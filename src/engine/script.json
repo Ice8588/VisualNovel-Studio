@@ -1,0 +1,36 @@
+{
+  "title": "預覽測試",
+  "scenes": [
+    {
+      "id": "scene_001",
+      "background": null,
+      "bgm": null,
+      "dialogues": [
+        {
+          "type": "narration",
+          "character": null,
+          "sprite": null,
+          "text": "他站在窗邊，沉默了很久。"
+        },
+        {
+          "type": "dialogue",
+          "character": "小花",
+          "sprite": null,
+          "text": "你真的要走嗎？"
+        },
+        {
+          "type": "narration",
+          "character": null,
+          "sprite": null,
+          "text": "她沒有回答，只是轉過身。"
+        },
+        {
+          "type": "dialogue",
+          "character": "小明",
+          "sprite": null,
+          "text": "我已經決定了。"
+        }
+      ]
+    }
+  ]
+}

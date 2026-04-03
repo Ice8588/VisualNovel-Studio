@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VisualNovel Studio</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="game-container">
+    <!-- 背景層（雙層交叉淡入） -->
+    <div id="background-next"></div>
+    <div id="background"></div>
+
+    <!-- 角色立繪 -->
+    <img id="sprite" alt="">
+
+    <!-- 對話框 -->
+    <div id="dialogue-box">
+      <div id="name-plate"></div>
+      <div id="dialogue-text"></div>
+    </div>
+
+    <!-- Quick Menu（對話框下方按鈕列） -->
+    <div id="quick-menu">
+      <button id="btn-auto">AUTO</button>
+      <button id="btn-skip">SKIP</button>
+      <button id="btn-log">LOG</button>
+      <button id="btn-hide">HIDE</button>
+    </div>
+
+    <!-- 狀態指示器 -->
+    <div id="skip-indicator">▶▶ SKIP</div>
+    <div id="auto-indicator">AUTO</div>
+
+    <!-- 歷史面板 -->
+    <div id="history-panel">
+      <div id="history-content"></div>
+      <button id="btn-close-history">關閉</button>
+    </div>
+
+    <!-- 特效 Canvas -->
+    <canvas id="effect-canvas"></canvas>
+
+    <!-- END 畫面 -->
+    <div id="end-screen">--- END ---</div>
+  </div>
+
+  <script src="effects.js"></script>
+  <script src="engine.js"></script>
+</body>
+</html>

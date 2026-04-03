@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.env
+.venv/
+venv/
+
+# Build / distribution
+build/
+dist/
+*.spec.bak
+
+# 大型二進位（ffmpeg 由使用者自行下載）
+resources/ffmpeg/*.exe
+resources/ffmpeg/*.zip
+
+# PyInstaller 產出（保留 spec 設定）
+dist/
+
+# 測試樣本 / 暫存影片
+tests/samples/
+tests/*.mp4
+tests/*.docx
+
+# 個人筆記 / AI 指令
+task.md
+CLAUDE.md
+image.png
+
+# Claude Code IDE 設定
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

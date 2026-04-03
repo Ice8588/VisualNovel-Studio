@@ -1,0 +1,612 @@
+"""主視窗：二欄佈局（左：場景+角色 / 右：預覽+對話）、選單列、工具列。"""
+
+import sys
+from pathlib import Path
+
+from PyQt6.QtCore import QThread, pyqtSignal, Qt
+from PyQt6.QtGui import QKeySequence
+from PyQt6.QtWidgets import (
+    QApplication,
+    QComboBox,
+    QFileDialog,
+    QLabel,
+    QMainWindow,
+    QMenuBar,
+    QMessageBox,
+    QProgressDialog,
+    QPushButton,
+    QSplitter,
+    QToolBar,
+)
+
+from src.core.asset_manager import import_asset
+from src.core.models import Project, Scene
+from src.core.project_io import load_project, save_project
+from src.core.text_parser import parse_file, _classify_lines
+from src.ui import dialogs
+from src.ui.center_panel import CenterPanel
+from src.ui.left_panel import LeftPanel
+from src.ui.theme import apply_theme, save_preference, load_preference
+
+
+class MainWindow(QMainWindow):
+    """應用程式主視窗。"""
+
+    _BASE_TITLE = "VisualNovel Studio v1.0.0"
+
+    def __init__(self):
+        super().__init__()
+        self._project = Project()
+        self._dirty = False
+        self._theme_name, self._font_size = load_preference()
+        self._setup_ui()
+        self._setup_menu()
+        self._setup_toolbar()
+        self._connect_signals()
+
+    def _setup_ui(self) -> None:
+        self.setWindowTitle(self._BASE_TITLE)
+        self.resize(1280, 780)
+
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+
+        self.left_panel = LeftPanel()
+        self.center_panel = CenterPanel()
+
+        splitter.addWidget(self.left_panel)
+        splitter.addWidget(self.center_panel)
+
+        # 左側 ~280px，右側佔滿
+        splitter.setSizes([280, 1000])
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+
+        self.setCentralWidget(splitter)
+
+        self.left_panel.set_project(self._project)
+        self.center_panel.set_project(self._project)
+
+    def _setup_menu(self) -> None:
+        menu_bar = QMenuBar()
+
+        # 檔案選單
+        file_menu = menu_bar.addMenu("檔案")
+        act_new = file_menu.addAction("新增專案", self._on_new_project)
+        act_new.setShortcut(QKeySequence.StandardKey.New)
+        act_open = file_menu.addAction("開啟專案", self._on_open_project)
+        act_open.setShortcut(QKeySequence.StandardKey.Open)
+        file_menu.addSeparator()
+        act_save = file_menu.addAction("儲存專案", self._on_save_project)
+        act_save.setShortcut(QKeySequence.StandardKey.Save)
+        file_menu.addAction("另存專案", self._on_save_project_as)
+        file_menu.addSeparator()
+        file_menu.addAction("匯入文字", self._on_import_text)
+        file_menu.addSeparator()
+        file_menu.addAction("結束", self.close)
+
+        # 素材選單
+        asset_menu = menu_bar.addMenu("素材")
+        asset_menu.addAction("匯入背景圖", lambda: self._on_import_assets("backgrounds"))
+        asset_menu.addAction("匯入角色立繪", lambda: self._on_import_assets("sprites"))
+        asset_menu.addAction("匯入音樂", lambda: self._on_import_assets("music"))
+
+        # 預覽選單
+        preview_menu = menu_bar.addMenu("預覽")
+        preview_menu.addAction("重新整理預覽", self._on_refresh_preview)
+
+        # 導出選單
+        export_menu = menu_bar.addMenu("導出")
+        export_menu.addAction("導出網頁 (ZIP)", self._on_export_zip)
+        export_menu.addAction("導出單一 HTML", self._on_export_html)
+        export_menu.addAction("導出影片 (MP4)", self._on_export_video)
+
+        # 設定選單
+        settings_menu = menu_bar.addMenu("設定")
+        settings_menu.addAction("外觀設定…", self._on_appearance_settings)
+        settings_menu.addAction("遊戲設定…", self._on_game_settings)
+
+        # 說明選單
+        help_menu = menu_bar.addMenu("說明")
+        help_menu.addAction("開啟 Log 資料夾", self._on_open_log_dir)
+
+        self.setMenuBar(menu_bar)
+
+    def _setup_toolbar(self) -> None:
+        toolbar = QToolBar("工具列")
+        toolbar.setMovable(False)
+        self.addToolBar(toolbar)
+
+    def _connect_signals(self) -> None:
+        # 左側面板 → 場景切換
+        self.left_panel.scene_selected.connect(self._on_scene_selected)
+        self.left_panel.scene_added.connect(self._on_project_changed)
+        self.left_panel.scene_removed.connect(self._on_scene_removed)
+        self.left_panel.scenes_reordered.connect(self._on_project_changed)
+        self.left_panel.scene_property_changed.connect(self._on_project_changed)
+
+        # 左側面板 → 角色操作
+        self.left_panel.character_add_requested.connect(self._on_add_character)
+        self.left_panel.character_edit_requested.connect(self._on_edit_character)
+        self.left_panel.character_remove_requested.connect(self._on_remove_character)
+
+        # 左側面板 → 素材匯入
+        self.left_panel.bg_import_requested.connect(
+            lambda: self._on_import_assets("backgrounds")
+        )
+        self.left_panel.music_import_requested.connect(
+            lambda: self._on_import_assets("music")
+        )
+
+        # 中央面板 → 內容變更
+        self.center_panel.project_changed.connect(self._on_project_changed)
+
+    # ── 場景切換 ──
+
+    def _on_scene_selected(self, index: int) -> None:
+        """左側場景列表選取變更時，同步對話表格。"""
+        self.center_panel.set_current_scene(index)
+
+    def _on_scene_removed(self, _index: int) -> None:
+        """場景被移除後更新。"""
+        self._on_project_changed()
+        # 同步中央面板
+        new_index = self.left_panel.get_current_scene_index()
+        self.center_panel.set_current_scene(new_index)
+
+    # ── 角色操作 ──
+
+    def _on_add_character(self) -> None:
+        from src.ui.dialogs import CharacterEditorDialog
+
+        dlg = CharacterEditorDialog(project_dir=self._get_project_dir(), parent=self)
+        if dlg.exec() != dlg.DialogCode.Accepted:
+            return
+        char = dlg.get_character()
+        self._project.characters.append(char)
+        self.left_panel.refresh_characters()
+        self._on_project_changed()
+
+    def _on_edit_character(self, index: int) -> None:
+        if index < 0 or index >= len(self._project.characters):
+            return
+        from src.ui.dialogs import CharacterEditorDialog
+
+        char = self._project.characters[index]
+        dlg = CharacterEditorDialog(character=char, project_dir=self._get_project_dir(), parent=self)
+        if dlg.exec() != dlg.DialogCode.Accepted:
+            return
+        self._project.characters[index] = dlg.get_character()
+        self.left_panel.refresh_characters()
+        self.center_panel._refresh_dialogue_table()
+        self._on_project_changed()
+
+    def _on_remove_character(self, index: int) -> None:
+        if index < 0 or index >= len(self._project.characters):
+            return
+        name = self._project.characters[index].name
+        result = QMessageBox.question(
+            self,
+            "確認移除",
+            f"確定要移除角色「{name}」嗎？\n"
+            "已指定此角色的對話將保留角色名稱但不再連結。",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if result != QMessageBox.StandardButton.Yes:
+            return
+        self._project.characters.pop(index)
+        self.left_panel.refresh_characters()
+        self.center_panel._refresh_dialogue_table()
+        self._on_project_changed()
+
+    # ── 主題 / 字體 ──
+
+    def _on_appearance_settings(self) -> None:
+        from src.ui.dialogs import AppearanceSettingsDialog
+
+        dlg = AppearanceSettingsDialog(self._theme_name, self._font_size, parent=self)
+        if dlg.exec() != dlg.DialogCode.Accepted:
+            return
+        self._theme_name, self._font_size = dlg.get_settings()
+        app = QApplication.instance()
+        apply_theme(app, self._theme_name, self._font_size)
+        save_preference(self._theme_name, self._font_size)
+
+    def _on_game_settings(self) -> None:
+        from src.ui.dialogs import GameSettingsDialog
+
+        dlg = GameSettingsDialog(self._project.game_settings, parent=self)
+        if dlg.exec() != dlg.DialogCode.Accepted:
+            return
+        self._project.game_settings = dlg.get_settings()
+        self._on_project_changed()
+
+    def _on_open_log_dir(self) -> None:
+        import subprocess
+        log_dir = str(Path.home() / ".vnstudio" / "logs")
+        if sys.platform == "win32":
+            subprocess.Popen(["explorer", log_dir])
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", log_dir])
+        else:
+            subprocess.Popen(["xdg-open", log_dir])
+
+    # ── 貼上文字 ──
+
+    def _on_paste_text(self) -> None:
+        dlg = dialogs.PasteTextDialog(self)
+        if dlg.exec() != dlg.DialogCode.Accepted:
+            return
+
+        text = dlg.get_text()
+        lines = text.splitlines()
+        new_dialogues = _classify_lines(lines)
+
+        if not new_dialogues:
+            dialogs.show_info(self, "無可用內容", "貼上的文字中沒有可辨識的對話或旁白。")
+            return
+
+        # 確保有場景
+        if not self._project.scenes:
+            scene_id = self._project.next_scene_id()
+            self._project.scenes.append(Scene(id=scene_id))
+            self.left_panel.refresh_scenes()
+            self.left_panel.scene_list.setCurrentRow(0)
+
+        insert_after = None
+        if dlg.is_insert_mode():
+            insert_after = self.center_panel.get_selected_dialogue_index()
+
+        self.center_panel.add_dialogues_to_current_scene(
+            new_dialogues, insert_after=insert_after
+        )
+
+    # ── 檔案操作 ──
+
+    def _on_new_project(self) -> None:
+        if not self._confirm_discard():
+            return
+        self._project = Project()
+        self._dirty = False
+        self._rebuild_ui()
+
+    def _on_open_project(self) -> None:
+        if not self._confirm_discard():
+            return
+        path = dialogs.open_project_dialog(self)
+        if not path:
+            return
+        try:
+            self._project = load_project(path)
+            self._dirty = False
+            self._rebuild_ui()
+        except (FileNotFoundError, ValueError) as e:
+            dialogs.show_error(self, "開啟失敗", str(e))
+
+    def _on_save_project(self) -> None:
+        if self._project.project_path:
+            self._save_to(self._project.project_path)
+        else:
+            self._on_save_project_as()
+
+    def _on_save_project_as(self) -> None:
+        path = dialogs.save_project_dialog(self)
+        if path:
+            self._save_to(path)
+
+    def _save_to(self, path: Path) -> None:
+        try:
+            save_project(self._project, path)
+            self._dirty = False
+            self._update_title()
+            dialogs.show_info(self, "儲存成功", f"專案已儲存至\n{path}")
+        except OSError as e:
+            dialogs.show_error(self, "儲存失敗", str(e))
+
+    # ── 文字匯入 ──
+
+    def _on_import_text(self) -> None:
+        path = dialogs.open_text_file(self)
+        if not path:
+            return
+        try:
+            result = parse_file(path)
+            # 確保有場景
+            if not self._project.scenes:
+                scene_id = self._project.next_scene_id()
+                self._project.scenes.append(Scene(id=scene_id))
+                self.left_panel.refresh_scenes()
+                self.left_panel.scene_list.setCurrentRow(0)
+            self.center_panel.add_dialogues_to_current_scene(result)
+        except (ValueError, FileNotFoundError) as e:
+            dialogs.show_error(self, "匯入失敗", str(e))
+
+    # ── 素材操作 ──
+
+    def _on_import_assets(self, category: str) -> None:
+        if category == "music":
+            paths = dialogs.open_audio_files(self)
+        else:
+            paths = dialogs.open_image_files(self)
+
+        if not paths:
+            return
+
+        project_dir = self._get_project_dir()
+        for path in paths:
+            try:
+                filename = import_asset(path, category, project_dir)
+                self._project.assets[category].append(filename)
+            except (ValueError, FileNotFoundError) as e:
+                dialogs.show_error(self, "匯入失敗", str(e))
+
+        self._sync_asset_lists()
+        self._on_project_changed()
+
+    # ── 預覽 ──
+
+    def _on_project_changed(self) -> None:
+        self._dirty = True
+        self._update_title()
+        self._on_refresh_preview()
+
+    def _on_refresh_preview(self) -> None:
+        self.center_panel.reload_preview(self._project)
+
+    # ── 導出 ──
+
+    def _has_dialogues(self) -> bool:
+        return any(s.dialogues for s in self._project.scenes)
+
+    def _check_export_ready(self) -> bool:
+        if not self._project.scenes:
+            dialogs.show_error(
+                self, "無法導出", "專案中沒有任何場景。\n請先新增場景。"
+            )
+            return False
+        if not self._has_dialogues():
+            dialogs.show_error(
+                self, "無法導出", "所有場景都沒有對話。\n請先匯入文字或新增對話。"
+            )
+            return False
+        return True
+
+    def _on_export_zip(self) -> None:
+        if not self._check_export_ready():
+            return
+        path = dialogs.export_zip_dialog(self)
+        if not path:
+            return
+        try:
+            from src.core.exporter import export_zip
+
+            export_zip(self._project, path)
+            dialogs.show_info(self, "導出成功", f"已導出至\n{path}")
+        except (FileNotFoundError, OSError) as e:
+            dialogs.show_error(self, "導出失敗", str(e))
+
+    def _on_export_html(self) -> None:
+        if not self._check_export_ready():
+            return
+
+        # 估算大小，超過 30MB 警告
+        from src.core.exporter_html import SIZE_THRESHOLD, estimate_export_size
+
+        est_size = estimate_export_size(self._project)
+        if est_size > SIZE_THRESHOLD:
+            mb = est_size / (1024 * 1024)
+            result = QMessageBox.warning(
+                self,
+                "檔案可能過大",
+                f"估計導出大小約 {mb:.1f} MB，超過 30 MB 閾值。\n"
+                "過大的檔案可能導致瀏覽器載入緩慢。\n\n"
+                "是否繼續導出？",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if result != QMessageBox.StandardButton.Yes:
+                return
+
+        path, _ = QFileDialog.getSaveFileName(
+            self, "導出單一 HTML", "", "HTML 檔案 (*.html)"
+        )
+        if not path:
+            return
+
+        try:
+            from src.core.exporter_html import export_single_html
+
+            export_single_html(self._project, Path(path))
+            dialogs.show_info(self, "導出成功", f"已導出至\n{path}")
+        except (FileNotFoundError, OSError) as e:
+            dialogs.show_error(self, "導出失敗", str(e))
+
+    def _on_export_video(self) -> None:
+        if not self._check_export_ready():
+            return
+
+        # 檢查 FFmpeg 是否可用，不可用則提示下載
+        from src.core.ffmpeg_manager import find_ffmpeg, download_ffmpeg
+
+        if not find_ffmpeg():
+            reply = QMessageBox.question(
+                self,
+                "需要 FFmpeg",
+                "影片導出需要 FFmpeg（約 80 MB）。\n是否自動下載並安裝？",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+
+            dl_progress = QProgressDialog(
+                "正在下載 FFmpeg…", "取消", 0, 100, self
+            )
+            dl_progress.setWindowTitle("下載 FFmpeg")
+            dl_progress.setMinimumDuration(0)
+            dl_progress.setValue(0)
+
+            self._ffmpeg_worker = _FFmpegDownloadWorker()
+            self._ffmpeg_worker.progress.connect(
+                lambda d, t: dl_progress.setValue(
+                    int(d / t * 100) if t > 0 else 0
+                )
+            )
+            self._ffmpeg_worker.finished.connect(dl_progress.close)
+            self._ffmpeg_worker.error.connect(
+                lambda msg: self._on_ffmpeg_download_error(dl_progress, msg)
+            )
+            dl_progress.canceled.connect(
+                self._ffmpeg_worker.requestInterruption
+            )
+            self._ffmpeg_worker.start()
+            self._ffmpeg_worker.wait()  # 阻塞等待下載完成
+
+            if not find_ffmpeg():
+                return
+
+        dlg = dialogs.VideoExportDialog(self._project, self)
+        if dlg.exec() != dlg.DialogCode.Accepted:
+            return
+
+        settings = dlg.get_settings()
+
+        progress = QProgressDialog("正在導出影片…", "取消", 0, 100, self)
+        progress.setWindowTitle("導出影片")
+        progress.setMinimumDuration(0)
+        progress.setValue(0)
+
+        # v2：WebEngine 截幀（主執行緒）
+        from src.ui.webengine_capture import WebEngineVideoExporter
+
+        def update_progress(current: int, total: int) -> None:
+            if total > 0:
+                progress.setValue(int(current / total * 100))
+            QApplication.processEvents()
+            if progress.wasCanceled():
+                raise InterruptedError("使用者取消導出。")
+
+        try:
+            exporter = WebEngineVideoExporter(
+                self._project,
+                settings["output_path"],
+                resolution=settings["resolution"],
+            )
+            exporter.export(progress_callback=update_progress)
+            self._on_video_export_done(progress, None)
+        except InterruptedError:
+            progress.close()
+        except Exception as e:
+            self._on_video_export_done(progress, str(e))
+
+    def _on_video_export_done(
+        self, progress: QProgressDialog, error: str | None
+    ) -> None:
+        progress.close()
+        if error:
+            dialogs.show_error(self, "導出失敗", error)
+        else:
+            dialogs.show_info(self, "導出成功", "影片已成功導出。")
+
+    def _on_ffmpeg_download_error(
+        self, progress: QProgressDialog, error: str
+    ) -> None:
+        progress.close()
+        dialogs.show_error(self, "下載失敗", error)
+
+    # ── 內部工具 ──
+
+    def _sync_asset_lists(self) -> None:
+        self.left_panel.set_asset_lists(
+            self._project.assets.get("backgrounds", []),
+            self._project.assets.get("music", []),
+        )
+
+    def _rebuild_ui(self) -> None:
+        self.left_panel.set_project(self._project)
+        self.center_panel.set_project(self._project)
+        self._sync_asset_lists()
+        self._on_refresh_preview()
+        self._update_title()
+
+    def _update_title(self) -> None:
+        title = self._BASE_TITLE
+        if self._project.project_path:
+            title += f" — {self._project.project_path.name}"
+        if self._dirty:
+            title += " *"
+        self.setWindowTitle(title)
+
+    def _confirm_discard(self) -> bool:
+        if not self._dirty:
+            return True
+        result = QMessageBox.question(
+            self,
+            "未儲存的變更",
+            "目前的變更尚未儲存，確定要放棄嗎？",
+            QMessageBox.StandardButton.Save
+            | QMessageBox.StandardButton.Discard
+            | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Save,
+        )
+        if result == QMessageBox.StandardButton.Save:
+            self._on_save_project()
+            return not self._dirty
+        return result == QMessageBox.StandardButton.Discard
+
+    def _get_project_dir(self) -> Path:
+        if self._project.project_path:
+            return self._project.project_path.parent
+        import tempfile
+
+        return Path(tempfile.gettempdir()) / "vnstudio_unsaved"
+
+    def closeEvent(self, event) -> None:
+        if not self._confirm_discard():
+            event.ignore()
+            return
+        self.center_panel.cleanup()
+        super().closeEvent(event)
+
+
+class _VideoExportWorker(QThread):
+    """在背景執行影片導出。"""
+
+    progress = pyqtSignal(int, int)
+    error = pyqtSignal(str)
+
+    def __init__(self, project: Project, settings: dict):
+        super().__init__()
+        self._project = project
+        self._settings = settings
+
+    def run(self) -> None:
+        try:
+            from src.core.exporter_video import VideoExporter
+
+            exporter = VideoExporter(
+                self._project,
+                self._settings["output_path"],
+                resolution=self._settings["resolution"],
+            )
+            exporter.export(
+                progress_callback=lambda c, t: self.progress.emit(c, t)
+            )
+        except Exception as e:
+            self.error.emit(str(e))
+
+
+class _FFmpegDownloadWorker(QThread):
+    """在背景下載 FFmpeg。"""
+
+    progress = pyqtSignal(int, int)
+    error = pyqtSignal(str)
+
+    def run(self) -> None:
+        try:
+            from src.core.ffmpeg_manager import download_ffmpeg
+
+            download_ffmpeg(
+                progress_callback=lambda d, t: self.progress.emit(d, t)
+            )
+        except Exception as e:
+            self.error.emit(str(e))
