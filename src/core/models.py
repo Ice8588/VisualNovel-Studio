@@ -56,14 +56,18 @@ class Dialogue:
     text: str
     character: str | None = None
     sprite: str | None = None  # 表情標籤（對應 SpriteVariant.label），fallback 當檔名
+    effects: list[str] = field(default_factory=list)  # 文字效果，如 ["bold", "italic"]
 
     def to_dict(self) -> dict:
-        return {
+        d: dict = {
             "type": self.type,
             "text": self.text,
             "character": self.character,
             "sprite": self.sprite,
         }
+        if self.effects:
+            d["effects"] = self.effects
+        return d
 
     @classmethod
     def from_dict(cls, data: dict) -> Dialogue:
@@ -72,6 +76,7 @@ class Dialogue:
             text=data["text"],
             character=data.get("character"),
             sprite=data.get("sprite"),
+            effects=data.get("effects", []),
         )
 
 

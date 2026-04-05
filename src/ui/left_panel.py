@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QSplitter,
     QStackedWidget,
+    QTabBar,
     QVBoxLayout,
     QWidget,
 )
@@ -59,35 +60,44 @@ class LeftPanel(QWidget):
 
         splitter = QSplitter(Qt.Orientation.Vertical)
 
-        # ── 場景列表 ──
+        # ── 上方：Tab 切換（場景 / 角色） ──
+        top_widget = QWidget()
+        top_layout = QVBoxLayout()
+        top_layout.setContentsMargins(0, 0, 0, 0)
+        top_layout.setSpacing(0)
+
+        self._tab_bar = QTabBar()
+        self._tab_bar.addTab("場景")
+        self._tab_bar.addTab("角色")
+        self._tab_bar.currentChanged.connect(self._on_tab_changed)
+        top_layout.addWidget(self._tab_bar)
+
+        self._list_stack = QStackedWidget()
+
+        # Page 0：場景列表
         scene_section = QWidget()
         scene_layout = QVBoxLayout()
-        scene_layout.setContentsMargins(0, 0, 0, 0)
-        scene_group = QGroupBox("場景列表")
-        scene_group_layout = QVBoxLayout()
+        scene_layout.setContentsMargins(0, 4, 0, 0)
         self.scene_list = QListWidget()
         self.scene_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
-        scene_group_layout.addWidget(self.scene_list)
+        scene_layout.addWidget(self.scene_list)
         scene_btn_layout = QHBoxLayout()
         self.btn_add_scene = QPushButton("新增")
         self.btn_remove_scene = QPushButton("移除")
         self.btn_remove_scene.setEnabled(False)
         scene_btn_layout.addWidget(self.btn_add_scene)
         scene_btn_layout.addWidget(self.btn_remove_scene)
-        scene_group_layout.addLayout(scene_btn_layout)
-        scene_group.setLayout(scene_group_layout)
-        scene_layout.addWidget(scene_group)
+        scene_layout.addLayout(scene_btn_layout)
         scene_section.setLayout(scene_layout)
+        self._list_stack.addWidget(scene_section)
 
-        # ── 角色列表 ──
+        # Page 1：角色列表
         char_section = QWidget()
         char_layout = QVBoxLayout()
-        char_layout.setContentsMargins(0, 0, 0, 0)
-        char_group = QGroupBox("角色列表")
-        char_group_layout = QVBoxLayout()
+        char_layout.setContentsMargins(0, 4, 0, 0)
         self.character_list = QListWidget()
         self.character_list.setIconSize(QSize(32, 32))
-        char_group_layout.addWidget(self.character_list)
+        char_layout.addWidget(self.character_list)
         char_btn_layout = QHBoxLayout()
         self.btn_add_char = QPushButton("新增")
         self.btn_edit_char = QPushButton("編輯")
@@ -97,12 +107,16 @@ class LeftPanel(QWidget):
         char_btn_layout.addWidget(self.btn_add_char)
         char_btn_layout.addWidget(self.btn_edit_char)
         char_btn_layout.addWidget(self.btn_remove_char)
-        char_group_layout.addLayout(char_btn_layout)
-        char_group.setLayout(char_group_layout)
-        char_layout.addWidget(char_group)
+        char_layout.addLayout(char_btn_layout)
         char_section.setLayout(char_layout)
+        self._list_stack.addWidget(char_section)
 
-        # ── Inspector 屬性面板 ──
+        top_layout.addWidget(self._list_stack)
+        top_widget.setLayout(top_layout)
+
+        splitter.addWidget(top_widget)
+
+        # ── 下方：Inspector 屬性面板 ──
         inspector_group = QGroupBox("屬性")
         inspector_layout = QVBoxLayout()
         self._inspector = QStackedWidget()
@@ -172,12 +186,9 @@ class LeftPanel(QWidget):
         inspector_layout.addWidget(self._inspector)
         inspector_group.setLayout(inspector_layout)
 
-        splitter.addWidget(scene_section)
-        splitter.addWidget(char_section)
         splitter.addWidget(inspector_group)
-        splitter.setStretchFactor(0, 2)
-        splitter.setStretchFactor(1, 2)
-        splitter.setStretchFactor(2, 1)
+        splitter.setStretchFactor(0, 3)
+        splitter.setStretchFactor(1, 1)
 
         layout.addWidget(splitter)
         self.setLayout(layout)
@@ -204,6 +215,23 @@ class LeftPanel(QWidget):
         self.btn_remove_char.clicked.connect(
             lambda: self.character_remove_requested.emit(self.character_list.currentRow())
         )
+
+    def _on_tab_changed(self, index: int) -> None:
+        """Tab 切換：同步 stacked widget 和屬性面板。"""
+        self._list_stack.setCurrentIndex(index)
+        if index == 0:
+            # 切回場景 tab：根據是否有選中場景決定屬性面板
+            if self._current_scene_index >= 0:
+                self._inspector.setCurrentIndex(1)
+            else:
+                self._inspector.setCurrentIndex(0)
+        else:
+            # 切到角色 tab：根據是否有選中角色決定屬性面板
+            row = self.character_list.currentRow()
+            if row >= 0:
+                self._on_char_selection_changed(row)
+            else:
+                self._inspector.setCurrentIndex(0)
 
     # ── 公開方法 ──
 

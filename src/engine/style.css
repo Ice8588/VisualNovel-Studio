@@ -96,7 +96,8 @@
 }
 
 #name-plate {
-  display: none;
+  display: block;
+  visibility: hidden;
   background: rgba(70, 130, 180, 0.9);
   color: #fff;
   padding: 4px 16px;
@@ -104,6 +105,7 @@
   border-radius: 4px;
   font-size: 16px;
   font-weight: bold;
+  min-height: 28px;
 }
 
 #dialogue-text {

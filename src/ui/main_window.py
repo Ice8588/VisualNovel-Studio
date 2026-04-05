@@ -3,7 +3,7 @@
 import sys
 from pathlib import Path
 
-from PyQt6.QtCore import QThread, pyqtSignal, Qt
+from PyQt6.QtCore import QThread, QTimer, pyqtSignal, Qt
 from PyQt6.QtGui import QKeySequence
 from PyQt6.QtWidgets import (
     QApplication,
@@ -84,12 +84,6 @@ class MainWindow(QMainWindow):
         file_menu.addSeparator()
         file_menu.addAction("結束", self.close)
 
-        # 素材選單
-        asset_menu = menu_bar.addMenu("素材")
-        asset_menu.addAction("匯入背景圖", lambda: self._on_import_assets("backgrounds"))
-        asset_menu.addAction("匯入角色立繪", lambda: self._on_import_assets("sprites"))
-        asset_menu.addAction("匯入音樂", lambda: self._on_import_assets("music"))
-
         # 預覽選單
         preview_menu = menu_bar.addMenu("預覽")
         preview_menu.addAction("重新整理預覽", self._on_refresh_preview)
@@ -100,13 +94,38 @@ class MainWindow(QMainWindow):
         export_menu.addAction("導出單一 HTML", self._on_export_html)
         export_menu.addAction("導出影片 (MP4)", self._on_export_video)
 
-        # 設定選單
+        # 外觀選單（獨立，即時套用）
+        view_menu = menu_bar.addMenu("外觀")
+        theme_menu = view_menu.addMenu("主題")
+        self._act_dark = theme_menu.addAction("深色")
+        self._act_dark.setCheckable(True)
+        self._act_dark.setChecked(self._theme_name == "dark")
+        self._act_dark.triggered.connect(lambda: self._apply_theme_immediate("dark"))
+        self._act_light = theme_menu.addAction("淺色")
+        self._act_light.setCheckable(True)
+        self._act_light.setChecked(self._theme_name == "light")
+        self._act_light.triggered.connect(lambda: self._apply_theme_immediate("light"))
+
+        font_menu = view_menu.addMenu("UI 字體大小")
+        for size in [12, 14, 16, 18, 20]:
+            act = font_menu.addAction(f"{size}px")
+            act.setCheckable(True)
+            act.setChecked(size == self._font_size)
+            act.triggered.connect(lambda _, s=size: self._apply_font_size_immediate(s))
+        self._font_size_actions = font_menu.actions()
+
+        view_menu.addSeparator()
+        view_menu.addAction("恢復預設", self._on_restore_default_appearance)
+
+        # 設定選單（僅遊戲設定）
         settings_menu = menu_bar.addMenu("設定")
-        settings_menu.addAction("外觀設定…", self._on_appearance_settings)
         settings_menu.addAction("遊戲設定…", self._on_game_settings)
 
         # 說明選單
         help_menu = menu_bar.addMenu("說明")
+        help_menu.addAction("使用教學", self._on_show_tutorial)
+        help_menu.addAction("關於", self._on_show_about)
+        help_menu.addSeparator()
         help_menu.addAction("開啟 Log 資料夾", self._on_open_log_dir)
 
         self.setMenuBar(menu_bar)
@@ -140,6 +159,10 @@ class MainWindow(QMainWindow):
         # 中央面板 → 內容變更
         self.center_panel.project_changed.connect(self._on_project_changed)
 
+        # 預覽工具列按鈕
+        self.center_panel.btn_refresh_preview.clicked.connect(self._on_refresh_preview)
+        self.center_panel.btn_game_settings.clicked.connect(self._on_game_settings)
+
     # ── 場景切換 ──
 
     def _on_scene_selected(self, index: int) -> None:
@@ -163,6 +186,10 @@ class MainWindow(QMainWindow):
             return
         char = dlg.get_character()
         self._project.characters.append(char)
+        # 同步立繪到素材清單
+        for sv in char.sprites:
+            if sv.filename and sv.filename not in self._project.assets["sprites"]:
+                self._project.assets["sprites"].append(sv.filename)
         self.left_panel.refresh_characters()
         self._on_project_changed()
 
@@ -176,6 +203,10 @@ class MainWindow(QMainWindow):
         if dlg.exec() != dlg.DialogCode.Accepted:
             return
         self._project.characters[index] = dlg.get_character()
+        # 同步立繪到素材清單
+        for sv in self._project.characters[index].sprites:
+            if sv.filename and sv.filename not in self._project.assets["sprites"]:
+                self._project.assets["sprites"].append(sv.filename)
         self.left_panel.refresh_characters()
         self.center_panel._refresh_dialogue_table()
         self._on_project_changed()
@@ -200,16 +231,51 @@ class MainWindow(QMainWindow):
 
     # ── 主題 / 字體 ──
 
-    def _on_appearance_settings(self) -> None:
-        from src.ui.dialogs import AppearanceSettingsDialog
-
-        dlg = AppearanceSettingsDialog(self._theme_name, self._font_size, parent=self)
-        if dlg.exec() != dlg.DialogCode.Accepted:
-            return
-        self._theme_name, self._font_size = dlg.get_settings()
+    def _apply_theme_immediate(self, theme: str) -> None:
+        self._theme_name = theme
+        self._act_dark.setChecked(theme == "dark")
+        self._act_light.setChecked(theme == "light")
         app = QApplication.instance()
         apply_theme(app, self._theme_name, self._font_size)
         save_preference(self._theme_name, self._font_size)
+
+    def _apply_font_size_immediate(self, size: int) -> None:
+        self._font_size = size
+        for act in self._font_size_actions:
+            act.setChecked(act.text() == f"{size}px")
+        app = QApplication.instance()
+        apply_theme(app, self._theme_name, self._font_size)
+        save_preference(self._theme_name, self._font_size)
+
+    def _on_restore_default_appearance(self) -> None:
+        self._apply_theme_immediate("dark")
+        self._apply_font_size_immediate(14)
+
+    def _on_show_tutorial(self) -> None:
+        QMessageBox.information(
+            self, "使用教學",
+            "VisualNovel Studio 使用教學\n\n"
+            "1. 新增專案或匯入文字\n"
+            "2. 在場景列表中管理場景，設定背景、BGM、特效\n"
+            "3. 在角色列表中新增角色，設定名稱、顏色、表情差分\n"
+            "4. 在對話列表中編輯台詞，指定角色與表情\n"
+            "5. 預覽畫面即時顯示效果\n"
+            "6. 完成後導出為影片 (MP4) 或網頁 (ZIP/HTML)\n\n"
+            "快捷鍵：\n"
+            "  Ctrl+N — 新增專案\n"
+            "  Ctrl+O — 開啟專案\n"
+            "  Ctrl+S — 儲存專案\n"
+            "  Delete — 刪除選取的對話\n"
+            "  Ctrl+C/V — 複製/貼上對話"
+        )
+
+    def _on_show_about(self) -> None:
+        QMessageBox.about(
+            self, "關於",
+            "VisualNovel Studio v1.0.0\n\n"
+            "簡易視覺小說製作工具\n"
+            "支援 MP4 影片導出、HTML5 網頁導出"
+        )
 
     def _on_game_settings(self) -> None:
         from src.ui.dialogs import GameSettingsDialog
@@ -497,6 +563,10 @@ class MainWindow(QMainWindow):
             progress.close()
         except Exception as e:
             self._on_video_export_done(progress, str(e))
+        finally:
+            # 延遲刷新預覽，避免與 WebEngine 清理衝突
+            QApplication.processEvents()
+            QTimer.singleShot(500, self._on_refresh_preview)
 
     def _on_video_export_done(
         self, progress: QProgressDialog, error: str | None

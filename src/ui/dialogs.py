@@ -5,6 +5,8 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
+from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QCheckBox,
     QColorDialog,
@@ -22,8 +24,11 @@ from PyQt6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QRadioButton,
+    QSplitter,
     QTableWidget,
     QTableWidgetItem,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -396,15 +401,28 @@ class CharacterEditorDialog(QDialog):
         sprite_group = QGroupBox("表情差分列表")
         sprite_layout = QVBoxLayout()
 
-        self.sprite_table = QTableWidget()
-        self.sprite_table.setColumnCount(3)
-        self.sprite_table.setHorizontalHeaderLabels(["標籤", "檔案名稱", "操作"])
-        header = self.sprite_table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
-        self.sprite_table.setColumnWidth(2, 70)
-        sprite_layout.addWidget(self.sprite_table)
+        # 水平佈局：左側 tree + 按鈕，右側預覽
+        sprite_content = QHBoxLayout()
+
+        # 左側：樹狀結構
+        left_side = QVBoxLayout()
+        self.sprite_tree = QTreeWidget()
+        self.sprite_tree.setColumnCount(2)
+        self.sprite_tree.setHeaderLabels(["標籤", ""])
+        self.sprite_tree.setIconSize(QSize(48, 48))
+        self.sprite_tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.sprite_tree.header().setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
+        self.sprite_tree.header().resizeSection(1, 60)
+        self.sprite_tree.setMinimumHeight(180)
+
+        # 根節點（不可選取，僅作分組標題）
+        self._sprite_root = QTreeWidgetItem(self.sprite_tree, ["立繪"])
+        self._sprite_root.setExpanded(True)
+        self._sprite_root.setFlags(
+            self._sprite_root.flags() & ~Qt.ItemFlag.ItemIsSelectable
+        )
+
+        left_side.addWidget(self.sprite_tree)
 
         sprite_btn_layout = QHBoxLayout()
         btn_add_sprite = QPushButton("新增差分")
@@ -414,10 +432,22 @@ class CharacterEditorDialog(QDialog):
         sprite_btn_layout.addWidget(btn_add_sprite)
         sprite_btn_layout.addWidget(btn_remove_sprite)
         sprite_btn_layout.addStretch()
-        sprite_layout.addLayout(sprite_btn_layout)
+        left_side.addLayout(sprite_btn_layout)
 
+        sprite_content.addLayout(left_side, 2)
+
+        # 右側：圖片預覽
+        self._sprite_preview = QLabel("選擇差分\n以預覽")
+        self._sprite_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._sprite_preview.setMinimumSize(160, 180)
+        self._sprite_preview.setStyleSheet("border: 1px solid #555; background: #1e1e1e; color: #888;")
+        sprite_content.addWidget(self._sprite_preview, 1)
+
+        sprite_layout.addLayout(sprite_content)
         sprite_group.setLayout(sprite_layout)
         layout.addWidget(sprite_group)
+
+        self.sprite_tree.currentItemChanged.connect(self._on_sprite_selected)
 
         # 按鈕
         buttons = QDialogButtonBox(
@@ -436,11 +466,24 @@ class CharacterEditorDialog(QDialog):
         pos_label = POSITION_LABELS.get(char.position, "中")
         self.combo_position.setCurrentText(pos_label)
 
-        self.sprite_table.setRowCount(len(char.sprites))
-        for row, sv in enumerate(char.sprites):
-            self.sprite_table.setItem(row, 0, QTableWidgetItem(sv.label))
-            self.sprite_table.setItem(row, 1, QTableWidgetItem(sv.filename))
-            self._add_browse_button(row)
+        for sv in char.sprites:
+            item = QTreeWidgetItem(self._sprite_root, [sv.label])
+            item.setData(0, Qt.ItemDataRole.UserRole, sv.filename)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
+            # 載入縮圖
+            full_path = self._project_dir / "assets" / sv.filename
+            if full_path.exists():
+                pm = QPixmap(str(full_path)).scaled(
+                    48, 48, Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation
+                )
+                item.setIcon(0, QIcon(pm))
+            # 瀏覽按鈕
+            btn = QPushButton("瀏覽…")
+            btn.setFixedHeight(24)
+            btn.clicked.connect(lambda _, i=item: self._on_browse_sprite(i))
+            self.sprite_tree.setItemWidget(item, 1, btn)
+        self._sprite_root.setExpanded(True)
 
     def _on_pick_color(self) -> None:
         from PyQt6.QtGui import QColor
@@ -455,22 +498,8 @@ class CharacterEditorDialog(QDialog):
             f"background-color: {color_text}; border: 1px solid #888; border-radius: 3px;"
         )
 
-    def _add_browse_button(self, row: int) -> None:
-        """在指定行的操作欄加入瀏覽按鈕。"""
-        btn = QPushButton("瀏覽…")
-        btn.clicked.connect(self._on_browse_sprite_clicked)
-        self.sprite_table.setCellWidget(row, 2, btn)
-
-    def _on_browse_sprite_clicked(self) -> None:
-        """找出觸發點擊的按鈕所在行，呼叫瀏覽圖片。"""
-        btn = self.sender()
-        for row in range(self.sprite_table.rowCount()):
-            if self.sprite_table.cellWidget(row, 2) is btn:
-                self._on_browse_sprite(row)
-                return
-
-    def _on_browse_sprite(self, row: int) -> None:
-        """開啟圖片選擇對話框，複製圖片到素材目錄，回填檔名欄。"""
+    def _on_browse_sprite(self, item: QTreeWidgetItem) -> None:
+        """開啟圖片選擇對話框，複製圖片到素材目錄，更新縮圖與 UserRole。"""
         from src.core.asset_manager import import_asset
 
         file_path, _ = QFileDialog.getOpenFileName(
@@ -480,23 +509,57 @@ class CharacterEditorDialog(QDialog):
             return
         try:
             filename = import_asset(Path(file_path), "sprites", self._project_dir)
-            self.sprite_table.setItem(row, 1, QTableWidgetItem(filename))
+            item.setData(0, Qt.ItemDataRole.UserRole, filename)
+            # 更新縮圖 icon
+            pm = QPixmap(file_path).scaled(
+                48, 48, Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation
+            )
+            item.setIcon(0, QIcon(pm))
+            # 若此 item 正被選中，更新右側預覽
+            if self.sprite_tree.currentItem() is item:
+                self._on_sprite_selected(item, None)
         except (ValueError, FileNotFoundError, OSError) as e:
             QMessageBox.warning(self, "匯入失敗", str(e))
 
     def _on_add_sprite(self) -> None:
-        row = self.sprite_table.rowCount()
-        self.sprite_table.insertRow(row)
-        self.sprite_table.setItem(row, 0, QTableWidgetItem(""))
-        self.sprite_table.setItem(row, 1, QTableWidgetItem(""))
-        self._add_browse_button(row)
-        self.sprite_table.setCurrentCell(row, 0)
-        self.sprite_table.editItem(self.sprite_table.item(row, 0))
+        count = self._sprite_root.childCount()
+        default_label = f"差分{count + 1}"
+        item = QTreeWidgetItem(self._sprite_root, [default_label])
+        item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
+        # 瀏覽按鈕
+        btn = QPushButton("瀏覽…")
+        btn.setFixedHeight(24)
+        btn.clicked.connect(lambda _, i=item: self._on_browse_sprite(i))
+        self.sprite_tree.setItemWidget(item, 1, btn)
+        self.sprite_tree.setCurrentItem(item)
+        self.sprite_tree.editItem(item, 0)
 
     def _on_remove_sprite(self) -> None:
-        row = self.sprite_table.currentRow()
-        if row >= 0:
-            self.sprite_table.removeRow(row)
+        current = self.sprite_tree.currentItem()
+        if current and current.parent() == self._sprite_root:
+            self._sprite_root.removeChild(current)
+            self._sprite_preview.clear()
+            self._sprite_preview.setText("選擇差分\n以預覽")
+
+    def _on_sprite_selected(self, current, _previous) -> None:
+        """選中 tree item 時更新右側圖片預覽。"""
+        if current and current.parent() == self._sprite_root:
+            filename = current.data(0, Qt.ItemDataRole.UserRole)
+            if filename:
+                full_path = self._project_dir / "assets" / filename
+                if full_path.exists():
+                    pm = QPixmap(str(full_path))
+                    scaled = pm.scaled(
+                        self._sprite_preview.width(),
+                        self._sprite_preview.height(),
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation
+                    )
+                    self._sprite_preview.setPixmap(scaled)
+                    return
+        self._sprite_preview.clear()
+        self._sprite_preview.setText("選擇差分\n以預覽")
 
     def _validate_and_accept(self) -> None:
         name = self.edit_name.text().strip()
@@ -513,13 +576,15 @@ class CharacterEditorDialog(QDialog):
         position = POSITION_OPTIONS.get(pos_label, "center")
 
         sprites = []
-        for row in range(self.sprite_table.rowCount()):
-            label_item = self.sprite_table.item(row, 0)
-            file_item = self.sprite_table.item(row, 1)
-            label = label_item.text().strip() if label_item else ""
-            filename = file_item.text().strip() if file_item else ""
-            if label and filename:
-                sprites.append(SpriteVariant(label=label, filename=filename))
+        for i in range(self._sprite_root.childCount()):
+            child = self._sprite_root.child(i)
+            label = child.text(0).strip()
+            filename = (child.data(0, Qt.ItemDataRole.UserRole) or "").strip()
+            if not filename:
+                continue  # 沒有選擇圖片的差分跳過
+            if not label:
+                label = f"差分{i + 1}"  # 自動補標籤
+            sprites.append(SpriteVariant(label=label, filename=filename))
 
         return Character(
             name=name,
@@ -595,18 +660,18 @@ class GameSettingsDialog(QDialog):
         self._setup_ui()
 
     def _setup_ui(self) -> None:
-        from PyQt6.QtWidgets import QDoubleSpinBox, QSpinBox
+        from PyQt6.QtWidgets import QDoubleSpinBox, QGroupBox, QSpinBox
         layout = QVBoxLayout()
 
         form = QFormLayout()
 
         self._spin_dlg_font = QSpinBox()
-        self._spin_dlg_font.setRange(14, 32)
+        self._spin_dlg_font.setRange(12, 86)
         self._spin_dlg_font.setValue(self._gs.dialogue_font_size)
         form.addRow("對話文字大小 (px):", self._spin_dlg_font)
 
         self._spin_name_font = QSpinBox()
-        self._spin_name_font.setRange(12, 28)
+        self._spin_name_font.setRange(12, 86)
         self._spin_name_font.setValue(self._gs.name_font_size)
         form.addRow("角色名稱大小 (px):", self._spin_name_font)
 
@@ -619,6 +684,40 @@ class GameSettingsDialog(QDialog):
 
         layout.addLayout(form)
 
+        # 建議範圍提示
+        tip = QLabel(
+            "建議：\n"
+            "  720p → 對話 18~28px、名稱 16~24px\n"
+            "  1080p → 對話 24~40px、名稱 20~32px\n"
+            "  4K → 對話 36~56px、名稱 28~48px"
+        )
+        tip.setStyleSheet("color: #888; font-size: 12px;")
+        layout.addWidget(tip)
+
+        # 即時預覽區
+        preview_group = QGroupBox("預覽")
+        preview_layout = QVBoxLayout()
+        self._preview_name = QLabel("角色名稱")
+        self._preview_name.setStyleSheet("color: #4682B4; font-weight: bold;")
+        self._preview_text = QLabel(
+            "這是一段預覽文字，用來確認字體大小是否合適。\n"
+            "This is a preview text for checking font size."
+        )
+        self._preview_text.setWordWrap(True)
+        self._preview_text.setStyleSheet(
+            "color: #eee; background: rgba(20,20,40,200); padding: 12px; border-radius: 4px;"
+        )
+        preview_layout.addWidget(self._preview_name)
+        preview_layout.addWidget(self._preview_text)
+        preview_group.setLayout(preview_layout)
+        layout.addWidget(preview_group)
+
+        # 連接即時預覽
+        self._spin_dlg_font.valueChanged.connect(self._update_preview)
+        self._spin_name_font.valueChanged.connect(self._update_preview)
+        self._spin_opacity.valueChanged.connect(self._update_preview)
+        self._update_preview()
+
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
@@ -626,6 +725,17 @@ class GameSettingsDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
         self.setLayout(layout)
+
+    def _update_preview(self) -> None:
+        dlg_size = self._spin_dlg_font.value()
+        name_size = self._spin_name_font.value()
+        self._preview_name.setStyleSheet(
+            f"color: #4682B4; font-weight: bold; font-size: {name_size}px;"
+        )
+        self._preview_text.setStyleSheet(
+            f"color: #eee; background: rgba(20,20,40,200); "
+            f"padding: 12px; border-radius: 4px; font-size: {dlg_size}px;"
+        )
 
     def get_settings(self):
         """回傳更新後的 GameSettings。"""

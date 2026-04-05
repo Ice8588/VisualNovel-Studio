@@ -24,6 +24,42 @@ logger = logging.getLogger(__name__)
 
 ENGINE_DIR = Path(__file__).parent.parent / "engine"
 
+# Module-level GPU encoder 快取（False = 尚未偵測，None = 無可用 GPU）
+_GPU_ENCODER_CACHE: str | None | bool = False
+
+
+def _detect_gpu_encoder(ffmpeg_path: Path) -> str | None:
+    """偵測可用的 GPU 硬體編碼器。回傳編碼器名稱或 None。"""
+    try:
+        result = subprocess.run(
+            [str(ffmpeg_path), "-hide_banner", "-encoders"],
+            capture_output=True, text=True, timeout=10
+        )
+        output = result.stdout
+        # 優先順序：NVENC (NVIDIA) > AMF (AMD) > QSV (Intel)
+        for encoder in ("h264_nvenc", "h264_amf", "h264_qsv"):
+            if encoder in output:
+                # 驗證編碼器是否真的可用（nullsrc 測試渲染）
+                test = subprocess.run(
+                    [str(ffmpeg_path), "-hide_banner", "-f", "lavfi",
+                     "-i", "nullsrc=s=256x256:d=1", "-c:v", encoder,
+                     "-f", "null", "-"],
+                    capture_output=True, text=True, timeout=15
+                )
+                if test.returncode == 0:
+                    return encoder
+    except Exception:
+        pass
+    return None
+
+
+def _get_gpu_encoder(ffmpeg_path: Path) -> str | None:
+    """取得 GPU 編碼器（快取偵測結果，避免每次導出重新偵測）。"""
+    global _GPU_ENCODER_CACHE
+    if _GPU_ENCODER_CACHE is False:
+        _GPU_ENCODER_CACHE = _detect_gpu_encoder(ffmpeg_path)
+    return _GPU_ENCODER_CACHE  # type: ignore[return-value]
+
 
 def _calc_duration(text: str) -> float:
     """依字數計算停留秒數，與前端 Auto 模式邏輯一致。"""
@@ -97,10 +133,16 @@ class WebEngineVideoExporter:
 
         finally:
             if view is not None:
+                # 先導航到空白頁，釋放對 temp_dir 檔案的鎖定
+                view.page().setUrl(QUrl("about:blank"))
+                QApplication.processEvents()
+                self._sleep_ms(200)
                 view.close()
                 view.deleteLater()
-                # 讓 Qt 處理 deleteLater
-                QApplication.processEvents()
+                # 多次處理事件確保 deleteLater 完成
+                for _ in range(5):
+                    QApplication.processEvents()
+                    self._sleep_ms(50)
             shutil.rmtree(temp_dir, ignore_errors=True)
 
     # ── 引擎檔案準備 ──
@@ -150,6 +192,16 @@ class WebEngineVideoExporter:
                 src_file = src_assets / filename
                 if src_file.exists():
                     shutil.copy2(src_file, assets_dir / filename)
+
+        # 複製角色立繪（可能未列入 project.assets["sprites"]）
+        for char in self._project.characters:
+            for sv in char.sprites:
+                if sv.filename:
+                    dest = assets_dir / sv.filename
+                    if not dest.exists():
+                        src_file = src_assets / sv.filename
+                        if src_file.exists():
+                            shutil.copy2(src_file, dest)
 
     def _get_project_assets_dir(self) -> Path | None:
         """取得專案素材所在目錄。"""
@@ -280,7 +332,7 @@ class WebEngineVideoExporter:
                 # 第一句已由 goToScene 顯示，後續需手動切換
                 if di > 0:
                     self._run_js(view, f"VNCaptureAPI.goToDialogue({di})")
-                    self._sleep_ms(50)  # 等待 DOM 更新
+                    self._sleep_ms(100)  # 等待 DOM 完全穩定
 
                 duration = _calc_duration(dlg.text)
 
@@ -333,39 +385,58 @@ class WebEngineVideoExporter:
         path.write_text("\n".join(lines), encoding="utf-8")
 
     def _encode_video(self, concat_path: Path, audio_timeline, temp_dir: Path) -> None:
-        """用 ffmpeg 將幀序列 + 音訊編碼為 MP4。"""
-        cmd = [
-            str(self._ffmpeg),
-            "-y",
-            "-f", "concat",
-            "-safe", "0",
-            "-i", str(concat_path),
-        ]
+        """用 ffmpeg 將幀序列 + 音訊編碼為 MP4。支援 GPU 加速，自動回退到 CPU。"""
+        gpu_encoder = _get_gpu_encoder(self._ffmpeg)
 
         audio_path = None
         if audio_timeline:
             audio_path = self._build_audio_track(audio_timeline, temp_dir)
+
+        def _build_cmd(encoder: str | None) -> list[str]:
+            cmd = [
+                str(self._ffmpeg), "-y",
+                "-f", "concat", "-safe", "0",
+                "-i", str(concat_path),
+            ]
             if audio_path and audio_path.exists():
                 cmd.extend(["-i", str(audio_path)])
 
-        cmd.extend([
-            "-c:v", "libx264",
-            "-preset", "medium",
-            "-crf", "23",
-            "-pix_fmt", "yuv420p",
-            "-r", str(self._fps),
-        ])
+            if encoder == "h264_nvenc":
+                cmd.extend(["-c:v", "h264_nvenc", "-preset", "p4",
+                             "-rc:v", "vbr", "-cq:v", "19", "-b:v", "0"])
+            elif encoder == "h264_amf":
+                cmd.extend(["-c:v", "h264_amf", "-quality", "balanced",
+                             "-rc", "cqp", "-qp_i", "20"])
+            elif encoder == "h264_qsv":
+                cmd.extend(["-c:v", "h264_qsv", "-preset", "medium",
+                             "-global_quality", "20"])
+            else:
+                cmd.extend(["-c:v", "libx264", "-preset", "medium", "-crf", "23"])
 
-        if audio_path and audio_path.exists():
-            cmd.extend([
-                "-c:a", "aac",
-                "-b:a", "128k",
-                "-shortest",
-            ])
+            cmd.extend(["-pix_fmt", "yuv420p", "-r", str(self._fps)])
 
-        cmd.append(str(self._output_path))
+            if audio_path and audio_path.exists():
+                cmd.extend(["-c:a", "aac", "-b:a", "128k", "-shortest"])
 
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+            cmd.append(str(self._output_path))
+            return cmd
+
+        if gpu_encoder:
+            logger.info("使用 GPU 編碼器：%s", gpu_encoder)
+            result = subprocess.run(
+                _build_cmd(gpu_encoder), capture_output=True, text=True, timeout=600
+            )
+            if result.returncode != 0:
+                logger.warning("GPU 編碼失敗，回退到 CPU：%s", result.stderr[-200:])
+                result = subprocess.run(
+                    _build_cmd(None), capture_output=True, text=True, timeout=600
+                )
+        else:
+            logger.info("使用 CPU 編碼器：libx264")
+            result = subprocess.run(
+                _build_cmd(None), capture_output=True, text=True, timeout=600
+            )
+
         if result.returncode != 0:
             raise RuntimeError(f"ffmpeg 編碼失敗：\n{result.stderr[-500:]}")
 

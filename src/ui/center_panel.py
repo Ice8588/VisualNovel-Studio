@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QAction, QColor
+from PyQt6.QtGui import QAction, QColor, QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -14,7 +14,6 @@ from PyQt6.QtWidgets import (
     QMenu,
     QPushButton,
     QSplitter,
-    QStyledItemDelegate,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -26,84 +25,6 @@ from src.ui.preview_widget import PreviewWidget
 
 NONE_LABEL = "(無)"
 NARRATION_LABEL = "(旁白)"
-
-
-class _CharacterComboDelegate(QStyledItemDelegate):
-    """角色欄下拉選單：顯示所有角色 + 旁白選項。"""
-
-    def __init__(self, panel, parent=None):
-        super().__init__(parent)
-        self._panel = panel  # CenterPanel
-
-    def createEditor(self, parent, option, index):
-        if not self._panel._project:
-            return None
-        combo = QComboBox(parent)
-        combo.addItem(NARRATION_LABEL, None)
-        for char in self._panel._project.characters:
-            combo.addItem(char.name, char.name)
-        return combo
-
-    def setEditorData(self, editor, index):
-        scene = self._panel._get_current_scene()
-        if not scene or index.row() >= len(scene.dialogues):
-            return
-        dlg = scene.dialogues[index.row()]
-        idx = editor.findData(dlg.character)
-        editor.setCurrentIndex(max(0, idx))
-
-    def setModelData(self, editor, model, index):
-        scene = self._panel._get_current_scene()
-        if not scene or index.row() >= len(scene.dialogues):
-            return
-        dlg = scene.dialogues[index.row()]
-        char_name = editor.currentData()
-        dlg.character = char_name
-        dlg.type = "dialogue" if char_name else "narration"
-        if not char_name:
-            dlg.sprite = None
-        self._panel._refresh_dialogue_table()
-        self._panel.project_changed.emit()
-
-
-class _SpriteComboDelegate(QStyledItemDelegate):
-    """表情欄下拉選單：顯示當前行角色的所有表情差分。"""
-
-    def __init__(self, panel, parent=None):
-        super().__init__(parent)
-        self._panel = panel  # CenterPanel
-
-    def createEditor(self, parent, option, index):
-        scene = self._panel._get_current_scene()
-        if not scene or index.row() >= len(scene.dialogues):
-            return None
-        dlg = scene.dialogues[index.row()]
-        if not dlg.character:
-            return None  # 旁白不可編輯表情
-        combo = QComboBox(parent)
-        combo.addItem(NONE_LABEL, None)
-        char = self._panel._find_character(dlg.character)
-        if char:
-            for sv in char.sprites:
-                combo.addItem(sv.label, sv.label)
-        return combo
-
-    def setEditorData(self, editor, index):
-        scene = self._panel._get_current_scene()
-        if not scene or index.row() >= len(scene.dialogues):
-            return
-        dlg = scene.dialogues[index.row()]
-        idx = editor.findData(dlg.sprite)
-        editor.setCurrentIndex(max(0, idx))
-
-    def setModelData(self, editor, model, index):
-        scene = self._panel._get_current_scene()
-        if not scene or index.row() >= len(scene.dialogues):
-            return
-        dlg = scene.dialogues[index.row()]
-        dlg.sprite = editor.currentData()
-        self._panel._refresh_dialogue_table()
-        self._panel.project_changed.emit()
 
 
 class _DraggableTable(QTableWidget):
@@ -119,6 +40,14 @@ class _DraggableTable(QTableWidget):
         self.setAcceptDrops(True)
         self.viewport().setAcceptDrops(True)
         self.setDragDropOverwriteMode(False)
+        self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+
+    def startDrag(self, supportedActions):
+        """確保拖曳時選中整行。"""
+        row = self.currentRow()
+        if row >= 0:
+            self.selectRow(row)
+        super().startDrag(supportedActions)
 
     def dropEvent(self, event) -> None:
         from_row = self.currentRow()
@@ -134,6 +63,14 @@ class _DraggableTable(QTableWidget):
         if from_row >= 0 and to_row != from_row:
             self.row_moved.emit(from_row, to_row)
         event.accept()
+
+    def mousePressEvent(self, event):
+        """點擊空白區域取消選取。"""
+        index = self.indexAt(event.pos())
+        if not index.isValid():
+            self.clearSelection()
+            self.setCurrentItem(None)
+        super().mousePressEvent(event)
 
 
 class CenterPanel(QWidget):
@@ -201,27 +138,27 @@ class CenterPanel(QWidget):
         search_layout.addWidget(self.lbl_search_count)
         dialogue_layout.addLayout(search_layout)
 
-        # 對話表格：3 欄（角色、文字、表情）
+        # 對話表格：6 欄（#、圖示、對話文字、角色、表情、效果）
         self.dialogue_table = _DraggableTable()
-        self.dialogue_table.setColumnCount(3)
-        self.dialogue_table.setHorizontalHeaderLabels(["角色", "文字", "表情"])
+        self.dialogue_table.setColumnCount(6)
+        self.dialogue_table.setHorizontalHeaderLabels(["#", "", "對話文字", "角色", "表情", "效果"])
         header = self.dialogue_table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
-        self.dialogue_table.setColumnWidth(0, 100)
-        self.dialogue_table.setColumnWidth(2, 100)
-        self.dialogue_table.setSelectionBehavior(
-            QAbstractItemView.SelectionBehavior.SelectRows
-        )
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Interactive)
+        self.dialogue_table.setColumnWidth(0, 40)
+        self.dialogue_table.setColumnWidth(1, 40)
+        self.dialogue_table.setColumnWidth(3, 100)
+        self.dialogue_table.setColumnWidth(4, 80)
+        self.dialogue_table.setColumnWidth(5, 100)
+        self.dialogue_table.verticalHeader().setDefaultSectionSize(48)
+        self.dialogue_table.verticalHeader().setVisible(False)
         self.dialogue_table.setSelectionMode(
             QAbstractItemView.SelectionMode.ExtendedSelection
         )
-        # 角色/表情欄 ComboBox Delegate
-        self._char_delegate = _CharacterComboDelegate(self)
-        self._sprite_delegate = _SpriteComboDelegate(self)
-        self.dialogue_table.setItemDelegateForColumn(0, self._char_delegate)
-        self.dialogue_table.setItemDelegateForColumn(2, self._sprite_delegate)
         # 右鍵選單
         self.dialogue_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.dialogue_table.customContextMenuRequested.connect(self._on_context_menu)
@@ -247,7 +184,25 @@ class CenterPanel(QWidget):
         dialogue_layout.addWidget(self.dialogue_table)
         dialogue_widget.setLayout(dialogue_layout)
 
-        splitter.addWidget(self.preview)
+        # 預覽容器：工具列 + 預覽元件
+        preview_container = QWidget()
+        preview_layout = QVBoxLayout()
+        preview_layout.setContentsMargins(0, 0, 0, 0)
+        preview_layout.setSpacing(2)
+
+        preview_toolbar = QHBoxLayout()
+        preview_toolbar.addStretch()
+        self.btn_refresh_preview = QPushButton("重新整理")
+        self.btn_game_settings = QPushButton("遊戲設定")
+        self.btn_refresh_preview.setFixedHeight(24)
+        self.btn_game_settings.setFixedHeight(24)
+        preview_toolbar.addWidget(self.btn_refresh_preview)
+        preview_toolbar.addWidget(self.btn_game_settings)
+        preview_layout.addLayout(preview_toolbar)
+        preview_layout.addWidget(self.preview)
+        preview_container.setLayout(preview_layout)
+
+        splitter.addWidget(preview_container)
         splitter.addWidget(dialogue_widget)
         splitter.setStretchFactor(0, 2)
         splitter.setStretchFactor(1, 3)
@@ -315,7 +270,7 @@ class CenterPanel(QWidget):
     # ── 對話表格 ──
 
     def _refresh_dialogue_table(self) -> None:
-        """重建對話表格。3 欄：角色、文字、表情。"""
+        """重建對話表格。6 欄：#、圖示、對話文字、角色、表情、效果。"""
         self._updating = True
         self.dialogue_table.setRowCount(0)
 
@@ -324,31 +279,60 @@ class CenterPanel(QWidget):
             self._updating = False
             return
 
-        characters = self._project.characters if self._project else []
-        char_names = [NARRATION_LABEL] + [c.name for c in characters]
-
         self.dialogue_table.setRowCount(len(scene.dialogues))
         for row, dlg in enumerate(scene.dialogues):
-            # 角色欄（透過 ComboBox Delegate 編輯）
-            char_display = dlg.character if dlg.character else NARRATION_LABEL
-            char_item = QTableWidgetItem(char_display)
+            # 欄 0：索引（唯讀）
+            idx_item = QTableWidgetItem(str(row + 1))
+            idx_item.setFlags(idx_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            idx_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.dialogue_table.setItem(row, 0, idx_item)
+
+            # 欄 1：角色縮圖（唯讀）
+            icon_item = QTableWidgetItem()
+            icon_item.setFlags(icon_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             if dlg.character:
                 char_obj = self._find_character(dlg.character)
                 if char_obj:
-                    char_item.setForeground(QColor(char_obj.name_color))
-            else:
-                char_item.setForeground(QColor("#888"))
-            self.dialogue_table.setItem(row, 0, char_item)
+                    pm = self._get_char_thumbnail(char_obj)
+                    if pm:
+                        icon_item.setIcon(QIcon(pm))
+            self.dialogue_table.setItem(row, 1, icon_item)
 
-            # 文字欄（可直接編輯）
-            self.dialogue_table.setItem(row, 1, QTableWidgetItem(dlg.text))
+            # 欄 2：對話文字（可編輯）
+            self.dialogue_table.setItem(row, 2, QTableWidgetItem(dlg.text))
 
-            # 表情欄（透過 ComboBox Delegate 編輯；旁白時顯示空白）
-            sprite_display = dlg.sprite if dlg.sprite else ""
-            sprite_item = QTableWidgetItem(sprite_display)
-            if not dlg.character:
-                sprite_item.setFlags(sprite_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            self.dialogue_table.setItem(row, 2, sprite_item)
+            # 欄 3：角色 ComboBox
+            char_combo = QComboBox()
+            char_combo.addItem(NARRATION_LABEL, None)
+            if self._project:
+                for c in self._project.characters:
+                    char_combo.addItem(c.name, c.name)
+            idx = char_combo.findData(dlg.character)
+            char_combo.setCurrentIndex(max(0, idx))
+            char_combo.currentIndexChanged.connect(
+                lambda _, r=row: self._on_char_combo_changed(r)
+            )
+            self.dialogue_table.setCellWidget(row, 3, char_combo)
+
+            # 欄 4：表情 ComboBox
+            sprite_combo = QComboBox()
+            sprite_combo.addItem(NONE_LABEL, None)
+            if dlg.character:
+                char_obj = self._find_character(dlg.character)
+                if char_obj:
+                    for sv in char_obj.sprites:
+                        sprite_combo.addItem(sv.label, sv.label)
+            idx = sprite_combo.findData(dlg.sprite)
+            sprite_combo.setCurrentIndex(max(0, idx))
+            sprite_combo.currentIndexChanged.connect(
+                lambda _, r=row: self._on_sprite_combo_changed(r)
+            )
+            sprite_combo.setEnabled(bool(dlg.character))
+            self.dialogue_table.setCellWidget(row, 4, sprite_combo)
+
+            # 欄 5：效果（逗號分隔文字）
+            effect_text = ", ".join(dlg.effects) if dlg.effects else ""
+            self.dialogue_table.setItem(row, 5, QTableWidgetItem(effect_text))
 
         self._updating = False
 
@@ -363,9 +347,85 @@ class CenterPanel(QWidget):
         item = self.dialogue_table.item(row, column)
         value = item.text() if item else ""
 
-        if column == 1:  # 文字欄
+        if column == 2:  # 對話文字欄
             dlg.text = value
             self.project_changed.emit()
+        elif column == 5:  # 效果欄
+            dlg.effects = [e.strip() for e in value.split(",") if e.strip()]
+            self.project_changed.emit()
+
+    def _on_char_combo_changed(self, row: int) -> None:
+        if self._updating:
+            return
+        scene = self._get_current_scene()
+        if not scene or row >= len(scene.dialogues):
+            return
+        combo = self.dialogue_table.cellWidget(row, 3)
+        if not combo:
+            return
+        char_name = combo.currentData()
+        dlg = scene.dialogues[row]
+        dlg.character = char_name
+        dlg.type = "dialogue" if char_name else "narration"
+        if not char_name:
+            dlg.sprite = None
+
+        # 只更新該行的 sprite combo，不重建整個表格
+        self._updating = True
+        sprite_combo = self.dialogue_table.cellWidget(row, 4)
+        if sprite_combo:
+            sprite_combo.blockSignals(True)
+            sprite_combo.clear()
+            sprite_combo.addItem(NONE_LABEL, None)
+            if char_name:
+                char_obj = self._find_character(char_name)
+                if char_obj:
+                    for sv in char_obj.sprites:
+                        sprite_combo.addItem(sv.label, sv.label)
+            sprite_combo.setEnabled(bool(char_name))
+            sprite_combo.blockSignals(False)
+
+        # 更新圖示欄
+        icon_item = self.dialogue_table.item(row, 1)
+        if icon_item:
+            if char_name:
+                char_obj = self._find_character(char_name)
+                pm = self._get_char_thumbnail(char_obj) if char_obj else None
+                icon_item.setIcon(QIcon(pm) if pm else QIcon())
+            else:
+                icon_item.setIcon(QIcon())
+        self._updating = False
+
+        self.project_changed.emit()
+
+    def _on_sprite_combo_changed(self, row: int) -> None:
+        if self._updating:
+            return
+        scene = self._get_current_scene()
+        if not scene or row >= len(scene.dialogues):
+            return
+        combo = self.dialogue_table.cellWidget(row, 4)
+        if not combo:
+            return
+        scene.dialogues[row].sprite = combo.currentData()
+        self.project_changed.emit()
+
+    def _get_char_thumbnail(self, char: Character) -> QPixmap | None:
+        """取得角色 32x32 縮圖。"""
+        if not self._project or not self._project.project_path:
+            return None
+        assets_dir = self._project.project_path.parent / "assets"
+        if char.sprites:
+            path = assets_dir / char.sprites[0].filename
+            if path.exists():
+                pm = QPixmap(str(path))
+                if not pm.isNull():
+                    return pm.scaled(32, 32, Qt.AspectRatioMode.KeepAspectRatio,
+                                     Qt.TransformationMode.SmoothTransformation)
+        # fallback: 角色名稱顏色色塊
+        pm = QPixmap(32, 32)
+        pm.fill(QColor(char.name_color))
+        return pm
 
     # ── 對話操作 ──
 
@@ -393,8 +453,8 @@ class CenterPanel(QWidget):
         scene.dialogues.append(Dialogue(type="narration", text=""))
         self._refresh_dialogue_table()
         last_row = len(scene.dialogues) - 1
-        self.dialogue_table.setCurrentCell(last_row, 1)
-        self.dialogue_table.editItem(self.dialogue_table.item(last_row, 1))
+        self.dialogue_table.setCurrentCell(last_row, 2)
+        self.dialogue_table.editItem(self.dialogue_table.item(last_row, 2))
         self.project_changed.emit()
 
     def _on_remove_dialogue(self) -> None:
@@ -536,7 +596,7 @@ class CenterPanel(QWidget):
         for i, dlg in enumerate(self._clipboard_dialogues):
             scene.dialogues.insert(insert_after + 1 + i, copy.deepcopy(dlg))
         self._refresh_dialogue_table()
-        self.dialogue_table.setCurrentCell(insert_after + len(self._clipboard_dialogues), 0)
+        self.dialogue_table.setCurrentCell(insert_after + len(self._clipboard_dialogues), 2)
         self.project_changed.emit()
 
     def _on_paste_text_to_scene(self) -> None:
@@ -644,7 +704,7 @@ class CenterPanel(QWidget):
             self._current_scene_index = si
             self._refresh_dialogue_table()
 
-        self.dialogue_table.setCurrentCell(di, 1)
+        self.dialogue_table.setCurrentCell(di, 2)
         self._highlight_search_matches()
 
     def _highlight_search_matches(self) -> None:

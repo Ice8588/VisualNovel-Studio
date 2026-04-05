@@ -46,6 +46,13 @@
   // ── 初始化 ──
 
   function init() {
+    // Capture 模式：禁用所有 CSS 動畫/轉場，避免截幀出現中間狀態
+    if (CAPTURE_MODE) {
+      var noTransitionStyle = document.createElement("style");
+      noTransitionStyle.textContent = "* { transition: none !important; animation: none !important; }";
+      document.head.appendChild(noTransitionStyle);
+    }
+
     els.container = document.getElementById("game-container");
     els.bg = document.getElementById("background");
     els.bgNext = document.getElementById("background-next");
@@ -264,14 +271,15 @@
     // 名稱牌
     if (d.character) {
       els.namePlate.textContent = d.character;
-      els.namePlate.style.display = "inline-block";
+      els.namePlate.style.visibility = "visible";
       if (charInfo && charInfo.name_color) {
         els.namePlate.style.background = charInfo.name_color;
       } else {
         els.namePlate.style.background = "rgba(70, 130, 180, 0.9)";
       }
     } else {
-      els.namePlate.style.display = "none";
+      els.namePlate.textContent = "";
+      els.namePlate.style.visibility = "hidden";
     }
 
     // 立繪

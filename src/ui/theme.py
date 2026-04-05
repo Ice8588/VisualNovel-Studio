@@ -21,10 +21,12 @@ QMenuBar {{
     background-color: #2b2b2b;
     color: #ddd;
     border-bottom: 1px solid #3c3c3c;
+    font-size: {font_size}px;
 }}
 
 QMenuBar::item:selected {{
-    background-color: #3c3c3c;
+    background-color: #4682B4;
+    color: #fff;
 }}
 
 QMenu {{
@@ -42,6 +44,7 @@ QToolBar {{
     border-bottom: 1px solid #3c3c3c;
     spacing: 6px;
     padding: 4px;
+    font-size: {font_size}px;
 }}
 
 QPushButton {{
@@ -230,10 +233,12 @@ QMenuBar {{
     background-color: #f5f5f5;
     color: #333;
     border-bottom: 1px solid #ccc;
+    font-size: {font_size}px;
 }}
 
 QMenuBar::item:selected {{
-    background-color: #ddd;
+    background-color: #4682B4;
+    color: #fff;
 }}
 
 QMenu {{
@@ -252,6 +257,7 @@ QToolBar {{
     border-bottom: 1px solid #ccc;
     spacing: 6px;
     padding: 4px;
+    font-size: {font_size}px;
 }}
 
 QPushButton {{

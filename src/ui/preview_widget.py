@@ -98,6 +98,16 @@ class PreviewWidget(QWidget):
                 if src_file.exists():
                     shutil.copy2(src_file, assets_dir / filename)
 
+        # 複製角色立繪（可能未列入 project.assets["sprites"]）
+        for char in project.characters:
+            for sv in char.sprites:
+                if sv.filename:
+                    dest = assets_dir / sv.filename
+                    if not dest.exists():
+                        src_file = src_assets / sv.filename
+                        if src_file.exists():
+                            shutil.copy2(src_file, dest)
+
     @staticmethod
     def _get_project_assets_dir(project: Project) -> Path | None:
         """取得專案素材所在目錄。"""
