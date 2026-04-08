@@ -10,7 +10,6 @@ from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QCheckBox,
     QColorDialog,
-    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
@@ -19,10 +18,8 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
-    QLineEdit,
     QMessageBox,
     QPlainTextEdit,
-    QPushButton,
     QRadioButton,
     QSplitter,
     QTableWidget,
@@ -32,6 +29,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from qfluentwidgets import ComboBox, LineEdit, PushButton
 
 from src.core.models import Character, SpriteVariant
 
@@ -138,7 +136,7 @@ class VideoExportDialog(QDialog):
         form = QFormLayout()
 
         # 解析度
-        self.combo_resolution = QComboBox()
+        self.combo_resolution = ComboBox()
         self.combo_resolution.addItems(RESOLUTION_OPTIONS.keys())
         form.addRow("解析度:", self.combo_resolution)
 
@@ -149,9 +147,9 @@ class VideoExportDialog(QDialog):
 
         # 輸出路徑
         path_layout = QHBoxLayout()
-        self.edit_path = QLineEdit()
+        self.edit_path = LineEdit()
         self.edit_path.setPlaceholderText("選擇輸出路徑…")
-        btn_browse = QPushButton("瀏覽…")
+        btn_browse = PushButton("瀏覽…")
         btn_browse.clicked.connect(self._browse_output)
         path_layout.addWidget(self.edit_path, 1)
         path_layout.addWidget(btn_browse)
@@ -229,7 +227,7 @@ class BatchAssignDialog(QDialog):
         char_row = QHBoxLayout()
         self.chk_character = QCheckBox("變更")
         self.chk_character.setChecked(True)
-        self.edit_character = QLineEdit()
+        self.edit_character = LineEdit()
         self.edit_character.setPlaceholderText("輸入角色名稱（留空清除）")
         char_row.addWidget(self.chk_character)
         char_row.addWidget(self.edit_character, 1)
@@ -239,7 +237,7 @@ class BatchAssignDialog(QDialog):
         sprite_row = QHBoxLayout()
         self.chk_sprite = QCheckBox("變更")
         self.chk_sprite.setChecked(False)
-        self.combo_sprite = QComboBox()
+        self.combo_sprite = ComboBox()
         self.combo_sprite.addItem("(無)")
         self.combo_sprite.addItems(sprites)
         self.combo_sprite.setEnabled(False)
@@ -368,15 +366,15 @@ class CharacterEditorDialog(QDialog):
         form = QFormLayout()
 
         # 名稱
-        self.edit_name = QLineEdit()
+        self.edit_name = LineEdit()
         self.edit_name.setPlaceholderText("角色名稱")
         form.addRow("名稱:", self.edit_name)
 
         # 名稱顏色
         color_row = QHBoxLayout()
-        self.edit_color = QLineEdit("#4682B4")
+        self.edit_color = LineEdit("#4682B4")
         self.edit_color.setMaximumWidth(100)
-        self.btn_pick_color = QPushButton("選色…")
+        self.btn_pick_color = PushButton("選色…")
         self.btn_pick_color.clicked.connect(self._on_pick_color)
         self._color_preview = QLabel("  ")
         self._color_preview.setFixedSize(24, 24)
@@ -390,7 +388,7 @@ class CharacterEditorDialog(QDialog):
         self.edit_color.textChanged.connect(self._update_color_preview)
 
         # 螢幕位置
-        self.combo_position = QComboBox()
+        self.combo_position = ComboBox()
         self.combo_position.addItems(POSITION_OPTIONS.keys())
         self.combo_position.setCurrentText("中")
         form.addRow("螢幕位置:", self.combo_position)
@@ -425,8 +423,8 @@ class CharacterEditorDialog(QDialog):
         left_side.addWidget(self.sprite_tree)
 
         sprite_btn_layout = QHBoxLayout()
-        btn_add_sprite = QPushButton("新增差分")
-        btn_remove_sprite = QPushButton("移除差分")
+        btn_add_sprite = PushButton("新增差分")
+        btn_remove_sprite = PushButton("移除差分")
         btn_add_sprite.clicked.connect(self._on_add_sprite)
         btn_remove_sprite.clicked.connect(self._on_remove_sprite)
         sprite_btn_layout.addWidget(btn_add_sprite)
@@ -479,7 +477,7 @@ class CharacterEditorDialog(QDialog):
                 )
                 item.setIcon(0, QIcon(pm))
             # 瀏覽按鈕
-            btn = QPushButton("瀏覽…")
+            btn = PushButton("瀏覽…")
             btn.setFixedHeight(24)
             btn.clicked.connect(lambda _, i=item: self._on_browse_sprite(i))
             self.sprite_tree.setItemWidget(item, 1, btn)
@@ -626,7 +624,7 @@ class AppearanceSettingsDialog(QDialog):
         font_group = QGroupBox("UI 字體大小")
         font_layout = QHBoxLayout()
         font_layout.addWidget(QLabel("大小 (px):"))
-        self._combo_font = QComboBox()
+        self._combo_font = ComboBox()
         self._combo_font.addItems(["12", "14", "16", "18", "20"])
         self._combo_font.setCurrentText(str(self._font_size))
         font_layout.addWidget(self._combo_font)

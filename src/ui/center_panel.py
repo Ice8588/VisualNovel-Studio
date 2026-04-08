@@ -10,15 +10,14 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
-    QLineEdit,
     QMenu,
-    QPushButton,
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
+from qfluentwidgets import LineEdit, PushButton
 
 from src.core.models import Character, Dialogue, Project, Scene
 from src.ui.preview_widget import PreviewWidget
@@ -106,10 +105,10 @@ class CenterPanel(QWidget):
         dlg_header = QHBoxLayout()
         dlg_header.addWidget(QLabel("對話列表"))
         dlg_header.addStretch()
-        self.btn_add_dialogue = QPushButton("新增")
-        self.btn_remove_dialogue = QPushButton("移除")
-        self.btn_move_up = QPushButton("上移")
-        self.btn_move_down = QPushButton("下移")
+        self.btn_add_dialogue = PushButton("新增")
+        self.btn_remove_dialogue = PushButton("移除")
+        self.btn_move_up = PushButton("上移")
+        self.btn_move_down = PushButton("下移")
         self.btn_remove_dialogue.setEnabled(False)
         self.btn_move_up.setEnabled(False)
         self.btn_move_down.setEnabled(False)
@@ -122,11 +121,10 @@ class CenterPanel(QWidget):
         # 搜尋列
         search_layout = QHBoxLayout()
         search_layout.addWidget(QLabel("搜尋:"))
-        self.search_input = QLineEdit()
+        self.search_input = LineEdit()
         self.search_input.setPlaceholderText("輸入關鍵字搜尋對話…")
-        self.search_input.setClearButtonEnabled(True)
-        self.btn_search_prev = QPushButton("<")
-        self.btn_search_next = QPushButton(">")
+        self.btn_search_prev = PushButton("<")
+        self.btn_search_next = PushButton(">")
         self.btn_search_prev.setFixedWidth(30)
         self.btn_search_next.setFixedWidth(30)
         self.lbl_search_count = QLabel("")
@@ -192,8 +190,8 @@ class CenterPanel(QWidget):
 
         preview_toolbar = QHBoxLayout()
         preview_toolbar.addStretch()
-        self.btn_refresh_preview = QPushButton("重新整理")
-        self.btn_game_settings = QPushButton("遊戲設定")
+        self.btn_refresh_preview = PushButton("重新整理")
+        self.btn_game_settings = PushButton("遊戲設定")
         self.btn_refresh_preview.setFixedHeight(24)
         self.btn_game_settings.setFixedHeight(24)
         preview_toolbar.addWidget(self.btn_refresh_preview)

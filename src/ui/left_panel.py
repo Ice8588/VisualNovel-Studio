@@ -8,19 +8,17 @@ from PyQt6.QtCore import Qt, QSize, pyqtSignal
 from PyQt6.QtGui import QColor, QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QAbstractItemView,
-    QComboBox,
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QListWidget,
     QListWidgetItem,
-    QPushButton,
     QSplitter,
     QStackedWidget,
     QTabBar,
     QVBoxLayout,
     QWidget,
 )
+from qfluentwidgets import ComboBox, ListWidget, PushButton
 
 from src.core.models import Character, Project, Scene
 
@@ -78,12 +76,12 @@ class LeftPanel(QWidget):
         scene_section = QWidget()
         scene_layout = QVBoxLayout()
         scene_layout.setContentsMargins(0, 4, 0, 0)
-        self.scene_list = QListWidget()
+        self.scene_list = ListWidget()
         self.scene_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
         scene_layout.addWidget(self.scene_list)
         scene_btn_layout = QHBoxLayout()
-        self.btn_add_scene = QPushButton("新增")
-        self.btn_remove_scene = QPushButton("移除")
+        self.btn_add_scene = PushButton("新增")
+        self.btn_remove_scene = PushButton("移除")
         self.btn_remove_scene.setEnabled(False)
         scene_btn_layout.addWidget(self.btn_add_scene)
         scene_btn_layout.addWidget(self.btn_remove_scene)
@@ -95,13 +93,13 @@ class LeftPanel(QWidget):
         char_section = QWidget()
         char_layout = QVBoxLayout()
         char_layout.setContentsMargins(0, 4, 0, 0)
-        self.character_list = QListWidget()
+        self.character_list = ListWidget()
         self.character_list.setIconSize(QSize(32, 32))
         char_layout.addWidget(self.character_list)
         char_btn_layout = QHBoxLayout()
-        self.btn_add_char = QPushButton("新增")
-        self.btn_edit_char = QPushButton("編輯")
-        self.btn_remove_char = QPushButton("移除")
+        self.btn_add_char = PushButton("新增")
+        self.btn_edit_char = PushButton("編輯")
+        self.btn_remove_char = PushButton("移除")
         self.btn_edit_char.setEnabled(False)
         self.btn_remove_char.setEnabled(False)
         char_btn_layout.addWidget(self.btn_add_char)
@@ -132,25 +130,25 @@ class LeftPanel(QWidget):
         props_layout.setContentsMargins(0, 0, 0, 0)
         bg_row = QHBoxLayout()
         bg_row.addWidget(QLabel("背景:"))
-        self.combo_background = QComboBox()
+        self.combo_background = ComboBox()
         self.combo_background.addItem(NONE_LABEL)
         bg_row.addWidget(self.combo_background, 1)
-        self.btn_import_bg = QPushButton("匯入")
+        self.btn_import_bg = PushButton("匯入")
         self.btn_import_bg.setFixedWidth(50)
         bg_row.addWidget(self.btn_import_bg)
         props_layout.addLayout(bg_row)
         bgm_row = QHBoxLayout()
         bgm_row.addWidget(QLabel("BGM:"))
-        self.combo_bgm = QComboBox()
+        self.combo_bgm = ComboBox()
         self.combo_bgm.addItem(NONE_LABEL)
         bgm_row.addWidget(self.combo_bgm, 1)
-        self.btn_import_music = QPushButton("匯入")
+        self.btn_import_music = PushButton("匯入")
         self.btn_import_music.setFixedWidth(50)
         bgm_row.addWidget(self.btn_import_music)
         props_layout.addLayout(bgm_row)
         effect_row = QHBoxLayout()
         effect_row.addWidget(QLabel("特效:"))
-        self.combo_effect = QComboBox()
+        self.combo_effect = ComboBox()
         self.combo_effect.addItems(EFFECT_OPTIONS)
         effect_row.addWidget(self.combo_effect, 1)
         props_layout.addLayout(effect_row)
@@ -316,7 +314,7 @@ class LeftPanel(QWidget):
         self._updating = False
 
     @staticmethod
-    def _set_combo_value(combo: QComboBox, value: str | None) -> None:
+    def _set_combo_value(combo, value: str | None) -> None:
         if not value:
             combo.setCurrentIndex(0)
             return

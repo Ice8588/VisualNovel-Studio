@@ -7,14 +7,12 @@ from PyQt6.QtCore import QThread, QTimer, pyqtSignal, Qt
 from PyQt6.QtGui import QKeySequence
 from PyQt6.QtWidgets import (
     QApplication,
-    QComboBox,
     QFileDialog,
     QLabel,
     QMainWindow,
     QMenuBar,
     QMessageBox,
     QProgressDialog,
-    QPushButton,
     QSplitter,
     QToolBar,
 )
