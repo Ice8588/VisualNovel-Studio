@@ -31,7 +31,7 @@ from PyQt6.QtWidgets import (
 )
 from qfluentwidgets import ComboBox, LineEdit, PushButton
 
-from src.core.models import Character, SpriteVariant
+from src.core.models import Character, Costume, SpriteVariant
 
 
 def open_text_file(parent: QWidget) -> Path | None:
@@ -584,11 +584,12 @@ class CharacterEditorDialog(QDialog):
                 label = f"差分{i + 1}"  # 自動補標籤
             sprites.append(SpriteVariant(label=label, filename=filename))
 
+        default_costume = Costume(name="預設", expressions=sprites)
         return Character(
             name=name,
             name_color=color,
             position=position,
-            sprites=sprites,
+            costumes=[default_costume] if sprites else [],
         )
 
 
