@@ -5,7 +5,7 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtCore import Qt, QSize, pyqtSignal
 from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -17,7 +17,10 @@ from PyQt6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
+    QInputDialog,
     QLabel,
+    QListWidget,
+    QListWidgetItem,
     QMessageBox,
     QPlainTextEdit,
     QRadioButton,
@@ -591,6 +594,196 @@ class CharacterEditorDialog(QDialog):
             position=position,
             costumes=[default_costume] if sprites else [],
         )
+
+
+class CostumeEditorDialog(QDialog):
+    """服裝/表情分層編輯器：左側服裝列表，右側表情差分，支援拖曳匯入圖片。"""
+
+    def __init__(
+        self,
+        character: Character,
+        project_dir: Path,
+        parent: QWidget | None = None,
+    ):
+        super().__init__(parent)
+        import copy
+        self._project_dir = Path(project_dir)
+        self._costumes: list[Costume] = copy.deepcopy(character.costumes)
+        self.setWindowTitle(f"編輯服裝 — {character.name}")
+        self.setMinimumSize(580, 380)
+        self._setup_ui()
+        self._populate_costume_list()
+
+    def _setup_ui(self) -> None:
+        layout = QVBoxLayout()
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+
+        # 左側：服裝列表
+        left_widget = QWidget()
+        left_layout = QVBoxLayout()
+        left_layout.setContentsMargins(0, 0, 4, 0)
+        left_layout.addWidget(QLabel("服裝:"))
+        self._costume_list = QListWidget()
+        self._costume_list.setMinimumWidth(140)
+        left_layout.addWidget(self._costume_list)
+        cos_btns = QHBoxLayout()
+        btn_add_cos = PushButton("新增")
+        btn_rem_cos = PushButton("移除")
+        btn_add_cos.clicked.connect(self._on_add_costume)
+        btn_rem_cos.clicked.connect(self._on_remove_costume)
+        cos_btns.addWidget(btn_add_cos)
+        cos_btns.addWidget(btn_rem_cos)
+        left_layout.addLayout(cos_btns)
+        left_widget.setLayout(left_layout)
+        splitter.addWidget(left_widget)
+
+        # 右側：表情差分列表（接受拖曳）
+        right_widget = _DroppableExprWidget(self)
+        right_widget.files_dropped.connect(self._on_files_dropped)
+        right_layout = QVBoxLayout()
+        right_layout.setContentsMargins(4, 0, 0, 0)
+        right_layout.addWidget(QLabel("表情差分（可拖曳圖片匯入）:"))
+        self._expr_list = QListWidget()
+        self._expr_list.setIconSize(QSize(48, 48))
+        self._expr_list.setMinimumWidth(200)
+        right_layout.addWidget(self._expr_list)
+        expr_btns = QHBoxLayout()
+        btn_add_expr = PushButton("新增表情")
+        btn_rem_expr = PushButton("移除表情")
+        btn_add_expr.clicked.connect(self._on_add_expression)
+        btn_rem_expr.clicked.connect(self._on_remove_expression)
+        expr_btns.addWidget(btn_add_expr)
+        expr_btns.addWidget(btn_rem_expr)
+        right_layout.addLayout(expr_btns)
+        right_widget.setLayout(right_layout)
+        splitter.addWidget(right_widget)
+
+        splitter.setSizes([160, 380])
+        layout.addWidget(splitter)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        self.setLayout(layout)
+        self._costume_list.currentRowChanged.connect(self._on_costume_selected)
+
+    def _populate_costume_list(self) -> None:
+        self._costume_list.clear()
+        for cos in self._costumes:
+            self._costume_list.addItem(cos.name)
+        if self._costumes:
+            self._costume_list.setCurrentRow(0)
+        else:
+            self._expr_list.clear()
+
+    def _on_costume_selected(self, row: int) -> None:
+        self._expr_list.clear()
+        if 0 <= row < len(self._costumes):
+            for sv in self._costumes[row].expressions:
+                item = QListWidgetItem(sv.label)
+                item.setData(Qt.ItemDataRole.UserRole, sv.filename)
+                if sv.filename:
+                    path = self._project_dir / "assets" / sv.filename
+                    if path.exists():
+                        pm = QPixmap(str(path)).scaled(
+                            48, 48,
+                            Qt.AspectRatioMode.KeepAspectRatio,
+                            Qt.TransformationMode.SmoothTransformation,
+                        )
+                        item.setIcon(QIcon(pm))
+                self._expr_list.addItem(item)
+
+    def _on_add_costume(self) -> None:
+        name, ok = QInputDialog.getText(self, "新增服裝", "服裝名稱:")
+        if ok and name.strip():
+            self._costumes.append(Costume(name=name.strip()))
+            self._populate_costume_list()
+            self._costume_list.setCurrentRow(len(self._costumes) - 1)
+
+    def _on_remove_costume(self) -> None:
+        row = self._costume_list.currentRow()
+        if 0 <= row < len(self._costumes):
+            self._costumes.pop(row)
+            self._populate_costume_list()
+
+    def _on_add_expression(self) -> None:
+        cos_row = self._costume_list.currentRow()
+        if cos_row < 0 or cos_row >= len(self._costumes):
+            return
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "選擇表情圖片", "", "圖片 (*.png *.jpg *.jpeg)"
+        )
+        if not file_path:
+            return
+        self._import_expression(cos_row, Path(file_path))
+
+    def _on_remove_expression(self) -> None:
+        cos_row = self._costume_list.currentRow()
+        expr_row = self._expr_list.currentRow()
+        if (
+            0 <= cos_row < len(self._costumes)
+            and 0 <= expr_row < len(self._costumes[cos_row].expressions)
+        ):
+            self._costumes[cos_row].expressions.pop(expr_row)
+            self._on_costume_selected(cos_row)
+
+    def _on_files_dropped(self, paths: list[Path]) -> None:
+        """拖曳圖片到右側面板時批量匯入。"""
+        cos_row = self._costume_list.currentRow()
+        if cos_row < 0 or cos_row >= len(self._costumes):
+            return
+        for p in paths:
+            if p.suffix.lower() in (".png", ".jpg", ".jpeg"):
+                self._import_expression(cos_row, p)
+
+    def _import_expression(self, cos_row: int, file_path: Path) -> None:
+        try:
+            from src.core.asset_manager import import_asset
+            filename = import_asset(file_path, "sprites", self._project_dir)
+        except (ValueError, FileNotFoundError, OSError) as e:
+            QMessageBox.warning(self, "匯入失敗", str(e))
+            return
+        label, ok = QInputDialog.getText(
+            self, "表情標籤", "標籤名稱:", text=file_path.stem
+        )
+        if not ok or not label.strip():
+            return
+        self._costumes[cos_row].expressions.append(
+            SpriteVariant(label=label.strip(), filename=filename)
+        )
+        self._on_costume_selected(cos_row)
+
+    def get_costumes(self) -> list[Costume]:
+        """回傳編輯後的服裝列表。"""
+        return self._costumes
+
+
+class _DroppableExprWidget(QWidget):
+    """接受圖片拖曳的容器 widget。"""
+
+    files_dropped = pyqtSignal(list)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, event) -> None:
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event) -> None:
+        paths = [
+            Path(url.toLocalFile())
+            for url in event.mimeData().urls()
+            if url.isLocalFile()
+        ]
+        if paths:
+            self.files_dropped.emit(paths)
+        event.acceptProposedAction()
 
 
 class AppearanceSettingsDialog(QDialog):

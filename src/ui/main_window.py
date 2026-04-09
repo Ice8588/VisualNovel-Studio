@@ -147,6 +147,8 @@ class MainWindow(QMainWindow):
         self.left_panel.character_add_requested.connect(self._on_add_character)
         self.left_panel.character_edit_requested.connect(self._on_edit_character)
         self.left_panel.character_remove_requested.connect(self._on_remove_character)
+        self.left_panel.character_property_changed.connect(self._on_character_property_changed)
+        self.left_panel.costume_edit_requested.connect(self._on_costume_edit)
 
         # 左側面板 → 素材匯入
         self.left_panel.bg_import_requested.connect(
@@ -215,16 +217,55 @@ class MainWindow(QMainWindow):
         if index < 0 or index >= len(self._project.characters):
             return
         name = self._project.characters[index].name
+        affected = sum(
+            1 for sc in self._project.scenes
+            for dlg in sc.dialogues
+            if dlg.character == name
+        )
+        detail = (
+            f"\n{affected} 條對話將降級為旁白。"
+            if affected else
+            "\n此角色目前無對應對話。"
+        )
         result = QMessageBox.question(
             self,
             "確認移除",
-            f"確定要移除角色「{name}」嗎？\n"
-            "已指定此角色的對話將保留角色名稱但不再連結。",
+            f"確定要移除角色「{name}」嗎？{detail}",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if result != QMessageBox.StandardButton.Yes:
             return
+        # 軟性解綁：將所有引用此角色的對話降級為旁白
+        for scene in self._project.scenes:
+            for dlg in scene.dialogues:
+                if dlg.character == name:
+                    dlg.character = None
+                    dlg.costume = None
+                    dlg.sprite = None
+                    dlg.type = "narration"
         self._project.characters.pop(index)
+        self.left_panel.refresh_characters()
+        self.center_panel._refresh_dialogue_table()
+        self._on_project_changed()
+
+    def _on_costume_edit(self, char_index: int) -> None:
+        if char_index < 0 or char_index >= len(self._project.characters):
+            return
+        from src.ui.dialogs import CostumeEditorDialog
+        char = self._project.characters[char_index]
+        dlg = CostumeEditorDialog(char, self._get_project_dir(), self)
+        if dlg.exec() != dlg.DialogCode.Accepted:
+            return
+        char.costumes = dlg.get_costumes()
+        for sv in char.sprites:
+            if sv.filename and sv.filename not in self._project.assets["sprites"]:
+                self._project.assets["sprites"].append(sv.filename)
+        self.left_panel.refresh_characters()
+        self.left_panel.refresh_costume_list()
+        self.center_panel._refresh_dialogue_table()
+        self._on_project_changed()
+
+    def _on_character_property_changed(self) -> None:
         self.left_panel.refresh_characters()
         self.center_panel._refresh_dialogue_table()
         self._on_project_changed()

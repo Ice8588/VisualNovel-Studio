@@ -8,20 +8,27 @@ from PyQt6.QtCore import Qt, QSize, pyqtSignal
 from PyQt6.QtGui import QColor, QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QAbstractItemView,
+    QColorDialog,
     QGroupBox,
     QHBoxLayout,
     QInputDialog,
     QLabel,
+    QListWidget,
     QListWidgetItem,
+    QMessageBox,
     QPushButton,
     QSplitter,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
-from qfluentwidgets import ComboBox, ListWidget, PushButton, SegmentedWidget
+from qfluentwidgets import ComboBox, LineEdit, ListWidget, PushButton, SegmentedWidget
 
 from src.core.models import Character, Project, Scene
+
+_POS_OPTIONS = ["左", "中", "右"]
+_POS_TO_KEY = {"左": "left", "中": "center", "右": "right"}
+_KEY_TO_POS = {"left": "左", "center": "中", "right": "右"}
 
 NONE_LABEL = "(無)"
 EFFECT_OPTIONS = [NONE_LABEL, "rain", "snow", "crt", "pixel_dark"]
@@ -44,12 +51,13 @@ class _HoverDeleteItemWidget(QWidget):
         layout.setContentsMargins(6, 2, 4, 2)
         layout.setSpacing(6)
 
+        self._icon_label: QLabel | None = None
         if icon_pixmap is not None:
-            icon_lbl = QLabel()
-            icon_lbl.setPixmap(icon_pixmap)
-            icon_lbl.setFixedSize(32, 32)
-            icon_lbl.setScaledContents(True)
-            layout.addWidget(icon_lbl)
+            self._icon_label = QLabel()
+            self._icon_label.setPixmap(icon_pixmap)
+            self._icon_label.setFixedSize(32, 32)
+            self._icon_label.setScaledContents(True)
+            layout.addWidget(self._icon_label)
 
         self._text_label = QLabel(text)
         self._text_label.setContentsMargins(0, 0, 0, 0)
@@ -70,6 +78,10 @@ class _HoverDeleteItemWidget(QWidget):
 
     def set_text(self, text: str) -> None:
         self._text_label.setText(text)
+
+    def update_icon(self, pixmap: QPixmap) -> None:
+        if self._icon_label is not None:
+            self._icon_label.setPixmap(pixmap)
 
     def enterEvent(self, event) -> None:
         self._btn_del.show()
@@ -103,8 +115,10 @@ class LeftPanel(QWidget):
 
     # 角色信號
     character_add_requested = pyqtSignal()
-    character_edit_requested = pyqtSignal(int)  # character index
+    character_edit_requested = pyqtSignal(int)   # character index
     character_remove_requested = pyqtSignal(int)
+    character_property_changed = pyqtSignal()    # name/color/position edited
+    costume_edit_requested = pyqtSignal(int)     # character index
 
     # 素材匯入信號
     bg_import_requested = pyqtSignal()
@@ -114,6 +128,7 @@ class LeftPanel(QWidget):
         super().__init__(parent)
         self._project: Project | None = None
         self._current_scene_index: int = -1
+        self._current_char_index: int = -1
         self._updating = False
         self._setup_ui()
 
@@ -213,30 +228,54 @@ class LeftPanel(QWidget):
         scene_props.setLayout(props_layout)
         self._inspector.addWidget(scene_props)
 
-        # Page 2：角色屬性（唯讀顯示）
+        # Page 2：角色屬性（可編輯）
         char_props = QWidget()
         char_props_layout = QVBoxLayout()
         char_props_layout.setContentsMargins(0, 0, 0, 0)
-        self._lbl_char_name = QLabel("—")
-        self._lbl_char_color = QLabel()
-        self._lbl_char_color.setFixedSize(20, 20)
-        self._lbl_char_position = QLabel("—")
+        char_props_layout.setSpacing(4)
+        # 名稱
         name_row = QHBoxLayout()
         name_row.addWidget(QLabel("名稱:"))
-        name_row.addWidget(self._lbl_char_name, 1)
-        color_row_layout = QHBoxLayout()
-        color_row_layout.addWidget(QLabel("顏色:"))
-        color_row_layout.addWidget(self._lbl_char_color)
-        color_row_layout.addStretch()
+        self._edit_char_name = LineEdit()
+        self._edit_char_name.setPlaceholderText("角色名稱")
+        name_row.addWidget(self._edit_char_name, 1)
+        char_props_layout.addLayout(name_row)
+        # 顏色
+        color_row = QHBoxLayout()
+        color_row.addWidget(QLabel("顏色:"))
+        self._lbl_char_color = QLabel()
+        self._lbl_char_color.setFixedSize(20, 20)
+        self._btn_char_color = PushButton("選色")
+        self._btn_char_color.setFixedWidth(50)
+        color_row.addWidget(self._lbl_char_color)
+        color_row.addWidget(self._btn_char_color)
+        color_row.addStretch()
+        char_props_layout.addLayout(color_row)
+        # 位置
         pos_row = QHBoxLayout()
         pos_row.addWidget(QLabel("位置:"))
-        pos_row.addWidget(self._lbl_char_position, 1)
-        char_props_layout.addLayout(name_row)
-        char_props_layout.addLayout(color_row_layout)
+        self._combo_char_pos = ComboBox()
+        self._combo_char_pos.addItems(_POS_OPTIONS)
+        pos_row.addWidget(self._combo_char_pos, 1)
         char_props_layout.addLayout(pos_row)
+        # 服裝列表
+        char_props_layout.addWidget(QLabel("服裝:"))
+        self._char_costume_list = QListWidget()
+        self._char_costume_list.setFixedHeight(70)
+        char_props_layout.addWidget(self._char_costume_list)
+        btn_edit_costume = QPushButton("編輯服裝…")
+        btn_edit_costume.setStyleSheet(_DASHED_BTN_STYLE)
+        btn_edit_costume.clicked.connect(
+            lambda: self.costume_edit_requested.emit(self._current_char_index)
+        )
+        char_props_layout.addWidget(btn_edit_costume)
         char_props_layout.addStretch()
         char_props.setLayout(char_props_layout)
         self._inspector.addWidget(char_props)
+        # 角色屬性連接
+        self._edit_char_name.editingFinished.connect(self._on_char_name_changed)
+        self._btn_char_color.clicked.connect(self._on_char_color_btn)
+        self._combo_char_pos.currentIndexChanged.connect(self._on_char_position_changed)
 
         inspector_layout.addWidget(self._inspector)
         inspector_group.setLayout(inspector_layout)
@@ -429,10 +468,21 @@ class LeftPanel(QWidget):
         self.scene_added.emit()
 
     def _on_remove_scene_by_item(self, item: QListWidgetItem) -> None:
-        """由 item widget 的刪除按鈕觸發。"""
+        """由 item widget 的刪除按鈕觸發；場景有對話時先詢問確認。"""
         row = self.scene_list.row(item)
-        if row < 0 or not self._project:
+        if row < 0 or not self._project or row >= len(self._project.scenes):
             return
+        scene = self._project.scenes[row]
+        dlg_count = len(scene.dialogues)
+        if dlg_count > 0:
+            result = QMessageBox.question(
+                self,
+                "確認移除場景",
+                f"場景「{scene.id}」包含 {dlg_count} 條對話。\n確定要移除？",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if result != QMessageBox.StandardButton.Yes:
+                return
         self._project.scenes.pop(row)
         self._refresh_scene_list()
         self.scene_removed.emit(row)
@@ -536,20 +586,96 @@ class LeftPanel(QWidget):
             self.character_edit_requested.emit(row)
 
     def _on_char_selection_changed(self, row: int) -> None:
+        self._current_char_index = row
         if row >= 0 and self._project and row < len(self._project.characters):
-            char = self._project.characters[row]
-            self._lbl_char_name.setText(char.name)
-            self._lbl_char_color.setStyleSheet(
-                f"background-color: {char.name_color}; border: 1px solid #888; border-radius: 3px;"
-            )
-            pos_map = {"left": "左", "center": "中", "right": "右"}
-            self._lbl_char_position.setText(pos_map.get(char.position, char.position))
+            self._refresh_char_props()
             self._inspector.setCurrentIndex(2)
         else:
             if self._current_scene_index >= 0:
                 self._inspector.setCurrentIndex(1)
             else:
                 self._inspector.setCurrentIndex(0)
+
+    def _refresh_char_props(self) -> None:
+        """將角色屬性填入可編輯控件。"""
+        char = self._get_current_char()
+        if not char:
+            return
+        self._updating = True
+        self._edit_char_name.setText(char.name)
+        self._lbl_char_color.setStyleSheet(
+            f"background-color: {char.name_color}; border: 1px solid #888; border-radius: 3px;"
+        )
+        pos_label = _KEY_TO_POS.get(char.position, "中")
+        idx = _POS_OPTIONS.index(pos_label) if pos_label in _POS_OPTIONS else 1
+        self._combo_char_pos.setCurrentIndex(idx)
+        self._char_costume_list.clear()
+        for cos in char.costumes:
+            self._char_costume_list.addItem(cos.name)
+        self._updating = False
+
+    def _get_current_char(self) -> Character | None:
+        if (
+            not self._project
+            or self._current_char_index < 0
+            or self._current_char_index >= len(self._project.characters)
+        ):
+            return None
+        return self._project.characters[self._current_char_index]
+
+    def _on_char_name_changed(self) -> None:
+        if self._updating:
+            return
+        char = self._get_current_char()
+        if not char:
+            return
+        new_name = self._edit_char_name.text().strip()
+        if not new_name or new_name == char.name:
+            return
+        char.name = new_name
+        # Update the item widget text
+        item = self.character_list.item(self._current_char_index)
+        if item:
+            widget = self.character_list.itemWidget(item)
+            if widget:
+                widget.set_text(new_name)
+        self.character_property_changed.emit()
+
+    def _on_char_color_btn(self) -> None:
+        char = self._get_current_char()
+        if not char:
+            return
+        initial = QColor(char.name_color)
+        color = QColorDialog.getColor(initial, self, "選擇名稱顏色")
+        if not color.isValid():
+            return
+        char.name_color = color.name()
+        self._lbl_char_color.setStyleSheet(
+            f"background-color: {char.name_color}; border: 1px solid #888; border-radius: 3px;"
+        )
+        # Update icon (color block) in character list
+        item = self.character_list.item(self._current_char_index)
+        if item:
+            widget = self.character_list.itemWidget(item)
+            if widget:
+                pm = QPixmap(32, 32)
+                pm.fill(QColor(char.name_color))
+                widget.update_icon(pm)
+        self.character_property_changed.emit()
+
+    def _on_char_position_changed(self, _idx: int) -> None:
+        if self._updating:
+            return
+        char = self._get_current_char()
+        if not char:
+            return
+        pos_label = self._combo_char_pos.currentText()
+        char.position = _POS_TO_KEY.get(pos_label, "center")
+        self.character_property_changed.emit()
+
+    def refresh_costume_list(self) -> None:
+        """外部呼叫：重新整理角色屬性面板的服裝列表（服裝編輯後）。"""
+        self._refresh_char_props()
 
     def refresh_characters(self) -> None:
         """外部呼叫：重新整理角色列表。"""
