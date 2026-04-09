@@ -51,11 +51,13 @@ class MainWindow(QMainWindow):
         self.left_panel = LeftPanel()
         self.center_panel = CenterPanel()
 
+        self.left_panel.setMinimumWidth(250)
+        self.center_panel.setMinimumWidth(600)
         splitter.addWidget(self.left_panel)
         splitter.addWidget(self.center_panel)
 
-        # 左側 ~280px，右側佔滿
-        splitter.setSizes([280, 1000])
+        # 左側 320px，右側佔滿
+        splitter.setSizes([320, 960])
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
 
