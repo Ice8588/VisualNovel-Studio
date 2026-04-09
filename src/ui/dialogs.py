@@ -375,7 +375,8 @@ class CharacterEditorDialog(QDialog):
 
         # 名稱顏色
         color_row = QHBoxLayout()
-        self.edit_color = LineEdit("#4682B4")
+        self.edit_color = LineEdit()
+        self.edit_color.setText("#4682B4")
         self.edit_color.setMaximumWidth(100)
         self.btn_pick_color = PushButton("選色…")
         self.btn_pick_color.clicked.connect(self._on_pick_color)

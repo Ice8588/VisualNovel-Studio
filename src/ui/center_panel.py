@@ -92,16 +92,20 @@ class _HoverFilter(QObject):
         table.viewport().installEventFilter(self)
 
     def eventFilter(self, obj, event) -> bool:
-        if obj is self._table.viewport():
+        try:
+            vp = self._table.viewport()
+        except RuntimeError:
+            return False
+        if obj is vp:
             if event.type() == QEvent.Type.MouseMove:
                 row = self._table.rowAt(event.position().toPoint().y())
                 if row != self._delegate._hovered_row:
                     self._delegate._hovered_row = row
-                    self._table.viewport().update()
+                    vp.update()
             elif event.type() == QEvent.Type.Leave:
                 if self._delegate._hovered_row != -1:
                     self._delegate._hovered_row = -1
-                    self._table.viewport().update()
+                    vp.update()
         return False
 
 
