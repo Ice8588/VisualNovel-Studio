@@ -8,24 +8,99 @@ from PyQt6.QtCore import Qt, QSize, pyqtSignal
 from PyQt6.QtGui import QColor, QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QAbstractItemView,
-    QComboBox,
+    QColorDialog,
     QGroupBox,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QListWidget,
     QListWidgetItem,
+    QMessageBox,
     QPushButton,
     QSplitter,
     QStackedWidget,
-    QTabBar,
     QVBoxLayout,
     QWidget,
 )
+from qfluentwidgets import ComboBox, LineEdit, ListWidget, PushButton, SegmentedWidget
 
 from src.core.models import Character, Project, Scene
 
+_POS_OPTIONS = ["左", "中", "右"]
+_POS_TO_KEY = {"左": "left", "中": "center", "右": "right"}
+_KEY_TO_POS = {"left": "左", "center": "中", "right": "右"}
+
 NONE_LABEL = "(無)"
 EFFECT_OPTIONS = [NONE_LABEL, "rain", "snow", "crt", "pixel_dark"]
+
+
+class _HoverDeleteItemWidget(QWidget):
+    """清單項目 widget：文字標籤（可加圖示）+ hover 時顯示的 × 刪除按鈕。"""
+
+    delete_clicked = pyqtSignal()
+    item_double_clicked = pyqtSignal()
+
+    def __init__(
+        self,
+        text: str,
+        icon_pixmap: QPixmap | None = None,
+        parent: QWidget | None = None,
+    ):
+        super().__init__(parent)
+        layout = QHBoxLayout()
+        layout.setContentsMargins(6, 2, 4, 2)
+        layout.setSpacing(6)
+
+        self._icon_label: QLabel | None = None
+        if icon_pixmap is not None:
+            self._icon_label = QLabel()
+            self._icon_label.setPixmap(icon_pixmap)
+            self._icon_label.setFixedSize(32, 32)
+            self._icon_label.setScaledContents(True)
+            layout.addWidget(self._icon_label)
+
+        self._text_label = QLabel(text)
+        self._text_label.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self._text_label, 1)
+
+        self._btn_del = QPushButton("×")
+        self._btn_del.setFixedSize(18, 18)
+        self._btn_del.setStyleSheet(
+            "QPushButton{border:none;color:#888;background:transparent;"
+            "font-size:13px;font-weight:bold;padding:0;}"
+            "QPushButton:hover{color:#e05555;}"
+        )
+        self._btn_del.hide()
+        self._btn_del.clicked.connect(self.delete_clicked)
+        layout.addWidget(self._btn_del)
+
+        self.setLayout(layout)
+
+    def set_text(self, text: str) -> None:
+        self._text_label.setText(text)
+
+    def update_icon(self, pixmap: QPixmap) -> None:
+        if self._icon_label is not None:
+            self._icon_label.setPixmap(pixmap)
+
+    def enterEvent(self, event) -> None:
+        self._btn_del.show()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:
+        self._btn_del.hide()
+        super().leaveEvent(event)
+
+    def mouseDoubleClickEvent(self, event) -> None:
+        self.item_double_clicked.emit()
+        super().mouseDoubleClickEvent(event)
+
+
+_DASHED_BTN_STYLE = (
+    "QPushButton{border:2px dashed #555;border-radius:4px;color:#888;"
+    "background:transparent;padding:4px;}"
+    "QPushButton:hover{border-color:#888;color:#bbb;}"
+)
 
 
 class LeftPanel(QWidget):
@@ -40,8 +115,10 @@ class LeftPanel(QWidget):
 
     # 角色信號
     character_add_requested = pyqtSignal()
-    character_edit_requested = pyqtSignal(int)  # character index
+    character_edit_requested = pyqtSignal(int)   # character index
     character_remove_requested = pyqtSignal(int)
+    character_property_changed = pyqtSignal()    # name/color/position edited
+    costume_edit_requested = pyqtSignal(int)     # character index
 
     # 素材匯入信號
     bg_import_requested = pyqtSignal()
@@ -51,6 +128,7 @@ class LeftPanel(QWidget):
         super().__init__(parent)
         self._project: Project | None = None
         self._current_scene_index: int = -1
+        self._current_char_index: int = -1
         self._updating = False
         self._setup_ui()
 
@@ -60,54 +138,46 @@ class LeftPanel(QWidget):
 
         splitter = QSplitter(Qt.Orientation.Vertical)
 
-        # ── 上方：Tab 切換（場景 / 角色） ──
+        # ── 上方：SegmentedWidget 切換（場景 / 角色） ──
         top_widget = QWidget()
         top_layout = QVBoxLayout()
         top_layout.setContentsMargins(0, 0, 0, 0)
-        top_layout.setSpacing(0)
+        top_layout.setSpacing(4)
 
-        self._tab_bar = QTabBar()
-        self._tab_bar.addTab("場景")
-        self._tab_bar.addTab("角色")
-        self._tab_bar.currentChanged.connect(self._on_tab_changed)
-        top_layout.addWidget(self._tab_bar)
+        self._seg_widget = SegmentedWidget()
+        self._seg_widget.addItem(routeKey="scenes", text="場景")
+        self._seg_widget.addItem(routeKey="characters", text="角色")
+        self._seg_widget.setCurrentItem("scenes")
+        self._seg_widget.currentItemChanged.connect(self._on_tab_changed)
+        top_layout.addWidget(self._seg_widget)
 
         self._list_stack = QStackedWidget()
 
         # Page 0：場景列表
         scene_section = QWidget()
         scene_layout = QVBoxLayout()
-        scene_layout.setContentsMargins(0, 4, 0, 0)
-        self.scene_list = QListWidget()
+        scene_layout.setContentsMargins(0, 0, 0, 0)
+        scene_layout.setSpacing(4)
+        self.scene_list = ListWidget()
         self.scene_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
         scene_layout.addWidget(self.scene_list)
-        scene_btn_layout = QHBoxLayout()
-        self.btn_add_scene = QPushButton("新增")
-        self.btn_remove_scene = QPushButton("移除")
-        self.btn_remove_scene.setEnabled(False)
-        scene_btn_layout.addWidget(self.btn_add_scene)
-        scene_btn_layout.addWidget(self.btn_remove_scene)
-        scene_layout.addLayout(scene_btn_layout)
+        self.btn_add_scene = QPushButton("+ 新增場景")
+        self.btn_add_scene.setStyleSheet(_DASHED_BTN_STYLE)
+        scene_layout.addWidget(self.btn_add_scene)
         scene_section.setLayout(scene_layout)
         self._list_stack.addWidget(scene_section)
 
         # Page 1：角色列表
         char_section = QWidget()
         char_layout = QVBoxLayout()
-        char_layout.setContentsMargins(0, 4, 0, 0)
-        self.character_list = QListWidget()
+        char_layout.setContentsMargins(0, 0, 0, 0)
+        char_layout.setSpacing(4)
+        self.character_list = ListWidget()
         self.character_list.setIconSize(QSize(32, 32))
         char_layout.addWidget(self.character_list)
-        char_btn_layout = QHBoxLayout()
-        self.btn_add_char = QPushButton("新增")
-        self.btn_edit_char = QPushButton("編輯")
-        self.btn_remove_char = QPushButton("移除")
-        self.btn_edit_char.setEnabled(False)
-        self.btn_remove_char.setEnabled(False)
-        char_btn_layout.addWidget(self.btn_add_char)
-        char_btn_layout.addWidget(self.btn_edit_char)
-        char_btn_layout.addWidget(self.btn_remove_char)
-        char_layout.addLayout(char_btn_layout)
+        self.btn_add_char = QPushButton("+ 新增角色")
+        self.btn_add_char.setStyleSheet(_DASHED_BTN_STYLE)
+        char_layout.addWidget(self.btn_add_char)
         char_section.setLayout(char_layout)
         self._list_stack.addWidget(char_section)
 
@@ -132,25 +202,25 @@ class LeftPanel(QWidget):
         props_layout.setContentsMargins(0, 0, 0, 0)
         bg_row = QHBoxLayout()
         bg_row.addWidget(QLabel("背景:"))
-        self.combo_background = QComboBox()
+        self.combo_background = ComboBox()
         self.combo_background.addItem(NONE_LABEL)
         bg_row.addWidget(self.combo_background, 1)
-        self.btn_import_bg = QPushButton("匯入")
+        self.btn_import_bg = PushButton("匯入")
         self.btn_import_bg.setFixedWidth(50)
         bg_row.addWidget(self.btn_import_bg)
         props_layout.addLayout(bg_row)
         bgm_row = QHBoxLayout()
         bgm_row.addWidget(QLabel("BGM:"))
-        self.combo_bgm = QComboBox()
+        self.combo_bgm = ComboBox()
         self.combo_bgm.addItem(NONE_LABEL)
         bgm_row.addWidget(self.combo_bgm, 1)
-        self.btn_import_music = QPushButton("匯入")
+        self.btn_import_music = PushButton("匯入")
         self.btn_import_music.setFixedWidth(50)
         bgm_row.addWidget(self.btn_import_music)
         props_layout.addLayout(bgm_row)
         effect_row = QHBoxLayout()
         effect_row.addWidget(QLabel("特效:"))
-        self.combo_effect = QComboBox()
+        self.combo_effect = ComboBox()
         self.combo_effect.addItems(EFFECT_OPTIONS)
         effect_row.addWidget(self.combo_effect, 1)
         props_layout.addLayout(effect_row)
@@ -158,30 +228,54 @@ class LeftPanel(QWidget):
         scene_props.setLayout(props_layout)
         self._inspector.addWidget(scene_props)
 
-        # Page 2：角色屬性（唯讀顯示）
+        # Page 2：角色屬性（可編輯）
         char_props = QWidget()
         char_props_layout = QVBoxLayout()
         char_props_layout.setContentsMargins(0, 0, 0, 0)
-        self._lbl_char_name = QLabel("—")
-        self._lbl_char_color = QLabel()
-        self._lbl_char_color.setFixedSize(20, 20)
-        self._lbl_char_position = QLabel("—")
+        char_props_layout.setSpacing(4)
+        # 名稱
         name_row = QHBoxLayout()
         name_row.addWidget(QLabel("名稱:"))
-        name_row.addWidget(self._lbl_char_name, 1)
-        color_row_layout = QHBoxLayout()
-        color_row_layout.addWidget(QLabel("顏色:"))
-        color_row_layout.addWidget(self._lbl_char_color)
-        color_row_layout.addStretch()
+        self._edit_char_name = LineEdit()
+        self._edit_char_name.setPlaceholderText("角色名稱")
+        name_row.addWidget(self._edit_char_name, 1)
+        char_props_layout.addLayout(name_row)
+        # 顏色
+        color_row = QHBoxLayout()
+        color_row.addWidget(QLabel("顏色:"))
+        self._lbl_char_color = QLabel()
+        self._lbl_char_color.setFixedSize(20, 20)
+        self._btn_char_color = PushButton("選色")
+        self._btn_char_color.setFixedWidth(50)
+        color_row.addWidget(self._lbl_char_color)
+        color_row.addWidget(self._btn_char_color)
+        color_row.addStretch()
+        char_props_layout.addLayout(color_row)
+        # 位置
         pos_row = QHBoxLayout()
         pos_row.addWidget(QLabel("位置:"))
-        pos_row.addWidget(self._lbl_char_position, 1)
-        char_props_layout.addLayout(name_row)
-        char_props_layout.addLayout(color_row_layout)
+        self._combo_char_pos = ComboBox()
+        self._combo_char_pos.addItems(_POS_OPTIONS)
+        pos_row.addWidget(self._combo_char_pos, 1)
         char_props_layout.addLayout(pos_row)
+        # 服裝列表
+        char_props_layout.addWidget(QLabel("服裝:"))
+        self._char_costume_list = QListWidget()
+        self._char_costume_list.setFixedHeight(70)
+        char_props_layout.addWidget(self._char_costume_list)
+        btn_edit_costume = QPushButton("編輯服裝…")
+        btn_edit_costume.setStyleSheet(_DASHED_BTN_STYLE)
+        btn_edit_costume.clicked.connect(
+            lambda: self.costume_edit_requested.emit(self._current_char_index)
+        )
+        char_props_layout.addWidget(btn_edit_costume)
         char_props_layout.addStretch()
         char_props.setLayout(char_props_layout)
         self._inspector.addWidget(char_props)
+        # 角色屬性連接
+        self._edit_char_name.editingFinished.connect(self._on_char_name_changed)
+        self._btn_char_color.clicked.connect(self._on_char_color_btn)
+        self._combo_char_pos.currentIndexChanged.connect(self._on_char_position_changed)
 
         inspector_layout.addWidget(self._inspector)
         inspector_group.setLayout(inspector_layout)
@@ -196,7 +290,6 @@ class LeftPanel(QWidget):
         # 信號連接
         self.scene_list.currentRowChanged.connect(self._on_scene_selected)
         self.btn_add_scene.clicked.connect(self._on_add_scene)
-        self.btn_remove_scene.clicked.connect(self._on_remove_scene)
         self.scene_list.model().rowsMoved.connect(self._on_scenes_reordered)
         self.combo_background.currentIndexChanged.connect(self._on_background_changed)
         self.combo_bgm.currentIndexChanged.connect(self._on_bgm_changed)
@@ -205,28 +298,18 @@ class LeftPanel(QWidget):
         self.btn_import_music.clicked.connect(self.music_import_requested.emit)
 
         self.character_list.currentRowChanged.connect(self._on_char_selection_changed)
-        self.character_list.doubleClicked.connect(
-            lambda: self.character_edit_requested.emit(self.character_list.currentRow())
-        )
         self.btn_add_char.clicked.connect(self.character_add_requested.emit)
-        self.btn_edit_char.clicked.connect(
-            lambda: self.character_edit_requested.emit(self.character_list.currentRow())
-        )
-        self.btn_remove_char.clicked.connect(
-            lambda: self.character_remove_requested.emit(self.character_list.currentRow())
-        )
 
-    def _on_tab_changed(self, index: int) -> None:
-        """Tab 切換：同步 stacked widget 和屬性面板。"""
+    def _on_tab_changed(self, route_key: str) -> None:
+        """SegmentedWidget 切換：同步 stacked widget 和屬性面板。"""
+        index = 0 if route_key == "scenes" else 1
         self._list_stack.setCurrentIndex(index)
         if index == 0:
-            # 切回場景 tab：根據是否有選中場景決定屬性面板
             if self._current_scene_index >= 0:
                 self._inspector.setCurrentIndex(1)
             else:
                 self._inspector.setCurrentIndex(0)
         else:
-            # 切到角色 tab：根據是否有選中角色決定屬性面板
             row = self.character_list.currentRow()
             if row >= 0:
                 self._on_char_selection_changed(row)
@@ -270,7 +353,7 @@ class LeftPanel(QWidget):
     # ── 場景列表 ──
 
     def _refresh_scene_list(self) -> None:
-        """重建場景列表。"""
+        """重建場景列表，每項用帶 hover 刪除按鈕的 widget。"""
         self._updating = True
         self.scene_list.clear()
         if self._project:
@@ -278,7 +361,18 @@ class LeftPanel(QWidget):
                 label = scene.id
                 if scene.background:
                     label += f"  [{scene.background}]"
-                self.scene_list.addItem(label)
+                item = QListWidgetItem()
+                item.setData(Qt.ItemDataRole.UserRole, scene.id)
+                item.setSizeHint(QSize(0, 36))
+                self.scene_list.addItem(item)
+                widget = _HoverDeleteItemWidget(label)
+                widget.delete_clicked.connect(
+                    lambda checked=False, it=item: self._on_remove_scene_by_item(it)
+                )
+                widget.item_double_clicked.connect(
+                    lambda it=item: self._on_scene_rename_item(it)
+                )
+                self.scene_list.setItemWidget(item, widget)
         self._updating = False
 
         if self._project and self._project.scenes:
@@ -291,12 +385,11 @@ class LeftPanel(QWidget):
         if self._updating:
             return
         self._current_scene_index = index
-        self.btn_remove_scene.setEnabled(index >= 0)
         self._sync_props_to_scene()
         if index >= 0:
-            self._inspector.setCurrentIndex(1)  # 顯示場景屬性
+            self._inspector.setCurrentIndex(1)
         else:
-            self._inspector.setCurrentIndex(0)  # 空白
+            self._inspector.setCurrentIndex(0)
         self.scene_selected.emit(index)
 
     def _sync_props_to_scene(self) -> None:
@@ -316,7 +409,7 @@ class LeftPanel(QWidget):
         self._updating = False
 
     @staticmethod
-    def _set_combo_value(combo: QComboBox, value: str | None) -> None:
+    def _set_combo_value(combo, value: str | None) -> None:
         if not value:
             combo.setCurrentIndex(0)
             return
@@ -352,7 +445,7 @@ class LeftPanel(QWidget):
         self.scene_property_changed.emit()
 
     def _refresh_scene_list_label(self) -> None:
-        """更新當前場景在列表中的顯示文字。"""
+        """更新當前場景在列表 widget 中的顯示文字。"""
         scene = self._get_current_scene()
         if not scene or self._current_scene_index < 0:
             return
@@ -361,7 +454,9 @@ class LeftPanel(QWidget):
             label = scene.id
             if scene.background:
                 label += f"  [{scene.background}]"
-            item.setText(label)
+            widget = self.scene_list.itemWidget(item)
+            if widget:
+                widget.set_text(label)
 
     def _on_add_scene(self) -> None:
         if not self._project:
@@ -372,21 +467,51 @@ class LeftPanel(QWidget):
         self.scene_list.setCurrentRow(len(self._project.scenes) - 1)
         self.scene_added.emit()
 
-    def _on_remove_scene(self) -> None:
-        if not self._project or self._current_scene_index < 0:
+    def _on_remove_scene_by_item(self, item: QListWidgetItem) -> None:
+        """由 item widget 的刪除按鈕觸發；場景有對話時先詢問確認。"""
+        row = self.scene_list.row(item)
+        if row < 0 or not self._project or row >= len(self._project.scenes):
             return
-        idx = self._current_scene_index
-        self._project.scenes.pop(idx)
+        scene = self._project.scenes[row]
+        dlg_count = len(scene.dialogues)
+        if dlg_count > 0:
+            result = QMessageBox.question(
+                self,
+                "確認移除場景",
+                f"場景「{scene.id}」包含 {dlg_count} 條對話。\n確定要移除？",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if result != QMessageBox.StandardButton.Yes:
+                return
+        self._project.scenes.pop(row)
         self._refresh_scene_list()
-        self.scene_removed.emit(idx)
+        self.scene_removed.emit(row)
+
+    def _on_scene_rename_item(self, item: QListWidgetItem) -> None:
+        """雙擊場景 → QInputDialog 重命名。"""
+        row = self.scene_list.row(item)
+        if row < 0 or not self._project or row >= len(self._project.scenes):
+            return
+        scene = self._project.scenes[row]
+        new_name, ok = QInputDialog.getText(
+            self, "重命名場景", "場景 ID:", text=scene.id
+        )
+        if ok and new_name.strip():
+            scene.id = new_name.strip()
+            item.setData(Qt.ItemDataRole.UserRole, scene.id)
+            label = scene.id
+            if scene.background:
+                label += f"  [{scene.background}]"
+            widget = self.scene_list.itemWidget(item)
+            if widget:
+                widget.set_text(label)
 
     def _on_scenes_reordered(self) -> None:
         if self._updating or not self._project:
             return
         new_order = []
         for i in range(self.scene_list.count()):
-            text = self.scene_list.item(i).text()
-            scene_id = text.split()[0]
+            scene_id = self.scene_list.item(i).data(Qt.ItemDataRole.UserRole)
             for scene in self._project.scenes:
                 if scene.id == scene_id:
                     new_order.append(scene)
@@ -406,7 +531,7 @@ class LeftPanel(QWidget):
     # ── 角色列表 ──
 
     def _refresh_character_list(self) -> None:
-        """重建角色列表，有 Sprite 時顯示縮圖，否則顯示色塊。"""
+        """重建角色列表，每項帶頭像 + hover 刪除按鈕。"""
         self.character_list.clear()
         if not self._project:
             return
@@ -414,46 +539,143 @@ class LeftPanel(QWidget):
         if self._project.project_path:
             assets_dir = self._project.project_path.parent / "assets"
         for char in self._project.characters:
-            item = QListWidgetItem(f"  {char.name}")
-            pixmap = self._get_char_icon(char, assets_dir)
-            item.setIcon(QIcon(pixmap))
+            item = QListWidgetItem()
+            item.setSizeHint(QSize(0, 40))
             self.character_list.addItem(item)
+            icon_pixmap = self._get_char_icon(char, assets_dir)
+            widget = _HoverDeleteItemWidget(char.name, icon_pixmap=icon_pixmap)
+            widget.delete_clicked.connect(
+                lambda checked=False, it=item: self._on_remove_char_by_item(it)
+            )
+            widget.item_double_clicked.connect(
+                lambda it=item: self._on_char_double_clicked_item(it)
+            )
+            self.character_list.setItemWidget(item, widget)
 
-    def _get_char_icon(self, char, assets_dir) -> QPixmap:
-        """取得角色 Icon：優先 Sprite 縮圖，fallback 顏色方塊。"""
+    def _get_char_icon(self, char: Character, assets_dir: Path | None) -> QPixmap:
+        """取得角色 Icon：裁切上方 40% 高 × 水平中央 40% 寬後縮放至 32×32。"""
         if assets_dir and char.sprites:
             sprite_path = assets_dir / char.sprites[0].filename
             if sprite_path.exists():
                 pm = QPixmap(str(sprite_path))
                 if not pm.isNull():
-                    return pm.scaled(
+                    w, h = pm.width(), pm.height()
+                    crop_w = max(1, int(w * 0.4))
+                    crop_h = max(1, int(h * 0.4))
+                    x = (w - crop_w) // 2
+                    cropped = pm.copy(x, 0, crop_w, crop_h)
+                    return cropped.scaled(
                         32, 32,
-                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.AspectRatioMode.IgnoreAspectRatio,
                         Qt.TransformationMode.SmoothTransformation,
                     )
         pixmap = QPixmap(32, 32)
         pixmap.fill(QColor(char.name_color))
         return pixmap
 
+    def _on_remove_char_by_item(self, item: QListWidgetItem) -> None:
+        """由 item widget 的刪除按鈕觸發。"""
+        row = self.character_list.row(item)
+        if row >= 0:
+            self.character_remove_requested.emit(row)
+
+    def _on_char_double_clicked_item(self, item: QListWidgetItem) -> None:
+        """雙擊角色 → 開啟編輯對話框。"""
+        row = self.character_list.row(item)
+        if row >= 0:
+            self.character_edit_requested.emit(row)
+
     def _on_char_selection_changed(self, row: int) -> None:
-        has_selection = row >= 0
-        self.btn_edit_char.setEnabled(has_selection)
-        self.btn_remove_char.setEnabled(has_selection)
-        if has_selection and self._project and row < len(self._project.characters):
-            char = self._project.characters[row]
-            self._lbl_char_name.setText(char.name)
-            self._lbl_char_color.setStyleSheet(
-                f"background-color: {char.name_color}; border: 1px solid #888; border-radius: 3px;"
-            )
-            pos_map = {"left": "左", "center": "中", "right": "右"}
-            self._lbl_char_position.setText(pos_map.get(char.position, char.position))
-            self._inspector.setCurrentIndex(2)  # 顯示角色屬性
+        self._current_char_index = row
+        if row >= 0 and self._project and row < len(self._project.characters):
+            self._refresh_char_props()
+            self._inspector.setCurrentIndex(2)
         else:
-            # 角色取消選取時，若場景已選則回到場景屬性
             if self._current_scene_index >= 0:
                 self._inspector.setCurrentIndex(1)
             else:
                 self._inspector.setCurrentIndex(0)
+
+    def _refresh_char_props(self) -> None:
+        """將角色屬性填入可編輯控件。"""
+        char = self._get_current_char()
+        if not char:
+            return
+        self._updating = True
+        self._edit_char_name.setText(char.name)
+        self._lbl_char_color.setStyleSheet(
+            f"background-color: {char.name_color}; border: 1px solid #888; border-radius: 3px;"
+        )
+        pos_label = _KEY_TO_POS.get(char.position, "中")
+        idx = _POS_OPTIONS.index(pos_label) if pos_label in _POS_OPTIONS else 1
+        self._combo_char_pos.setCurrentIndex(idx)
+        self._char_costume_list.clear()
+        for cos in char.costumes:
+            self._char_costume_list.addItem(cos.name)
+        self._updating = False
+
+    def _get_current_char(self) -> Character | None:
+        if (
+            not self._project
+            or self._current_char_index < 0
+            or self._current_char_index >= len(self._project.characters)
+        ):
+            return None
+        return self._project.characters[self._current_char_index]
+
+    def _on_char_name_changed(self) -> None:
+        if self._updating:
+            return
+        char = self._get_current_char()
+        if not char:
+            return
+        new_name = self._edit_char_name.text().strip()
+        if not new_name or new_name == char.name:
+            return
+        char.name = new_name
+        # Update the item widget text
+        item = self.character_list.item(self._current_char_index)
+        if item:
+            widget = self.character_list.itemWidget(item)
+            if widget:
+                widget.set_text(new_name)
+        self.character_property_changed.emit()
+
+    def _on_char_color_btn(self) -> None:
+        char = self._get_current_char()
+        if not char:
+            return
+        initial = QColor(char.name_color)
+        color = QColorDialog.getColor(initial, self, "選擇名稱顏色")
+        if not color.isValid():
+            return
+        char.name_color = color.name()
+        self._lbl_char_color.setStyleSheet(
+            f"background-color: {char.name_color}; border: 1px solid #888; border-radius: 3px;"
+        )
+        # Update icon (color block) in character list
+        item = self.character_list.item(self._current_char_index)
+        if item:
+            widget = self.character_list.itemWidget(item)
+            if widget:
+                pm = QPixmap(32, 32)
+                pm.fill(QColor(char.name_color))
+                widget.update_icon(pm)
+        self.character_property_changed.emit()
+
+    def _on_char_position_changed(self, _idx: int) -> None:
+        if self._updating:
+            return
+        char = self._get_current_char()
+        if not char:
+            return
+        pos_label = self._combo_char_pos.currentText()
+        char.position = _POS_TO_KEY.get(pos_label, "center")
+        self.character_property_changed.emit()
+
+    def refresh_costume_list(self) -> None:
+        """外部呼叫：重新整理角色屬性面板的服裝列表（服裝編輯後）。"""
+        self._refresh_char_props()
 
     def refresh_characters(self) -> None:
         """外部呼叫：重新整理角色列表。"""

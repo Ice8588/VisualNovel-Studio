@@ -1,4 +1,4 @@
-"""資料模型：Project, Scene, Dialogue, Character dataclass，含 JSON 序列化。"""
+"""資料模型：Project, Scene, Dialogue, Character, Costume dataclass，含 JSON 序列化。"""
 
 from __future__ import annotations
 
@@ -22,29 +22,61 @@ class SpriteVariant:
 
 
 @dataclass
+class Costume:
+    """一套服裝，包含多個表情差分。"""
+
+    name: str
+    expressions: list[SpriteVariant] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "expressions": [e.to_dict() for e in self.expressions],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> Costume:
+        return cls(
+            name=data["name"],
+            expressions=[SpriteVariant.from_dict(e) for e in data.get("expressions", [])],
+        )
+
+
+@dataclass
 class Character:
-    """角色資料：名稱、名牌顏色、螢幕位置、表情差分列表。"""
+    """角色資料：名稱、名牌顏色、螢幕位置、服裝列表（每套服裝含多個表情）。"""
 
     name: str
     name_color: str = "#4682B4"
     position: str = "center"  # "left" / "center" / "right"
-    sprites: list[SpriteVariant] = field(default_factory=list)
+    costumes: list[Costume] = field(default_factory=list)
+
+    @property
+    def sprites(self) -> list[SpriteVariant]:
+        """向下相容：回傳所有服裝的表情展平列表。"""
+        return [e for c in self.costumes for e in c.expressions]
 
     def to_dict(self) -> dict:
         return {
             "name": self.name,
             "name_color": self.name_color,
             "position": self.position,
-            "sprites": [s.to_dict() for s in self.sprites],
+            "costumes": [c.to_dict() for c in self.costumes],
         }
 
     @classmethod
     def from_dict(cls, data: dict) -> Character:
+        if "costumes" in data:
+            costumes = [Costume.from_dict(c) for c in data["costumes"]]
+        else:
+            # 自動遷移舊格式（flat sprites）→ 包進單一預設服裝
+            old_sprites = [SpriteVariant.from_dict(s) for s in data.get("sprites", [])]
+            costumes = [Costume(name="預設", expressions=old_sprites)] if old_sprites else []
         return cls(
             name=data["name"],
             name_color=data.get("name_color", "#4682B4"),
             position=data.get("position", "center"),
-            sprites=[SpriteVariant.from_dict(s) for s in data.get("sprites", [])],
+            costumes=costumes,
         )
 
 
@@ -55,7 +87,8 @@ class Dialogue:
     type: str  # "dialogue" 或 "narration"
     text: str
     character: str | None = None
-    sprite: str | None = None  # 表情標籤（對應 SpriteVariant.label），fallback 當檔名
+    sprite: str | None = None    # 表情標籤（對應 SpriteVariant.label）
+    costume: str | None = None   # 服裝名稱（對應 Costume.name）
     effects: list[str] = field(default_factory=list)  # 文字效果，如 ["bold", "italic"]
 
     def to_dict(self) -> dict:
@@ -65,6 +98,8 @@ class Dialogue:
             "character": self.character,
             "sprite": self.sprite,
         }
+        if self.costume is not None:
+            d["costume"] = self.costume
         if self.effects:
             d["effects"] = self.effects
         return d
@@ -76,6 +111,7 @@ class Dialogue:
             text=data["text"],
             character=data.get("character"),
             sprite=data.get("sprite"),
+            costume=data.get("costume"),
             effects=data.get("effects", []),
         )
 
@@ -152,7 +188,7 @@ class Project:
     game_settings: GameSettings = field(default_factory=GameSettings)
 
     def to_script_json(self) -> dict:
-        """轉換為 engine.js 使用的 script.json 格式。"""
+        """轉換為 engine.js 使用的 script.json 格式（保持扁平 sprites dict）。"""
         return {
             "title": self.title,
             "scenes": [s.to_dict() for s in self.scenes],
@@ -160,7 +196,7 @@ class Project:
                 c.name: {
                     "name_color": c.name_color,
                     "position": c.position,
-                    "sprites": {s.label: s.filename for s in c.sprites},
+                    "sprites": {e.label: e.filename for cos in c.costumes for e in cos.expressions},
                 }
                 for c in self.characters
             },

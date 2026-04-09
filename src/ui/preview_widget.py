@@ -1,17 +1,63 @@
-"""預覽元件：QtWebEngine 即時預覽，從 right_panel.py 提取。"""
+"""預覽元件：QtWebEngine 即時預覽，含 16:9 Letterbox。"""
 
 import json
 import shutil
 import tempfile
 from pathlib import Path
 
-from PyQt6.QtCore import QUrl
+from PyQt6.QtCore import QObject, QUrl, pyqtSignal, pyqtSlot
+from PyQt6.QtWebChannel import QWebChannel
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import QVBoxLayout, QWidget
 
 from src.core.models import Project
 
 ENGINE_DIR = Path(__file__).parent.parent / "engine"
+
+_TARGET_RATIO = 16 / 9
+_QRC_WEBCHANNEL = '<script src="qrc:///qtwebchannel/qwebchannel.js"></script>'
+
+
+class PreviewBridge(QObject):
+    """Python←JS 橋接：Preview 推進台詞時通知 Python 端。"""
+
+    dialogue_advanced = pyqtSignal(int, int)  # (scene_index, dialogue_index)
+
+    @pyqtSlot(int, int)
+    def on_dialogue_shown(self, scene_index: int, dialogue_index: int) -> None:
+        self.dialogue_advanced.emit(scene_index, dialogue_index)
+
+
+class LetterboxContainer(QWidget):
+    """將 WebView 以 16:9 等比居中顯示，四周填黑邊。"""
+
+    def __init__(self, web_view: QWebEngineView, parent: QWidget | None = None):
+        super().__init__(parent)
+        self._web_view = web_view
+        self._web_view.setParent(self)
+        self.setStyleSheet("background-color: #000;")
+
+    def resizeEvent(self, event) -> None:
+        self._refit()
+        super().resizeEvent(event)
+
+    def _refit(self) -> None:
+        w, h = self.width(), self.height()
+        if w <= 0 or h <= 0:
+            return
+        if w / h > _TARGET_RATIO:
+            # 容器較寬 → 以高度為準，左右黑邊
+            new_h = h
+            new_w = int(h * _TARGET_RATIO)
+            x = (w - new_w) // 2
+            y = 0
+        else:
+            # 容器較窄 → 以寬度為準，上下黑邊
+            new_w = w
+            new_h = int(w / _TARGET_RATIO)
+            x = 0
+            y = (h - new_h) // 2
+        self._web_view.setGeometry(x, y, new_w, new_h)
 
 
 class PreviewWidget(QWidget):
@@ -28,7 +74,15 @@ class PreviewWidget(QWidget):
 
         self.web_view = QWebEngineView()
         self.web_view.setHtml(self._placeholder_html())
-        layout.addWidget(self.web_view)
+
+        # QWebChannel：Python←JS 雙向通訊
+        self.bridge = PreviewBridge()
+        self._channel = QWebChannel()
+        self._channel.registerObject("bridge", self.bridge)
+        self.web_view.page().setWebChannel(self._channel)
+
+        self.letterbox = LetterboxContainer(self.web_view)
+        layout.addWidget(self.letterbox)
 
         self.setLayout(layout)
 

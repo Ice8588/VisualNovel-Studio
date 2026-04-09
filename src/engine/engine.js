@@ -39,6 +39,7 @@
   var isSkipping = false;
   var skipTimer = null;
   var isUiHidden = false;
+  var _jumpedFromPython = false;  // QWebChannel：Python 主動跳轉時設為 true，避免回呼迴圈
 
   // ── DOM 快取 ──
   var els = {};
@@ -318,6 +319,12 @@
     });
 
     isTransitioning = false;
+
+    // 通知 Python 端當前台詞（QWebChannel，非 Capture 模式、非 Python 主動跳轉）
+    if (!CAPTURE_MODE && window._bridge && !_jumpedFromPython) {
+      window._bridge.on_dialogue_shown(sceneIndex, dialogueIndex);
+    }
+    _jumpedFromPython = false;
   }
 
   function resolveSpriteFile(dialogue, charInfo) {
@@ -700,18 +707,27 @@
     // VNPreviewAPI：在預覽模式也可跳轉（保留動畫效果）
     window.VNPreviewAPI = {
       goToScene: function (sIdx) {
+        _jumpedFromPython = true;
         if (!scriptData || sIdx < 0 || sIdx >= scriptData.scenes.length) return;
         sceneIndex = sIdx;
         dialogueIndex = 0;
         enterScene(sIdx);
       },
       goToDialogue: function (dIdx) {
+        _jumpedFromPython = true;
         var scene = scriptData && scriptData.scenes[sceneIndex];
         if (!scene || dIdx < 0 || dIdx >= scene.dialogues.length) return;
         dialogueIndex = dIdx;
         showDialogue();
       }
     };
+
+    // QWebChannel：在 PyQt6 WebEngine 預覽環境中初始化雙向通訊
+    if (!CAPTURE_MODE && typeof QWebChannel !== "undefined") {
+      new QWebChannel(qt.webChannelTransport, function (channel) {
+        window._bridge = channel.objects.bridge;
+      });
+    }
 
     if (CAPTURE_MODE) {
       // 暴露截幀控制 API 給 Python 端呼叫

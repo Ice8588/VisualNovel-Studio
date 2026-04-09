@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from src.core.models import Dialogue, Project, Scene
+from src.core.models import Character, Costume, Dialogue, Project, Scene, SpriteVariant
 
 
 class TestDialogue:
@@ -152,3 +152,89 @@ class TestProject:
         assert p.assets["backgrounds"] == ["bg.png"]
         assert p.assets["sprites"] == []
         assert p.assets["music"] == []
+
+
+class TestCharacterCostume:
+    def test_old_format_auto_migrates_to_default_costume(self):
+        """舊格式 JSON（flat sprites）→ 自動包進 default costume。"""
+        data = {
+            "name": "小明",
+            "name_color": "#4682B4",
+            "position": "left",
+            "sprites": [
+                {"label": "普通", "filename": "xm_normal.png"},
+                {"label": "微笑", "filename": "xm_smile.png"},
+            ],
+        }
+        char = Character.from_dict(data)
+        assert len(char.costumes) == 1
+        assert char.costumes[0].name == "預設"
+        assert len(char.costumes[0].expressions) == 2
+        # @property sprites 向下相容
+        assert len(char.sprites) == 2
+        assert char.sprites[0].label == "普通"
+
+    def test_new_format_costume_roundtrip(self):
+        """新格式 JSON（含 costumes）→ 正常讀寫往返。"""
+        char = Character(
+            name="小花",
+            name_color="#ff0000",
+            position="right",
+            costumes=[
+                Costume(name="校服", expressions=[
+                    SpriteVariant(label="普通", filename="hana_school.png"),
+                    SpriteVariant(label="開心", filename="hana_happy.png"),
+                ]),
+                Costume(name="便服", expressions=[
+                    SpriteVariant(label="普通", filename="hana_casual.png"),
+                ]),
+            ],
+        )
+        restored = Character.from_dict(char.to_dict())
+        assert restored.name == "小花"
+        assert len(restored.costumes) == 2
+        assert restored.costumes[0].name == "校服"
+        assert len(restored.costumes[0].expressions) == 2
+        assert restored.costumes[1].name == "便服"
+        # sprites property 展平
+        assert len(restored.sprites) == 3
+
+    def test_to_script_json_outputs_flat_sprites(self):
+        """to_script_json() 輸出扁平 sprites dict，engine.js 不需改動。"""
+        p = Project(
+            title="測試",
+            characters=[
+                Character(
+                    name="角色A",
+                    costumes=[
+                        Costume(name="服裝1", expressions=[
+                            SpriteVariant(label="普通", filename="a_normal.png"),
+                        ]),
+                        Costume(name="服裝2", expressions=[
+                            SpriteVariant(label="開心", filename="a_happy.png"),
+                        ]),
+                    ],
+                )
+            ],
+        )
+        result = p.to_script_json()
+        sprites = result["characters"]["角色A"]["sprites"]
+        assert sprites == {"普通": "a_normal.png", "開心": "a_happy.png"}
+
+    def test_dialogue_costume_field_serialization(self):
+        """Dialogue 含 costume 欄位的序列化與反序列化。"""
+        dlg = Dialogue(
+            type="dialogue",
+            text="你好",
+            character="小明",
+            sprite="普通",
+            costume="校服",
+        )
+        data = dlg.to_dict()
+        assert data["costume"] == "校服"
+        restored = Dialogue.from_dict(data)
+        assert restored.costume == "校服"
+
+        # costume=None 時不應出現在 dict 中
+        dlg_no_costume = Dialogue(type="narration", text="旁白")
+        assert "costume" not in dlg_no_costume.to_dict()
