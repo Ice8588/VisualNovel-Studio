@@ -62,6 +62,11 @@ def export_single_html(
     engine_js = (ENGINE_DIR / "engine.js").read_text(encoding="utf-8")
     style_css = (ENGINE_DIR / "style.css").read_text(encoding="utf-8")
 
+    # 移除 qrc:// QWebChannel 腳本（僅在 PyQt6 WebEngine 預覽環境有效，瀏覽器不可用）
+    index_html = index_html.replace(
+        '  <script src="qrc:///qtwebchannel/qwebchannel.js"></script>\n', ""
+    )
+
     # 讀取 effects.js（如果存在）
     effects_js = ""
     effects_path = ENGINE_DIR / "effects.js"

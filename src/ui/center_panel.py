@@ -208,6 +208,9 @@ class CenterPanel(QWidget):
         layout.addWidget(splitter)
         self.setLayout(layout)
 
+        # Preview bridge：自動播放同步表格高亮
+        self.preview.bridge.dialogue_advanced.connect(self._on_preview_dialogue_advanced)
+
         # 信號連接
         self.dialogue_table.cellChanged.connect(self._on_dialogue_edited)
         self.dialogue_table.row_moved.connect(self._on_row_moved)
@@ -730,6 +733,28 @@ class CenterPanel(QWidget):
                 item = self.dialogue_table.item(row, col)
                 if item:
                     item.setBackground(QColor(0, 0, 0, 0))
+
+    # ── Preview 雙向同步 ──
+
+    def _on_preview_dialogue_advanced(self, scene_idx: int, dlg_idx: int) -> None:
+        """Preview 自動播放推進台詞時，同步表格高亮。編輯中不搶焦點。"""
+        if self._updating:
+            return
+        if self.dialogue_table.state() == QAbstractItemView.State.EditingState:
+            return
+        if scene_idx != self._current_scene_index:
+            return
+        scene = self._get_current_scene()
+        if not scene or dlg_idx < 0 or dlg_idx >= len(scene.dialogues):
+            return
+        self._updating = True
+        self.dialogue_table.setCurrentCell(dlg_idx, 0)
+        item = self.dialogue_table.item(dlg_idx, 0)
+        if item:
+            self.dialogue_table.scrollToItem(
+                item, QAbstractItemView.ScrollHint.EnsureVisible
+            )
+        self._updating = False
 
     # ── 工具方法 ──
 

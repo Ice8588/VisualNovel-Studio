@@ -5,7 +5,8 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from PyQt6.QtCore import QUrl
+from PyQt6.QtCore import QObject, QUrl, pyqtSignal, pyqtSlot
+from PyQt6.QtWebChannel import QWebChannel
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import QVBoxLayout, QWidget
 
@@ -14,6 +15,17 @@ from src.core.models import Project
 ENGINE_DIR = Path(__file__).parent.parent / "engine"
 
 _TARGET_RATIO = 16 / 9
+_QRC_WEBCHANNEL = '<script src="qrc:///qtwebchannel/qwebchannel.js"></script>'
+
+
+class PreviewBridge(QObject):
+    """Python←JS 橋接：Preview 推進台詞時通知 Python 端。"""
+
+    dialogue_advanced = pyqtSignal(int, int)  # (scene_index, dialogue_index)
+
+    @pyqtSlot(int, int)
+    def on_dialogue_shown(self, scene_index: int, dialogue_index: int) -> None:
+        self.dialogue_advanced.emit(scene_index, dialogue_index)
 
 
 class LetterboxContainer(QWidget):
@@ -62,6 +74,13 @@ class PreviewWidget(QWidget):
 
         self.web_view = QWebEngineView()
         self.web_view.setHtml(self._placeholder_html())
+
+        # QWebChannel：Python←JS 雙向通訊
+        self.bridge = PreviewBridge()
+        self._channel = QWebChannel()
+        self._channel.registerObject("bridge", self.bridge)
+        self.web_view.page().setWebChannel(self._channel)
+
         self.letterbox = LetterboxContainer(self.web_view)
         layout.addWidget(self.letterbox)
 
