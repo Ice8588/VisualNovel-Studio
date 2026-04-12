@@ -112,6 +112,13 @@
       VNEffects.init(els.container);
     }
 
+    // 舞台 overlay：匯出時加 capture-mode class 隱藏；預覽時啟用 overlay
+    if (CAPTURE_MODE) {
+      document.body.classList.add("capture-mode");
+    } else {
+      setupStageOverlay();
+    }
+
     loadScript();
   }
 
@@ -318,6 +325,11 @@
 
     isTransitioning = false;
 
+    // 更新舞台 overlay 按鈕狀態（Preview 模式）
+    if (!CAPTURE_MODE) {
+      refreshStageOverlayButtons(d);
+    }
+
     // 通知 Python 端當前台詞（QWebChannel，非 Capture 模式、非 Python 主動跳轉）
     if (!CAPTURE_MODE && window._bridge && !_jumpedFromPython) {
       window._bridge.on_dialogue_shown(sceneIndex, dialogueIndex);
@@ -412,6 +424,72 @@
 
   function isDataUri(str) {
     return str && str.indexOf("data:") === 0;
+  }
+
+  // ── 舞台 overlay（Preview 模式） ──
+
+  function setupStageOverlay() {
+    var positions = ["left", "center", "right"];
+    positions.forEach(function (pos) {
+      var ctrl = document.querySelector(".slot-control[data-position='" + pos + "']");
+      if (!ctrl) return;
+
+      var btnAdd = document.createElement("button");
+      btnAdd.className = "btn-add";
+      btnAdd.textContent = "+";
+      btnAdd.addEventListener("click", function (e) {
+        e.stopPropagation();
+        if (window._bridge) {
+          window._bridge.on_stage_slot_clicked(sceneIndex, dialogueIndex, pos, "add");
+        }
+      });
+
+      var btnClear = document.createElement("button");
+      btnClear.className = "btn-clear";
+      btnClear.textContent = "✕";
+      btnClear.addEventListener("click", function (e) {
+        e.stopPropagation();
+        if (window._bridge) {
+          window._bridge.on_stage_slot_clicked(sceneIndex, dialogueIndex, pos, "clear");
+        }
+      });
+
+      var btnSwap = document.createElement("button");
+      btnSwap.className = "btn-swap";
+      btnSwap.textContent = "▼";
+      btnSwap.addEventListener("click", function (e) {
+        e.stopPropagation();
+        if (window._bridge) {
+          window._bridge.on_stage_slot_clicked(sceneIndex, dialogueIndex, pos, "swap");
+        }
+      });
+
+      ctrl.appendChild(btnAdd);
+      ctrl.appendChild(btnClear);
+      ctrl.appendChild(btnSwap);
+    });
+  }
+
+  function refreshStageOverlayButtons(d) {
+    var stage = d.stage || {left: null, center: null, right: null};
+    var positions = ["left", "center", "right"];
+    positions.forEach(function (pos) {
+      var ctrl = document.querySelector(".slot-control[data-position='" + pos + "']");
+      if (!ctrl) return;
+      var btnAdd   = ctrl.querySelector(".btn-add");
+      var btnClear = ctrl.querySelector(".btn-clear");
+      var btnSwap  = ctrl.querySelector(".btn-swap");
+      if (!btnAdd) return;
+      if (stage[pos]) {
+        ctrl.classList.add("filled");
+        btnAdd.style.display = "none";
+      } else {
+        ctrl.classList.remove("filled");
+        btnAdd.style.display = "";
+        if (btnClear) btnClear.style.display = "none";
+        if (btnSwap)  btnSwap.style.display  = "none";
+      }
+    });
   }
 
   // ── 推進 ──
