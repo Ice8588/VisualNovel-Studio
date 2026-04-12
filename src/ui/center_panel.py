@@ -113,6 +113,7 @@ class _BatchToolbar(QWidget):
     """多選 ≥2 行時浮現的批次操作列。"""
 
     batch_assign = pyqtSignal()
+    batch_stage = pyqtSignal()
     batch_delete = pyqtSignal()
 
     def __init__(self, parent=None):
@@ -125,6 +126,9 @@ class _BatchToolbar(QWidget):
         btn_assign = PushButton("批次指定角色")
         btn_assign.clicked.connect(self.batch_assign)
         layout.addWidget(btn_assign)
+        btn_stage = PushButton("批次設置舞台")
+        btn_stage.clicked.connect(self.batch_stage)
+        layout.addWidget(btn_stage)
         btn_del = PushButton("刪除選取")
         btn_del.clicked.connect(self.batch_delete)
         layout.addWidget(btn_del)
@@ -247,6 +251,7 @@ class CenterPanel(QWidget):
         # 批次操作列（多選 ≥2 顯示）
         self._batch_toolbar = _BatchToolbar()
         self._batch_toolbar.batch_assign.connect(self._on_batch_assign)
+        self._batch_toolbar.batch_stage.connect(self._on_batch_stage)
         self._batch_toolbar.batch_delete.connect(self._on_batch_delete_selected)
         dialogue_layout.addWidget(self._batch_toolbar)
 
@@ -867,6 +872,37 @@ class CenterPanel(QWidget):
                     d.sprite = sprite or None
 
         self._refresh_dialogue_table()
+        self.project_changed.emit()
+
+    def _on_batch_stage(self) -> None:
+        """批次設置選取行的舞台槽位。"""
+        scene = self._get_current_scene()
+        if not scene or not self._project:
+            return
+        selected_rows = sorted(
+            {idx.row() for idx in self.dialogue_table.selectionModel().selectedRows()}
+        )
+        if len(selected_rows) < 2:
+            return
+        from src.ui.dialogs import StageBatchDialog
+        dlg = StageBatchDialog(self._project.characters, self)
+        if dlg.exec() != dlg.DialogCode.Accepted:
+            return
+        values = dlg.get_values()
+        for row in selected_rows:
+            if row >= len(scene.dialogues):
+                continue
+            d = scene.dialogues[row]
+            for pos in ("left", "center", "right"):
+                v = values[pos]
+                if v is None:
+                    continue
+                elif v == "clear":
+                    d.stage[pos] = None
+                else:
+                    d.stage[pos] = v
+        self._refresh_dialogue_table()
+        self.preview.reload_preview()
         self.project_changed.emit()
 
     def _on_batch_delete_selected(self) -> None:
