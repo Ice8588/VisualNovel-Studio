@@ -250,11 +250,11 @@ class CenterPanel(QWidget):
         self._batch_toolbar.batch_delete.connect(self._on_batch_delete_selected)
         dialogue_layout.addWidget(self._batch_toolbar)
 
-        # 對話表格：6 欄（#、台詞、角色、服裝、表情、效果）
+        # 對話表格：7 欄（#、台詞、角色、服裝、表情、效果、舞台）
         self.dialogue_table = _DraggableTable()
-        self.dialogue_table.setColumnCount(6)
+        self.dialogue_table.setColumnCount(7)
         self.dialogue_table.setHorizontalHeaderLabels(
-            ["#", "台詞", "角色", "服裝", "表情", "效果"]
+            ["#", "台詞", "角色", "服裝", "表情", "效果", "舞台"]
         )
         header = self.dialogue_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
@@ -263,11 +263,13 @@ class CenterPanel(QWidget):
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.Interactive)
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)
         self.dialogue_table.setColumnWidth(0, 40)
         self.dialogue_table.setColumnWidth(2, 100)
         self.dialogue_table.setColumnWidth(3, 90)
         self.dialogue_table.setColumnWidth(4, 90)
         self.dialogue_table.setColumnWidth(5, 100)
+        self.dialogue_table.setColumnWidth(6, 90)
         self.dialogue_table.verticalHeader().setDefaultSectionSize(40)
         self.dialogue_table.verticalHeader().setVisible(False)
         self.dialogue_table.setSelectionMode(
@@ -336,6 +338,8 @@ class CenterPanel(QWidget):
 
         # Preview bridge：自動播放同步表格高亮
         self.preview.bridge.dialogue_advanced.connect(self._on_preview_dialogue_advanced)
+        # Preview bridge：舞台槽位點擊
+        self.preview.bridge.stage_slot_clicked.connect(self._on_stage_slot_clicked)
 
         # 信號連接
         self.dialogue_table.cellChanged.connect(self._on_dialogue_edited)
@@ -477,6 +481,18 @@ class CenterPanel(QWidget):
             # 欄 5：效果（逗號分隔文字）
             effect_text = ", ".join(dlg.effects) if dlg.effects else ""
             self.dialogue_table.setItem(row, 5, QTableWidgetItem(effect_text))
+
+            # 欄 6：舞台槽位指示（L/C/R，● 有角色 ○ 空）
+            stage = dlg.stage
+            parts = [
+                "L●" if stage.get("left") else "L○",
+                "C●" if stage.get("center") else "C○",
+                "R●" if stage.get("right") else "R○",
+            ]
+            stage_item = QTableWidgetItem(" ".join(parts))
+            stage_item.setFlags(stage_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            stage_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.dialogue_table.setItem(row, 6, stage_item)
 
         self._updating = False
 
@@ -789,6 +805,33 @@ class CenterPanel(QWidget):
             return
         insert_after = self.dialogue_table.currentRow() if dlg.is_insert_mode() else None
         self.add_dialogues_to_current_scene(new_dialogues, insert_after=insert_after)
+
+    # ── 舞台槽位 ──
+
+    def _on_stage_slot_clicked(self, scene_idx: int, dlg_idx: int, position: str, action: str) -> None:
+        scene = self._get_current_scene()
+        if not scene or dlg_idx < 0 or dlg_idx >= len(scene.dialogues):
+            return
+        d = scene.dialogues[dlg_idx]
+        if action == "clear":
+            d.stage[position] = None
+        else:  # "add" or "swap"
+            from src.ui.dialogs import StageSlotPickerDialog
+            characters = self._project.characters if self._project else []
+            picker = StageSlotPickerDialog(characters, current=d.stage.get(position), parent=self)
+            if picker.exec() != picker.DialogCode.Accepted:
+                return
+            d.stage[position] = picker.get_value()
+        # 局部刷新 preview（不退回第一幕）
+        js = (
+            f"if(window.VNPreviewAPI){{"
+            f"VNPreviewAPI.goToScene({scene_idx});"
+            f"VNPreviewAPI.goToDialogue({dlg_idx});"
+            f"}}"
+        )
+        self.preview.web_view.page().runJavaScript(js)
+        self._refresh_dialogue_table()
+        self.project_changed.emit()
 
     # ── 批次操作 ──
 

@@ -938,3 +938,104 @@ class GameSettingsDialog(QDialog):
             name_font_size=self._spin_name_font.value(),
             dialogue_box_opacity=self._spin_opacity.value(),
         )
+
+
+# ── 舞台槽位 Picker ──
+
+
+class StageSlotPickerDialog(QDialog):
+    """為單一舞台槽位（left/center/right）選取角色 + 服裝 + 表情。"""
+
+    def __init__(
+        self,
+        characters: list[Character],
+        current: dict | None = None,
+        parent: QWidget | None = None,
+    ):
+        super().__init__(parent)
+        self.setWindowTitle("設置舞台槽位")
+        self.setMinimumWidth(340)
+        self._characters = characters
+        self._result: dict | None = None
+
+        layout = QVBoxLayout()
+        form = QFormLayout()
+
+        # 角色
+        self._combo_char = ComboBox()
+        self._combo_char.addItem("(無)")
+        for c in characters:
+            self._combo_char.addItem(c.name)
+        form.addRow("角色:", self._combo_char)
+
+        # 服裝
+        self._combo_costume = ComboBox()
+        form.addRow("服裝:", self._combo_costume)
+
+        # 表情
+        self._combo_sprite = ComboBox()
+        form.addRow("表情:", self._combo_sprite)
+
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        self.setLayout(layout)
+
+        # 信號串聯
+        self._combo_char.currentIndexChanged.connect(self._on_char_changed)
+        self._combo_costume.currentIndexChanged.connect(self._on_costume_changed)
+
+        # 預填現有值
+        if current and current.get("character"):
+            idx = self._combo_char.findText(current["character"])
+            if idx >= 0:
+                self._combo_char.setCurrentIndex(idx)
+            self._on_char_changed(self._combo_char.currentIndex())
+            if current.get("costume"):
+                cidx = self._combo_costume.findText(current["costume"])
+                if cidx >= 0:
+                    self._combo_costume.setCurrentIndex(cidx)
+                self._on_costume_changed(self._combo_costume.currentIndex())
+            if current.get("sprite"):
+                sidx = self._combo_sprite.findText(current["sprite"])
+                if sidx >= 0:
+                    self._combo_sprite.setCurrentIndex(sidx)
+        else:
+            self._on_char_changed(0)
+
+    def _on_char_changed(self, index: int) -> None:
+        self._combo_costume.clear()
+        char_name = self._combo_char.currentText()
+        char = next((c for c in self._characters if c.name == char_name), None)
+        if char:
+            for cos in char.costumes:
+                self._combo_costume.addItem(cos.name)
+        self._on_costume_changed(0)
+
+    def _on_costume_changed(self, index: int) -> None:
+        self._combo_sprite.clear()
+        char_name = self._combo_char.currentText()
+        char = next((c for c in self._characters if c.name == char_name), None)
+        if not char:
+            return
+        cos_name = self._combo_costume.currentText()
+        cos = next((c for c in char.costumes if c.name == cos_name), None)
+        if cos:
+            self._combo_sprite.addItem("(預設)")
+            for expr in cos.expressions:
+                self._combo_sprite.addItem(expr.label)
+
+    def get_value(self) -> dict | None:
+        """回傳 {"character": str, "costume": str|None, "sprite": str|None}，或 None（選(無)）。"""
+        char_name = self._combo_char.currentText()
+        if char_name == "(無)":
+            return None
+        cos_name = self._combo_costume.currentText() or None
+        sprite_text = self._combo_sprite.currentText()
+        sprite = None if (not sprite_text or sprite_text == "(預設)") else sprite_text
+        return {"character": char_name, "costume": cos_name, "sprite": sprite}
