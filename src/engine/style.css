@@ -69,6 +69,92 @@
   left: 75%;
 }
 
+/* ── 三槽位立繪（stage 模式） ── */
+
+.stage-sprite {
+  position: absolute;
+  bottom: 0;
+  max-height: 80%;
+  max-width: 40%;
+  z-index: 2;
+  transition: opacity 0.3s ease;
+  display: none;
+  transform: translateX(-50%);
+}
+
+#sprite-left   { left: 25%; }
+#sprite-center { left: 50%; }
+#sprite-right  { left: 75%; }
+
+/* ── 舞台槽位 overlay（Preview 編輯，匯出時隱藏） ── */
+
+#stage-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.slot-control {
+  position: absolute;
+  bottom: 10%;
+  width: 80px;
+  height: 80px;
+  transform: translateX(-50%);
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.slot-control[data-position="left"]   { left: 25%; }
+.slot-control[data-position="center"] { left: 50%; }
+.slot-control[data-position="right"]  { left: 75%; }
+
+.slot-control .btn-add {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 2px dashed #888;
+  background: rgba(0, 0, 0, 0.3);
+  color: #ccc;
+  font-size: 32px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.slot-control .btn-add:hover {
+  border-color: #fff;
+  color: #fff;
+}
+
+.slot-control .btn-clear,
+.slot-control .btn-swap {
+  display: none;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid #aaa;
+  border-radius: 4px;
+  color: #eee;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 8px;
+  margin: 2px;
+}
+
+.slot-control.filled {
+  flex-direction: column;
+}
+
+.slot-control.filled:hover .btn-clear,
+.slot-control.filled:hover .btn-swap {
+  display: inline-block;
+}
+
+/* 匯出雙重保護：CAPTURE_MODE 下整個 overlay 消失 */
+body.capture-mode #stage-overlay { display: none !important; }
+
 /* ── 特效覆蓋層 ── */
 
 #effect-canvas {

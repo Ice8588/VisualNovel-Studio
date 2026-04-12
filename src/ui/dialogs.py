@@ -938,3 +938,208 @@ class GameSettingsDialog(QDialog):
             name_font_size=self._spin_name_font.value(),
             dialogue_box_opacity=self._spin_opacity.value(),
         )
+
+
+# ── 舞台槽位 Picker ──
+
+
+class StageSlotPickerDialog(QDialog):
+    """為單一舞台槽位（left/center/right）選取角色 + 服裝 + 表情。"""
+
+    def __init__(
+        self,
+        characters: list[Character],
+        current: dict | None = None,
+        parent: QWidget | None = None,
+    ):
+        super().__init__(parent)
+        self.setWindowTitle("設置舞台槽位")
+        self.setMinimumWidth(340)
+        self._characters = characters
+        self._result: dict | None = None
+
+        layout = QVBoxLayout()
+        form = QFormLayout()
+
+        # 角色
+        self._combo_char = ComboBox()
+        self._combo_char.addItem("(無)")
+        for c in characters:
+            self._combo_char.addItem(c.name)
+        form.addRow("角色:", self._combo_char)
+
+        # 服裝
+        self._combo_costume = ComboBox()
+        form.addRow("服裝:", self._combo_costume)
+
+        # 表情
+        self._combo_sprite = ComboBox()
+        form.addRow("表情:", self._combo_sprite)
+
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        self.setLayout(layout)
+
+        # 信號串聯
+        self._combo_char.currentIndexChanged.connect(self._on_char_changed)
+        self._combo_costume.currentIndexChanged.connect(self._on_costume_changed)
+
+        # 預填現有值
+        if current and current.get("character"):
+            idx = self._combo_char.findText(current["character"])
+            if idx >= 0:
+                self._combo_char.setCurrentIndex(idx)
+            self._on_char_changed(self._combo_char.currentIndex())
+            if current.get("costume"):
+                cidx = self._combo_costume.findText(current["costume"])
+                if cidx >= 0:
+                    self._combo_costume.setCurrentIndex(cidx)
+                self._on_costume_changed(self._combo_costume.currentIndex())
+            if current.get("sprite"):
+                sidx = self._combo_sprite.findText(current["sprite"])
+                if sidx >= 0:
+                    self._combo_sprite.setCurrentIndex(sidx)
+        else:
+            self._on_char_changed(0)
+
+    def _on_char_changed(self, index: int) -> None:
+        self._combo_costume.clear()
+        char_name = self._combo_char.currentText()
+        char = next((c for c in self._characters if c.name == char_name), None)
+        if char:
+            for cos in char.costumes:
+                self._combo_costume.addItem(cos.name)
+        self._on_costume_changed(0)
+
+    def _on_costume_changed(self, index: int) -> None:
+        self._combo_sprite.clear()
+        char_name = self._combo_char.currentText()
+        char = next((c for c in self._characters if c.name == char_name), None)
+        if not char:
+            return
+        cos_name = self._combo_costume.currentText()
+        cos = next((c for c in char.costumes if c.name == cos_name), None)
+        if cos:
+            self._combo_sprite.addItem("(預設)")
+            for expr in cos.expressions:
+                self._combo_sprite.addItem(expr.label)
+
+    def get_value(self) -> dict | None:
+        """回傳 {"character": str, "costume": str|None, "sprite": str|None}，或 None（選(無)）。"""
+        char_name = self._combo_char.currentText()
+        if char_name == "(無)":
+            return None
+        cos_name = self._combo_costume.currentText() or None
+        sprite_text = self._combo_sprite.currentText()
+        sprite = None if (not sprite_text or sprite_text == "(預設)") else sprite_text
+        return {"character": char_name, "costume": cos_name, "sprite": sprite}
+
+
+# ── 批次舞台設置對話框 ──
+
+
+class StageBatchDialog(QDialog):
+    """批次設置多行的舞台槽位（左/中/右），每槽三態：不動 / 清空 / 指定。"""
+
+    _KEEP = "keep"
+    _CLEAR = "clear"
+    _SET = "set"
+
+    def __init__(
+        self,
+        characters: list[Character],
+        parent: QWidget | None = None,
+    ):
+        super().__init__(parent)
+        self.setWindowTitle("批次設置舞台")
+        self.setMinimumWidth(400)
+        self._characters = characters
+        self._pickers: dict[str, StageSlotPickerDialog | None] = {
+            "left": None, "center": None, "right": None
+        }
+
+        layout = QVBoxLayout()
+        layout.addWidget(QLabel("勾選要變更的槽位，未勾選的槽位保持不變。"))
+
+        for pos, label in [("left", "左槽"), ("center", "中槽"), ("right", "右槽")]:
+            box = QGroupBox(label)
+            box_layout = QHBoxLayout()
+
+            chk = QCheckBox("套用")
+            chk.setObjectName(f"chk_{pos}")
+            box_layout.addWidget(chk)
+
+            btn_clear = PushButton("清空")
+            btn_clear.setObjectName(f"btn_clear_{pos}")
+            btn_clear.setEnabled(False)
+            box_layout.addWidget(btn_clear)
+
+            btn_set = PushButton("指定角色…")
+            btn_set.setObjectName(f"btn_set_{pos}")
+            btn_set.setEnabled(False)
+            box_layout.addWidget(btn_set)
+
+            lbl_preview = QLabel("（不動）")
+            lbl_preview.setObjectName(f"lbl_{pos}")
+            box_layout.addWidget(lbl_preview, 1)
+
+            box.setLayout(box_layout)
+            layout.addWidget(box)
+
+            # 連線
+            chk.toggled.connect(lambda checked, p=pos: self._on_chk_toggled(p, checked))
+            btn_clear.clicked.connect(lambda _, p=pos: self._on_clear(p))
+            btn_set.clicked.connect(lambda _, p=pos: self._on_set(p))
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        self.setLayout(layout)
+
+        # 每槽狀態：keep / clear / set
+        self._mode: dict[str, str] = {"left": self._KEEP, "center": self._KEEP, "right": self._KEEP}
+        self._set_value: dict[str, dict | None] = {"left": None, "center": None, "right": None}
+
+    def _on_chk_toggled(self, pos: str, checked: bool) -> None:
+        self.findChild(PushButton, f"btn_clear_{pos}").setEnabled(checked)
+        self.findChild(PushButton, f"btn_set_{pos}").setEnabled(checked)
+        if not checked:
+            self._mode[pos] = self._KEEP
+            self.findChild(QLabel, f"lbl_{pos}").setText("（不動）")
+
+    def _on_clear(self, pos: str) -> None:
+        self._mode[pos] = self._CLEAR
+        self._set_value[pos] = None
+        self.findChild(QLabel, f"lbl_{pos}").setText("→ 清空")
+
+    def _on_set(self, pos: str) -> None:
+        picker = StageSlotPickerDialog(self._characters, current=self._set_value.get(pos), parent=self)
+        if picker.exec() != picker.DialogCode.Accepted:
+            return
+        val = picker.get_value()
+        self._set_value[pos] = val
+        self._mode[pos] = self._SET
+        name = val["character"] if val else "(無)"
+        self.findChild(QLabel, f"lbl_{pos}").setText(f"→ {name}")
+
+    def get_values(self) -> dict[str, dict | None | str]:
+        """回傳 {"left": None|"clear"|dict, ...}。None=不動，"clear"=清空，dict=設定。"""
+        result = {}
+        for pos in ("left", "center", "right"):
+            mode = self._mode[pos]
+            if mode == self._KEEP:
+                result[pos] = None
+            elif mode == self._CLEAR:
+                result[pos] = "clear"
+            else:
+                result[pos] = self._set_value[pos]
+        return result

@@ -58,6 +58,11 @@
     els.bg = document.getElementById("background");
     els.bgNext = document.getElementById("background-next");
     els.sprite = document.getElementById("sprite");
+    els.stageSprites = {
+      left:   document.getElementById("sprite-left"),
+      center: document.getElementById("sprite-center"),
+      right:  document.getElementById("sprite-right"),
+    };
     els.dialogueBox = document.getElementById("dialogue-box");
     els.namePlate = document.getElementById("name-plate");
     els.dialogueText = document.getElementById("dialogue-text");
@@ -105,6 +110,13 @@
     // 初始化特效引擎
     if (typeof VNEffects !== "undefined") {
       VNEffects.init(els.container);
+    }
+
+    // 舞台 overlay：匯出時加 capture-mode class 隱藏；預覽時啟用 overlay
+    if (CAPTURE_MODE) {
+      document.body.classList.add("capture-mode");
+    } else {
+      setupStageOverlay();
     }
 
     loadScript();
@@ -283,24 +295,17 @@
       els.namePlate.style.visibility = "hidden";
     }
 
-    // 立繪
-    var spriteFile = resolveSpriteFile(d, charInfo);
-    if (spriteFile) {
-      var spriteUrl = isDataUri(spriteFile) ? spriteFile : ASSETS_DIR + spriteFile;
-      if (els.sprite.getAttribute("src") !== spriteUrl) {
-        els.sprite.style.opacity = "0";
-        els.sprite.src = spriteUrl;
-        els.sprite.onload = function () {
-          els.sprite.style.display = "block";
-          els.sprite.style.opacity = "1";
-        };
-      } else {
-        els.sprite.style.display = "block";
-        els.sprite.style.opacity = "1";
-      }
-      setSpritePosition(charInfo ? charInfo.position : "center");
-    } else {
+    // 立繪：優先用 stage；三槽皆空時退回 legacy 單立繪
+    var stage = d.stage || {left: null, center: null, right: null};
+    var hasStage = stage.left || stage.center || stage.right;
+    if (hasStage) {
+      renderStageSlot("left",   stage.left);
+      renderStageSlot("center", stage.center);
+      renderStageSlot("right",  stage.right);
       els.sprite.style.display = "none";
+    } else {
+      hideAllStageSlots();
+      renderLegacySprite(d, charInfo);
     }
 
     // Skip / Capture 模式：跳過打字機，直接顯示完整文字
@@ -319,6 +324,11 @@
     });
 
     isTransitioning = false;
+
+    // 更新舞台 overlay 按鈕狀態（Preview 模式）
+    if (!CAPTURE_MODE) {
+      refreshStageOverlayButtons(d);
+    }
 
     // 通知 Python 端當前台詞（QWebChannel，非 Capture 模式、非 Python 主動跳轉）
     if (!CAPTURE_MODE && window._bridge && !_jumpedFromPython) {
@@ -347,8 +357,139 @@
     }
   }
 
+  // ── 三槽位立繪輔助函數 ──
+
+  function renderStageSlot(position, slotData) {
+    var el = els.stageSprites[position];
+    if (!slotData) {
+      el.style.display = "none";
+      return;
+    }
+    var charInfo = slotData.character ? (charactersMap[slotData.character] || null) : null;
+    var spriteLabel = slotData.sprite || null;
+    var spriteFile = null;
+    if (spriteLabel) {
+      if (isDataUri(spriteLabel)) {
+        spriteFile = spriteLabel;
+      } else if (charInfo && charInfo.sprites && charInfo.sprites[spriteLabel]) {
+        spriteFile = charInfo.sprites[spriteLabel];
+      } else {
+        spriteFile = spriteLabel;
+      }
+    }
+    if (!spriteFile) {
+      el.style.display = "none";
+      return;
+    }
+    var url = isDataUri(spriteFile) ? spriteFile : ASSETS_DIR + spriteFile;
+    if (el.getAttribute("src") !== url) {
+      el.style.opacity = "0";
+      el.src = url;
+      el.onload = function () {
+        el.style.display = "block";
+        el.style.opacity = "1";
+      };
+    } else {
+      el.style.display = "block";
+      el.style.opacity = "1";
+    }
+  }
+
+  function hideAllStageSlots() {
+    els.stageSprites.left.style.display   = "none";
+    els.stageSprites.center.style.display = "none";
+    els.stageSprites.right.style.display  = "none";
+  }
+
+  function renderLegacySprite(d, charInfo) {
+    var spriteFile = resolveSpriteFile(d, charInfo);
+    if (spriteFile) {
+      var spriteUrl = isDataUri(spriteFile) ? spriteFile : ASSETS_DIR + spriteFile;
+      if (els.sprite.getAttribute("src") !== spriteUrl) {
+        els.sprite.style.opacity = "0";
+        els.sprite.src = spriteUrl;
+        els.sprite.onload = function () {
+          els.sprite.style.display = "block";
+          els.sprite.style.opacity = "1";
+        };
+      } else {
+        els.sprite.style.display = "block";
+        els.sprite.style.opacity = "1";
+      }
+      setSpritePosition(charInfo ? charInfo.position : "center");
+    } else {
+      els.sprite.style.display = "none";
+    }
+  }
+
   function isDataUri(str) {
     return str && str.indexOf("data:") === 0;
+  }
+
+  // ── 舞台 overlay（Preview 模式） ──
+
+  function setupStageOverlay() {
+    var positions = ["left", "center", "right"];
+    positions.forEach(function (pos) {
+      var ctrl = document.querySelector(".slot-control[data-position='" + pos + "']");
+      if (!ctrl) return;
+
+      var btnAdd = document.createElement("button");
+      btnAdd.className = "btn-add";
+      btnAdd.textContent = "+";
+      btnAdd.addEventListener("click", function (e) {
+        e.stopPropagation();
+        if (window._bridge) {
+          window._bridge.on_stage_slot_clicked(sceneIndex, dialogueIndex, pos, "add");
+        }
+      });
+
+      var btnClear = document.createElement("button");
+      btnClear.className = "btn-clear";
+      btnClear.textContent = "✕";
+      btnClear.addEventListener("click", function (e) {
+        e.stopPropagation();
+        if (window._bridge) {
+          window._bridge.on_stage_slot_clicked(sceneIndex, dialogueIndex, pos, "clear");
+        }
+      });
+
+      var btnSwap = document.createElement("button");
+      btnSwap.className = "btn-swap";
+      btnSwap.textContent = "▼";
+      btnSwap.addEventListener("click", function (e) {
+        e.stopPropagation();
+        if (window._bridge) {
+          window._bridge.on_stage_slot_clicked(sceneIndex, dialogueIndex, pos, "swap");
+        }
+      });
+
+      ctrl.appendChild(btnAdd);
+      ctrl.appendChild(btnClear);
+      ctrl.appendChild(btnSwap);
+    });
+  }
+
+  function refreshStageOverlayButtons(d) {
+    var stage = d.stage || {left: null, center: null, right: null};
+    var positions = ["left", "center", "right"];
+    positions.forEach(function (pos) {
+      var ctrl = document.querySelector(".slot-control[data-position='" + pos + "']");
+      if (!ctrl) return;
+      var btnAdd   = ctrl.querySelector(".btn-add");
+      var btnClear = ctrl.querySelector(".btn-clear");
+      var btnSwap  = ctrl.querySelector(".btn-swap");
+      if (!btnAdd) return;
+      if (stage[pos]) {
+        ctrl.classList.add("filled");
+        btnAdd.style.display = "none";
+      } else {
+        ctrl.classList.remove("filled");
+        btnAdd.style.display = "";
+        if (btnClear) btnClear.style.display = "none";
+        if (btnSwap)  btnSwap.style.display  = "none";
+      }
+    });
   }
 
   // ── 推進 ──

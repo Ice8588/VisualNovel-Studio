@@ -90,6 +90,9 @@ class Dialogue:
     sprite: str | None = None    # 表情標籤（對應 SpriteVariant.label）
     costume: str | None = None   # 服裝名稱（對應 Costume.name）
     effects: list[str] = field(default_factory=list)  # 文字效果，如 ["bold", "italic"]
+    stage: dict[str, dict | None] = field(
+        default_factory=lambda: {"left": None, "center": None, "right": None}
+    )  # 舞台槽位：{"left": {"character": str, "sprite": str|None, "costume": str|None} | None, ...}
 
     def to_dict(self) -> dict:
         d: dict = {
@@ -102,10 +105,18 @@ class Dialogue:
             d["costume"] = self.costume
         if self.effects:
             d["effects"] = self.effects
+        if any(v is not None for v in self.stage.values()):
+            d["stage"] = self.stage
         return d
 
     @classmethod
     def from_dict(cls, data: dict) -> Dialogue:
+        raw_stage = data.get("stage") or {}
+        stage = {
+            "left":   raw_stage.get("left"),
+            "center": raw_stage.get("center"),
+            "right":  raw_stage.get("right"),
+        }
         return cls(
             type=data["type"],
             text=data["text"],
@@ -113,6 +124,7 @@ class Dialogue:
             sprite=data.get("sprite"),
             costume=data.get("costume"),
             effects=data.get("effects", []),
+            stage=stage,
         )
 
 

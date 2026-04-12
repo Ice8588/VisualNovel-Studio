@@ -113,6 +113,7 @@ class _BatchToolbar(QWidget):
     """多選 ≥2 行時浮現的批次操作列。"""
 
     batch_assign = pyqtSignal()
+    batch_stage = pyqtSignal()
     batch_delete = pyqtSignal()
 
     def __init__(self, parent=None):
@@ -125,6 +126,9 @@ class _BatchToolbar(QWidget):
         btn_assign = PushButton("批次指定角色")
         btn_assign.clicked.connect(self.batch_assign)
         layout.addWidget(btn_assign)
+        btn_stage = PushButton("批次設置舞台")
+        btn_stage.clicked.connect(self.batch_stage)
+        layout.addWidget(btn_stage)
         btn_del = PushButton("刪除選取")
         btn_del.clicked.connect(self.batch_delete)
         layout.addWidget(btn_del)
@@ -247,14 +251,15 @@ class CenterPanel(QWidget):
         # 批次操作列（多選 ≥2 顯示）
         self._batch_toolbar = _BatchToolbar()
         self._batch_toolbar.batch_assign.connect(self._on_batch_assign)
+        self._batch_toolbar.batch_stage.connect(self._on_batch_stage)
         self._batch_toolbar.batch_delete.connect(self._on_batch_delete_selected)
         dialogue_layout.addWidget(self._batch_toolbar)
 
-        # 對話表格：6 欄（#、台詞、角色、服裝、表情、效果）
+        # 對話表格：7 欄（#、台詞、角色、服裝、表情、效果、舞台）
         self.dialogue_table = _DraggableTable()
-        self.dialogue_table.setColumnCount(6)
+        self.dialogue_table.setColumnCount(7)
         self.dialogue_table.setHorizontalHeaderLabels(
-            ["#", "台詞", "角色", "服裝", "表情", "效果"]
+            ["#", "台詞", "角色", "服裝", "表情", "效果", "舞台"]
         )
         header = self.dialogue_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
@@ -263,11 +268,13 @@ class CenterPanel(QWidget):
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.Interactive)
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)
         self.dialogue_table.setColumnWidth(0, 40)
         self.dialogue_table.setColumnWidth(2, 100)
         self.dialogue_table.setColumnWidth(3, 90)
         self.dialogue_table.setColumnWidth(4, 90)
         self.dialogue_table.setColumnWidth(5, 100)
+        self.dialogue_table.setColumnWidth(6, 90)
         self.dialogue_table.verticalHeader().setDefaultSectionSize(40)
         self.dialogue_table.verticalHeader().setVisible(False)
         self.dialogue_table.setSelectionMode(
@@ -336,6 +343,8 @@ class CenterPanel(QWidget):
 
         # Preview bridge：自動播放同步表格高亮
         self.preview.bridge.dialogue_advanced.connect(self._on_preview_dialogue_advanced)
+        # Preview bridge：舞台槽位點擊
+        self.preview.bridge.stage_slot_clicked.connect(self._on_stage_slot_clicked)
 
         # 信號連接
         self.dialogue_table.cellChanged.connect(self._on_dialogue_edited)
@@ -477,6 +486,18 @@ class CenterPanel(QWidget):
             # 欄 5：效果（逗號分隔文字）
             effect_text = ", ".join(dlg.effects) if dlg.effects else ""
             self.dialogue_table.setItem(row, 5, QTableWidgetItem(effect_text))
+
+            # 欄 6：舞台槽位指示（L/C/R，● 有角色 ○ 空）
+            stage = dlg.stage
+            parts = [
+                "L●" if stage.get("left") else "L○",
+                "C●" if stage.get("center") else "C○",
+                "R●" if stage.get("right") else "R○",
+            ]
+            stage_item = QTableWidgetItem(" ".join(parts))
+            stage_item.setFlags(stage_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            stage_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.dialogue_table.setItem(row, 6, stage_item)
 
         self._updating = False
 
@@ -790,6 +811,33 @@ class CenterPanel(QWidget):
         insert_after = self.dialogue_table.currentRow() if dlg.is_insert_mode() else None
         self.add_dialogues_to_current_scene(new_dialogues, insert_after=insert_after)
 
+    # ── 舞台槽位 ──
+
+    def _on_stage_slot_clicked(self, scene_idx: int, dlg_idx: int, position: str, action: str) -> None:
+        scene = self._get_current_scene()
+        if not scene or dlg_idx < 0 or dlg_idx >= len(scene.dialogues):
+            return
+        d = scene.dialogues[dlg_idx]
+        if action == "clear":
+            d.stage[position] = None
+        else:  # "add" or "swap"
+            from src.ui.dialogs import StageSlotPickerDialog
+            characters = self._project.characters if self._project else []
+            picker = StageSlotPickerDialog(characters, current=d.stage.get(position), parent=self)
+            if picker.exec() != picker.DialogCode.Accepted:
+                return
+            d.stage[position] = picker.get_value()
+        # 局部刷新 preview（不退回第一幕）
+        js = (
+            f"if(window.VNPreviewAPI){{"
+            f"VNPreviewAPI.goToScene({scene_idx});"
+            f"VNPreviewAPI.goToDialogue({dlg_idx});"
+            f"}}"
+        )
+        self.preview.web_view.page().runJavaScript(js)
+        self._refresh_dialogue_table()
+        self.project_changed.emit()
+
     # ── 批次操作 ──
 
     def _on_batch_assign(self) -> None:
@@ -824,6 +872,37 @@ class CenterPanel(QWidget):
                     d.sprite = sprite or None
 
         self._refresh_dialogue_table()
+        self.project_changed.emit()
+
+    def _on_batch_stage(self) -> None:
+        """批次設置選取行的舞台槽位。"""
+        scene = self._get_current_scene()
+        if not scene or not self._project:
+            return
+        selected_rows = sorted(
+            {idx.row() for idx in self.dialogue_table.selectionModel().selectedRows()}
+        )
+        if len(selected_rows) < 2:
+            return
+        from src.ui.dialogs import StageBatchDialog
+        dlg = StageBatchDialog(self._project.characters, self)
+        if dlg.exec() != dlg.DialogCode.Accepted:
+            return
+        values = dlg.get_values()
+        for row in selected_rows:
+            if row >= len(scene.dialogues):
+                continue
+            d = scene.dialogues[row]
+            for pos in ("left", "center", "right"):
+                v = values[pos]
+                if v is None:
+                    continue
+                elif v == "clear":
+                    d.stage[pos] = None
+                else:
+                    d.stage[pos] = v
+        self._refresh_dialogue_table()
+        self.preview.reload_preview()
         self.project_changed.emit()
 
     def _on_batch_delete_selected(self) -> None:
