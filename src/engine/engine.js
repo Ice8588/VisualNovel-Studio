@@ -58,6 +58,11 @@
     els.bg = document.getElementById("background");
     els.bgNext = document.getElementById("background-next");
     els.sprite = document.getElementById("sprite");
+    els.stageSprites = {
+      left:   document.getElementById("sprite-left"),
+      center: document.getElementById("sprite-center"),
+      right:  document.getElementById("sprite-right"),
+    };
     els.dialogueBox = document.getElementById("dialogue-box");
     els.namePlate = document.getElementById("name-plate");
     els.dialogueText = document.getElementById("dialogue-text");
@@ -283,24 +288,17 @@
       els.namePlate.style.visibility = "hidden";
     }
 
-    // 立繪
-    var spriteFile = resolveSpriteFile(d, charInfo);
-    if (spriteFile) {
-      var spriteUrl = isDataUri(spriteFile) ? spriteFile : ASSETS_DIR + spriteFile;
-      if (els.sprite.getAttribute("src") !== spriteUrl) {
-        els.sprite.style.opacity = "0";
-        els.sprite.src = spriteUrl;
-        els.sprite.onload = function () {
-          els.sprite.style.display = "block";
-          els.sprite.style.opacity = "1";
-        };
-      } else {
-        els.sprite.style.display = "block";
-        els.sprite.style.opacity = "1";
-      }
-      setSpritePosition(charInfo ? charInfo.position : "center");
-    } else {
+    // 立繪：優先用 stage；三槽皆空時退回 legacy 單立繪
+    var stage = d.stage || {left: null, center: null, right: null};
+    var hasStage = stage.left || stage.center || stage.right;
+    if (hasStage) {
+      renderStageSlot("left",   stage.left);
+      renderStageSlot("center", stage.center);
+      renderStageSlot("right",  stage.right);
       els.sprite.style.display = "none";
+    } else {
+      hideAllStageSlots();
+      renderLegacySprite(d, charInfo);
     }
 
     // Skip / Capture 模式：跳過打字機，直接顯示完整文字
@@ -344,6 +342,71 @@
       els.sprite.className = "sprite-right";
     } else {
       els.sprite.className = "sprite-center";
+    }
+  }
+
+  // ── 三槽位立繪輔助函數 ──
+
+  function renderStageSlot(position, slotData) {
+    var el = els.stageSprites[position];
+    if (!slotData) {
+      el.style.display = "none";
+      return;
+    }
+    var charInfo = slotData.character ? (charactersMap[slotData.character] || null) : null;
+    var spriteLabel = slotData.sprite || null;
+    var spriteFile = null;
+    if (spriteLabel) {
+      if (isDataUri(spriteLabel)) {
+        spriteFile = spriteLabel;
+      } else if (charInfo && charInfo.sprites && charInfo.sprites[spriteLabel]) {
+        spriteFile = charInfo.sprites[spriteLabel];
+      } else {
+        spriteFile = spriteLabel;
+      }
+    }
+    if (!spriteFile) {
+      el.style.display = "none";
+      return;
+    }
+    var url = isDataUri(spriteFile) ? spriteFile : ASSETS_DIR + spriteFile;
+    if (el.getAttribute("src") !== url) {
+      el.style.opacity = "0";
+      el.src = url;
+      el.onload = function () {
+        el.style.display = "block";
+        el.style.opacity = "1";
+      };
+    } else {
+      el.style.display = "block";
+      el.style.opacity = "1";
+    }
+  }
+
+  function hideAllStageSlots() {
+    els.stageSprites.left.style.display   = "none";
+    els.stageSprites.center.style.display = "none";
+    els.stageSprites.right.style.display  = "none";
+  }
+
+  function renderLegacySprite(d, charInfo) {
+    var spriteFile = resolveSpriteFile(d, charInfo);
+    if (spriteFile) {
+      var spriteUrl = isDataUri(spriteFile) ? spriteFile : ASSETS_DIR + spriteFile;
+      if (els.sprite.getAttribute("src") !== spriteUrl) {
+        els.sprite.style.opacity = "0";
+        els.sprite.src = spriteUrl;
+        els.sprite.onload = function () {
+          els.sprite.style.display = "block";
+          els.sprite.style.opacity = "1";
+        };
+      } else {
+        els.sprite.style.display = "block";
+        els.sprite.style.opacity = "1";
+      }
+      setSpritePosition(charInfo ? charInfo.position : "center");
+    } else {
+      els.sprite.style.display = "none";
     }
   }
 

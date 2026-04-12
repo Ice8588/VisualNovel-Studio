@@ -69,6 +69,23 @@
   left: 75%;
 }
 
+/* ── 三槽位立繪（stage 模式） ── */
+
+.stage-sprite {
+  position: absolute;
+  bottom: 0;
+  max-height: 80%;
+  max-width: 40%;
+  z-index: 2;
+  transition: opacity 0.3s ease;
+  display: none;
+  transform: translateX(-50%);
+}
+
+#sprite-left   { left: 25%; }
+#sprite-center { left: 50%; }
+#sprite-right  { left: 75%; }
+
 /* ── 特效覆蓋層 ── */
 
 #effect-canvas {
