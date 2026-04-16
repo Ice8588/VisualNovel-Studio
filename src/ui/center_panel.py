@@ -269,7 +269,7 @@ class CenterPanel(QWidget):
         self.dialogue_table.setColumnWidth(3, 90)
         self.dialogue_table.setColumnWidth(4, 90)
         self.dialogue_table.setColumnWidth(5, 100)
-        self.dialogue_table.setColumnWidth(6, 90)
+        self.dialogue_table.setColumnWidth(6, 120)
         self.dialogue_table.verticalHeader().setDefaultSectionSize(40)
         self.dialogue_table.verticalHeader().setVisible(False)
         self.dialogue_table.setSelectionMode(
