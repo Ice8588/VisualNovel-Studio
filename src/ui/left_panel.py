@@ -230,11 +230,14 @@ class LeftPanel(QWidget):
         self._edit_char_name.setPlaceholderText("角色名稱")
         name_row.addWidget(self._edit_char_name, 1)
         char_props_layout.addLayout(name_row)
-        # 顏色
+        # 顏色（色塊本身也可點）
         color_row = QHBoxLayout()
         color_row.addWidget(QLabel("顏色:"))
         self._lbl_char_color = QLabel()
         self._lbl_char_color.setFixedSize(20, 20)
+        self._lbl_char_color.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._lbl_char_color.setToolTip("點擊以修改顏色")
+        self._lbl_char_color.mousePressEvent = self._on_color_label_clicked
         self._btn_char_color = PushButton("選色")
         self._btn_char_color.setFixedWidth(50)
         color_row.addWidget(self._lbl_char_color)
@@ -661,6 +664,10 @@ class LeftPanel(QWidget):
                 pm.fill(QColor(char.name_color))
                 widget.update_icon(pm)
         self.character_property_changed.emit()
+
+    def _on_color_label_clicked(self, event) -> None:
+        """色塊點擊：與按鈕行為相同。"""
+        self._on_char_color_btn()
 
     def _on_char_position_changed(self, _idx: int) -> None:
         if self._updating:
