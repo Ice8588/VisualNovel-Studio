@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QProgressDialog,
     QSplitter,
+    QStatusBar,
 )
 
 from src.core.asset_manager import import_asset
@@ -39,6 +40,8 @@ class MainWindow(QMainWindow):
         self._setup_ui()
         self._setup_menu()
         self._connect_signals()
+        self._setup_status_bar()
+        self._update_status()
 
     def _setup_ui(self) -> None:
         self.setWindowTitle(self._BASE_TITLE)
@@ -458,6 +461,7 @@ class MainWindow(QMainWindow):
     def _on_project_changed(self) -> None:
         self._dirty = True
         self._update_title()
+        self._update_status()
         self._on_refresh_preview()
 
     def _on_refresh_preview(self) -> None:
@@ -642,6 +646,7 @@ class MainWindow(QMainWindow):
         self._sync_asset_lists()
         self._on_refresh_preview()
         self._update_title()
+        self._update_status()
 
     def _update_title(self) -> None:
         title = self._BASE_TITLE
@@ -650,6 +655,31 @@ class MainWindow(QMainWindow):
         if self._dirty:
             title += " *"
         self.setWindowTitle(title)
+
+    def _setup_status_bar(self) -> None:
+        self._status_bar = QStatusBar()
+        self._lbl_stats = QLabel("")
+        self._status_bar.addWidget(self._lbl_stats)
+        self.setStatusBar(self._status_bar)
+
+    def _update_status(self) -> None:
+        """更新狀態列統計：場景數、對話數、估計總時長。"""
+        if not self._project:
+            self._lbl_stats.setText("")
+            return
+        scene_count = len(self._project.scenes)
+        dlg_count = sum(len(s.dialogues) for s in self._project.scenes)
+        # 使用與 engine.js / exporter_video.py 一致的估計公式（上限 8 秒）
+        total_sec = 0.0
+        for s in self._project.scenes:
+            for d in s.dialogues:
+                total_sec += max(1.5, min(1.0 + len(d.text) * 0.15, 8.0))
+        minutes = int(total_sec // 60)
+        seconds = int(total_sec % 60)
+        self._lbl_stats.setText(
+            f"場景 {scene_count} 個  │  對話 {dlg_count} 句  │  "
+            f"估計時長 {minutes}:{seconds:02d}"
+        )
 
     def _confirm_discard(self) -> bool:
         if not self._dirty:
