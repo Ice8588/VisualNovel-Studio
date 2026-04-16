@@ -407,7 +407,8 @@ def apply_theme(app: QApplication, theme_name: str, font_size: int) -> None:
     """套用指定主題和字體大小。"""
     font_size = max(8, int(font_size))
     setTheme(Theme.DARK if theme_name == "dark" else Theme.LIGHT)
-    font = QFont("Microsoft JhengHei, Noto Sans TC, sans-serif")
+    font = QFont()
+    font.setFamilies(["Microsoft JhengHei", "Noto Sans TC", "sans-serif"])
     font.setPixelSize(font_size)
     app.setFont(font)
     apply_custom_overrides(app, theme_name, font_size)
