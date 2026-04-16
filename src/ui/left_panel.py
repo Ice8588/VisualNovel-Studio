@@ -127,6 +127,7 @@ class LeftPanel(QWidget):
         layout.setContentsMargins(4, 4, 4, 4)
 
         splitter = QSplitter(Qt.Orientation.Vertical)
+        splitter.setHandleWidth(6)
 
         # ── 上方：SegmentedWidget 切換（場景 / 角色） ──
         top_widget = QWidget()
@@ -230,22 +231,34 @@ class LeftPanel(QWidget):
         self._edit_char_name.setPlaceholderText("角色名稱")
         name_row.addWidget(self._edit_char_name, 1)
         char_props_layout.addLayout(name_row)
-        # 顏色
+        # 顏色（色塊本身也可點）
         color_row = QHBoxLayout()
         color_row.addWidget(QLabel("顏色:"))
         self._lbl_char_color = QLabel()
         self._lbl_char_color.setFixedSize(20, 20)
+        self._lbl_char_color.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._lbl_char_color.setToolTip("點擊以修改顏色")
+        self._lbl_char_color.mousePressEvent = self._on_color_label_clicked
         self._btn_char_color = PushButton("選色")
         self._btn_char_color.setFixedWidth(50)
         color_row.addWidget(self._lbl_char_color)
         color_row.addWidget(self._btn_char_color)
         color_row.addStretch()
         char_props_layout.addLayout(color_row)
-        # 位置
+        # 位置（legacy：僅在未使用舞台槽位時生效）
         pos_row = QHBoxLayout()
-        pos_row.addWidget(QLabel("位置:"))
+        pos_label = QLabel("位置:")
+        pos_label.setToolTip(
+            "舊版欄位：僅對未設定「舞台槽位」的對話生效。\n"
+            "建議直接在對話列的「舞台」欄指定角色位置。"
+        )
+        pos_row.addWidget(pos_label)
         self._combo_char_pos = ComboBox()
         self._combo_char_pos.addItems(_POS_OPTIONS)
+        self._combo_char_pos.setToolTip(
+            "舊版欄位：僅對未設定「舞台槽位」的對話生效。\n"
+            "建議直接在對話列的「舞台」欄指定角色位置。"
+        )
         pos_row.addWidget(self._combo_char_pos, 1)
         char_props_layout.addLayout(pos_row)
         # 服裝列表
@@ -652,6 +665,10 @@ class LeftPanel(QWidget):
                 pm.fill(QColor(char.name_color))
                 widget.update_icon(pm)
         self.character_property_changed.emit()
+
+    def _on_color_label_clicked(self, event) -> None:
+        """色塊點擊：與按鈕行為相同。"""
+        self._on_char_color_btn()
 
     def _on_char_position_changed(self, _idx: int) -> None:
         if self._updating:

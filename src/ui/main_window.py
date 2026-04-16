@@ -45,6 +45,7 @@ class MainWindow(QMainWindow):
         self.resize(1280, 780)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setHandleWidth(6)
 
         self.left_panel = LeftPanel()
         self.center_panel = CenterPanel()
