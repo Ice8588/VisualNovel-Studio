@@ -202,6 +202,28 @@ QProgressDialog {{
     background-color: #2b2b2b;
     color: #ddd;
 }}
+QComboBox#tableCombo {{
+    background: transparent;
+    border: none;
+    padding: 1px 4px;
+    color: #ddd;
+}}
+QComboBox#tableCombo:hover, QComboBox#tableCombo:focus {{
+    background-color: #2a2a2a;
+    border: 1px solid #555;
+    border-radius: 3px;
+}}
+QComboBox#tableCombo::drop-down {{
+    border: none;
+    width: 14px;
+}}
+QComboBox#tableCombo QAbstractItemView {{
+    background-color: #1e1e1e;
+    color: #ddd;
+    border: 1px solid #555;
+    selection-background-color: #4682B4;
+    outline: none;
+}}
 """
 
 _LIGHT_OVERRIDES = """
@@ -399,6 +421,29 @@ QTreeWidget::item:selected {{
 QProgressDialog {{
     background-color: #f5f5f5;
     color: #333;
+}}
+QComboBox#tableCombo {{
+    background: transparent;
+    border: none;
+    padding: 1px 4px;
+    color: #333;
+}}
+QComboBox#tableCombo:hover, QComboBox#tableCombo:focus {{
+    background-color: #f0f0f0;
+    border: 1px solid #bbb;
+    border-radius: 3px;
+}}
+QComboBox#tableCombo::drop-down {{
+    border: none;
+    width: 14px;
+}}
+QComboBox#tableCombo QAbstractItemView {{
+    background-color: #fff;
+    color: #333;
+    border: 1px solid #ccc;
+    selection-background-color: #4682B4;
+    selection-color: #fff;
+    outline: none;
 }}
 """
 
