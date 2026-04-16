@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
     QStyle,
     QTableWidget,
     QTableWidgetItem,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -24,6 +25,7 @@ from qfluentwidgets import LineEdit, PushButton
 
 from src.core.models import Character, Dialogue, Project, Scene
 from src.ui.preview_widget import PreviewWidget
+from src.ui.empty_state import EmptyStateWidget
 
 NONE_LABEL = "(無)"
 NARRATION_LABEL = "(旁白)"
@@ -178,6 +180,8 @@ class CenterPanel(QWidget):
     """預覽 + 對話表格，支援行內編輯、搜尋、批次操作。"""
 
     project_changed = pyqtSignal()
+    empty_state_import_text = pyqtSignal()
+    empty_state_add_scene = pyqtSignal()
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -305,7 +309,7 @@ class CenterPanel(QWidget):
         dialogue_layout.addWidget(self.dialogue_table)
         dialogue_widget.setLayout(dialogue_layout)
 
-        # 預覽容器：工具列 + 預覽元件
+        # 預覽容器：工具列 + Stacked（EmptyState / 預覽）
         preview_container = QWidget()
         preview_layout = QVBoxLayout()
         preview_layout.setContentsMargins(0, 0, 0, 0)
@@ -320,7 +324,14 @@ class CenterPanel(QWidget):
         preview_toolbar.addWidget(self.btn_refresh_preview)
         preview_toolbar.addWidget(self.btn_game_settings)
         preview_layout.addLayout(preview_toolbar)
-        preview_layout.addWidget(self.preview)
+
+        self._preview_stack = QStackedWidget()
+        self._empty_state = EmptyStateWidget()
+        self._empty_state.import_text_clicked.connect(self.empty_state_import_text)
+        self._empty_state.add_scene_clicked.connect(self.empty_state_add_scene)
+        self._preview_stack.addWidget(self._empty_state)   # index 0
+        self._preview_stack.addWidget(self.preview)         # index 1
+        preview_layout.addWidget(self._preview_stack)
         preview_container.setLayout(preview_layout)
 
         splitter.addWidget(preview_container)
@@ -353,16 +364,23 @@ class CenterPanel(QWidget):
 
     # ── 公開方法 ──
 
+    def _update_empty_state(self) -> None:
+        """根據 project 是否有場景，切換 EmptyState / 預覽。"""
+        has_scenes = bool(self._project and self._project.scenes)
+        self._preview_stack.setCurrentIndex(1 if has_scenes else 0)
+
     def set_project(self, project: Project) -> None:
         """綁定 Project。"""
         self._project = project
         self._current_scene_index = 0 if project.scenes else -1
         self._refresh_dialogue_table()
+        self._update_empty_state()
 
     def set_current_scene(self, index: int) -> None:
         """外部切換場景時呼叫。"""
         self._current_scene_index = index
         self._refresh_dialogue_table()
+        self._update_empty_state()
 
     def reload_preview(self, project: Project) -> None:
         """重新載入預覽。"""
@@ -388,6 +406,7 @@ class CenterPanel(QWidget):
             else:
                 scene.dialogues.extend(dialogues)
             self._refresh_dialogue_table()
+            self._update_empty_state()
             self.project_changed.emit()
 
     def get_selected_dialogue_index(self) -> int | None:
