@@ -14,7 +14,6 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QProgressDialog,
     QSplitter,
-    QToolBar,
 )
 
 from src.core.asset_manager import import_asset
@@ -39,7 +38,6 @@ class MainWindow(QMainWindow):
         self._theme_name, self._font_size = load_preference()
         self._setup_ui()
         self._setup_menu()
-        self._setup_toolbar()
         self._connect_signals()
 
     def _setup_ui(self) -> None:
@@ -82,11 +80,10 @@ class MainWindow(QMainWindow):
         file_menu.addSeparator()
         file_menu.addAction("匯入文字", self._on_import_text)
         file_menu.addSeparator()
+        act_refresh = file_menu.addAction("重新整理預覽", self._on_refresh_preview)
+        act_refresh.setShortcut(QKeySequence("F5"))
+        file_menu.addSeparator()
         file_menu.addAction("結束", self.close)
-
-        # 預覽選單
-        preview_menu = menu_bar.addMenu("預覽")
-        preview_menu.addAction("重新整理預覽", self._on_refresh_preview)
 
         # 導出選單
         export_menu = menu_bar.addMenu("導出")
@@ -129,11 +126,6 @@ class MainWindow(QMainWindow):
         help_menu.addAction("開啟 Log 資料夾", self._on_open_log_dir)
 
         self.setMenuBar(menu_bar)
-
-    def _setup_toolbar(self) -> None:
-        toolbar = QToolBar("工具列")
-        toolbar.setMovable(False)
-        self.addToolBar(toolbar)
 
     def _connect_signals(self) -> None:
         # 左側面板 → 場景切換
