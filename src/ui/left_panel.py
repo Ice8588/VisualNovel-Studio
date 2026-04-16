@@ -127,6 +127,7 @@ class LeftPanel(QWidget):
         layout.setContentsMargins(4, 4, 4, 4)
 
         splitter = QSplitter(Qt.Orientation.Vertical)
+        splitter.setHandleWidth(6)
 
         # ── 上方：SegmentedWidget 切換（場景 / 角色） ──
         top_widget = QWidget()

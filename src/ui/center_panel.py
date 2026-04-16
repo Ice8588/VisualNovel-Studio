@@ -198,6 +198,7 @@ class CenterPanel(QWidget):
         layout.setContentsMargins(4, 4, 4, 4)
 
         splitter = QSplitter(Qt.Orientation.Vertical)
+        splitter.setHandleWidth(6)
 
         # ── 上半：預覽 ──
         self.preview = PreviewWidget()

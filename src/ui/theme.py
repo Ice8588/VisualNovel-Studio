@@ -246,6 +246,9 @@ QPushButton#hoverDeleteButton {{
 QPushButton#hoverDeleteButton:hover {{
     color: #e05555;
 }}
+QSplitter::handle:hover {{
+    background-color: #4682B4;
+}}
 """
 
 _LIGHT_OVERRIDES = """
@@ -488,6 +491,9 @@ QPushButton#hoverDeleteButton {{
 }}
 QPushButton#hoverDeleteButton:hover {{
     color: #c43434;
+}}
+QSplitter::handle:hover {{
+    background-color: #4682B4;
 }}
 """
 
