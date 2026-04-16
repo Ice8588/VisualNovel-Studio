@@ -202,6 +202,50 @@ QProgressDialog {{
     background-color: #2b2b2b;
     color: #ddd;
 }}
+QComboBox#tableCombo {{
+    background: transparent;
+    border: none;
+    padding: 1px 4px;
+    color: #ddd;
+}}
+QComboBox#tableCombo:hover, QComboBox#tableCombo:focus {{
+    background-color: #2a2a2a;
+    border: 1px solid #555;
+    border-radius: 3px;
+}}
+QComboBox#tableCombo::drop-down {{
+    border: none;
+    width: 14px;
+}}
+QComboBox#tableCombo QAbstractItemView {{
+    background-color: #1e1e1e;
+    color: #ddd;
+    border: 1px solid #555;
+    selection-background-color: #4682B4;
+    outline: none;
+}}
+QPushButton#dashedButton {{
+    border: 2px dashed #555;
+    border-radius: 4px;
+    color: #888;
+    background: transparent;
+    padding: 4px;
+}}
+QPushButton#dashedButton:hover {{
+    border-color: #888;
+    color: #bbb;
+}}
+QPushButton#hoverDeleteButton {{
+    border: none;
+    color: #888;
+    background: transparent;
+    font-size: 13px;
+    font-weight: bold;
+    padding: 0;
+}}
+QPushButton#hoverDeleteButton:hover {{
+    color: #e05555;
+}}
 """
 
 _LIGHT_OVERRIDES = """
@@ -400,6 +444,51 @@ QProgressDialog {{
     background-color: #f5f5f5;
     color: #333;
 }}
+QComboBox#tableCombo {{
+    background: transparent;
+    border: none;
+    padding: 1px 4px;
+    color: #333;
+}}
+QComboBox#tableCombo:hover, QComboBox#tableCombo:focus {{
+    background-color: #f0f0f0;
+    border: 1px solid #bbb;
+    border-radius: 3px;
+}}
+QComboBox#tableCombo::drop-down {{
+    border: none;
+    width: 14px;
+}}
+QComboBox#tableCombo QAbstractItemView {{
+    background-color: #fff;
+    color: #333;
+    border: 1px solid #ccc;
+    selection-background-color: #4682B4;
+    selection-color: #fff;
+    outline: none;
+}}
+QPushButton#dashedButton {{
+    border: 2px dashed #bbb;
+    border-radius: 4px;
+    color: #888;
+    background: transparent;
+    padding: 4px;
+}}
+QPushButton#dashedButton:hover {{
+    border-color: #666;
+    color: #333;
+}}
+QPushButton#hoverDeleteButton {{
+    border: none;
+    color: #999;
+    background: transparent;
+    font-size: 13px;
+    font-weight: bold;
+    padding: 0;
+}}
+QPushButton#hoverDeleteButton:hover {{
+    color: #c43434;
+}}
 """
 
 
@@ -407,7 +496,8 @@ def apply_theme(app: QApplication, theme_name: str, font_size: int) -> None:
     """套用指定主題和字體大小。"""
     font_size = max(8, int(font_size))
     setTheme(Theme.DARK if theme_name == "dark" else Theme.LIGHT)
-    font = QFont("Microsoft JhengHei, Noto Sans TC, sans-serif")
+    font = QFont()
+    font.setFamilies(["Microsoft JhengHei", "Noto Sans TC", "sans-serif"])
     font.setPixelSize(font_size)
     app.setFont(font)
     apply_custom_overrides(app, theme_name, font_size)

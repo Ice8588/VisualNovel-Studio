@@ -28,16 +28,6 @@ from src.ui.preview_widget import PreviewWidget
 NONE_LABEL = "(無)"
 NARRATION_LABEL = "(旁白)"
 
-# 半透明 ComboBox：平時低調，hover/focus 顯示邊框
-_COMBO_STYLE = (
-    "QComboBox{border:none;background:transparent;padding:1px 4px;}"
-    "QComboBox:hover,QComboBox:focus{"
-    "border:1px solid #555;background:#2a2a2a;border-radius:3px;}"
-    "QComboBox::drop-down{border:none;width:14px;}"
-    "QComboBox QAbstractItemView{border:1px solid #555;background:#1e1e1e;"
-    "selection-background-color:#0057b8;outline:none;}"
-)
-
 
 class _MultilineDelegate(QStyledItemDelegate):
     """台詞欄 delegate：用 QPlainTextEdit 允許 Enter 換行。"""
@@ -431,7 +421,7 @@ class CenterPanel(QWidget):
 
             # 欄 2：角色 ComboBox（所有行都有）
             char_combo = QComboBox()
-            char_combo.setStyleSheet(_COMBO_STYLE)
+            char_combo.setObjectName("tableCombo")
             char_combo.addItem(NARRATION_LABEL, None)
             if self._project:
                 for c in self._project.characters:
@@ -448,7 +438,7 @@ class CenterPanel(QWidget):
                 char_obj = self._find_character(dlg.character)
 
                 costume_combo = QComboBox()
-                costume_combo.setStyleSheet(_COMBO_STYLE)
+                costume_combo.setObjectName("tableCombo")
                 costume_combo.addItem(NONE_LABEL, None)
                 if char_obj:
                     for cos in char_obj.costumes:
@@ -461,7 +451,7 @@ class CenterPanel(QWidget):
                 self.dialogue_table.setCellWidget(row, 3, costume_combo)
 
                 sprite_combo = QComboBox()
-                sprite_combo.setStyleSheet(_COMBO_STYLE)
+                sprite_combo.setObjectName("tableCombo")
                 sprite_combo.addItem(NONE_LABEL, None)
                 if char_obj:
                     selected_cos = self._find_costume(char_obj, dlg.costume)
