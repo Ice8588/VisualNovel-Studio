@@ -152,6 +152,9 @@ class MainWindow(QMainWindow):
 
         # 中央面板 → 內容變更
         self.center_panel.project_changed.connect(self._on_project_changed)
+        # 空狀態 CTA
+        self.center_panel.empty_state_import_text.connect(self._on_import_text)
+        self.center_panel.empty_state_add_scene.connect(self._on_empty_add_scene)
 
         # 預覽工具列按鈕
         self.center_panel.btn_refresh_preview.clicked.connect(self._on_refresh_preview)
@@ -169,6 +172,14 @@ class MainWindow(QMainWindow):
         # 同步中央面板
         new_index = self.left_panel.get_current_scene_index()
         self.center_panel.set_current_scene(new_index)
+
+    def _on_empty_add_scene(self) -> None:
+        """空狀態引導：新增第一個場景。"""
+        scene_id = self._project.next_scene_id()
+        self._project.scenes.append(Scene(id=scene_id))
+        self.left_panel.refresh_scenes()
+        self.left_panel.scene_list.setCurrentRow(0)
+        self._on_project_changed()
 
     # ── 角色操作 ──
 
