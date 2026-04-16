@@ -224,6 +224,28 @@ QComboBox#tableCombo QAbstractItemView {{
     selection-background-color: #4682B4;
     outline: none;
 }}
+QPushButton#dashedButton {{
+    border: 2px dashed #555;
+    border-radius: 4px;
+    color: #888;
+    background: transparent;
+    padding: 4px;
+}}
+QPushButton#dashedButton:hover {{
+    border-color: #888;
+    color: #bbb;
+}}
+QPushButton#hoverDeleteButton {{
+    border: none;
+    color: #888;
+    background: transparent;
+    font-size: 13px;
+    font-weight: bold;
+    padding: 0;
+}}
+QPushButton#hoverDeleteButton:hover {{
+    color: #e05555;
+}}
 """
 
 _LIGHT_OVERRIDES = """
@@ -444,6 +466,28 @@ QComboBox#tableCombo QAbstractItemView {{
     selection-background-color: #4682B4;
     selection-color: #fff;
     outline: none;
+}}
+QPushButton#dashedButton {{
+    border: 2px dashed #bbb;
+    border-radius: 4px;
+    color: #888;
+    background: transparent;
+    padding: 4px;
+}}
+QPushButton#dashedButton:hover {{
+    border-color: #666;
+    color: #333;
+}}
+QPushButton#hoverDeleteButton {{
+    border: none;
+    color: #999;
+    background: transparent;
+    font-size: 13px;
+    font-weight: bold;
+    padding: 0;
+}}
+QPushButton#hoverDeleteButton:hover {{
+    color: #c43434;
 }}
 """
 

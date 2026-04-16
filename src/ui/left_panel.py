@@ -64,12 +64,8 @@ class _HoverDeleteItemWidget(QWidget):
         layout.addWidget(self._text_label, 1)
 
         self._btn_del = QPushButton("×")
+        self._btn_del.setObjectName("hoverDeleteButton")
         self._btn_del.setFixedSize(18, 18)
-        self._btn_del.setStyleSheet(
-            "QPushButton{border:none;color:#888;background:transparent;"
-            "font-size:13px;font-weight:bold;padding:0;}"
-            "QPushButton:hover{color:#e05555;}"
-        )
         self._btn_del.hide()
         self._btn_del.clicked.connect(self.delete_clicked)
         layout.addWidget(self._btn_del)
@@ -95,12 +91,6 @@ class _HoverDeleteItemWidget(QWidget):
         self.item_double_clicked.emit()
         super().mouseDoubleClickEvent(event)
 
-
-_DASHED_BTN_STYLE = (
-    "QPushButton{border:2px dashed #555;border-radius:4px;color:#888;"
-    "background:transparent;padding:4px;}"
-    "QPushButton:hover{border-color:#888;color:#bbb;}"
-)
 
 
 class LeftPanel(QWidget):
@@ -162,7 +152,7 @@ class LeftPanel(QWidget):
         self.scene_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
         scene_layout.addWidget(self.scene_list)
         self.btn_add_scene = QPushButton("+ 新增場景")
-        self.btn_add_scene.setStyleSheet(_DASHED_BTN_STYLE)
+        self.btn_add_scene.setObjectName("dashedButton")
         scene_layout.addWidget(self.btn_add_scene)
         scene_section.setLayout(scene_layout)
         self._list_stack.addWidget(scene_section)
@@ -176,7 +166,7 @@ class LeftPanel(QWidget):
         self.character_list.setIconSize(QSize(32, 32))
         char_layout.addWidget(self.character_list)
         self.btn_add_char = QPushButton("+ 新增角色")
-        self.btn_add_char.setStyleSheet(_DASHED_BTN_STYLE)
+        self.btn_add_char.setObjectName("dashedButton")
         char_layout.addWidget(self.btn_add_char)
         char_section.setLayout(char_layout)
         self._list_stack.addWidget(char_section)
@@ -264,7 +254,7 @@ class LeftPanel(QWidget):
         self._char_costume_list.setFixedHeight(70)
         char_props_layout.addWidget(self._char_costume_list)
         btn_edit_costume = QPushButton("編輯服裝…")
-        btn_edit_costume.setStyleSheet(_DASHED_BTN_STYLE)
+        btn_edit_costume.setObjectName("dashedButton")
         btn_edit_costume.clicked.connect(
             lambda: self.costume_edit_requested.emit(self._current_char_index)
         )
