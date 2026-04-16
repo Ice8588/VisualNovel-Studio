@@ -241,11 +241,20 @@ class LeftPanel(QWidget):
         color_row.addWidget(self._btn_char_color)
         color_row.addStretch()
         char_props_layout.addLayout(color_row)
-        # 位置
+        # 位置（legacy：僅在未使用舞台槽位時生效）
         pos_row = QHBoxLayout()
-        pos_row.addWidget(QLabel("位置:"))
+        pos_label = QLabel("位置:")
+        pos_label.setToolTip(
+            "舊版欄位：僅對未設定「舞台槽位」的對話生效。\n"
+            "建議直接在對話列的「舞台」欄指定角色位置。"
+        )
+        pos_row.addWidget(pos_label)
         self._combo_char_pos = ComboBox()
         self._combo_char_pos.addItems(_POS_OPTIONS)
+        self._combo_char_pos.setToolTip(
+            "舊版欄位：僅對未設定「舞台槽位」的對話生效。\n"
+            "建議直接在對話列的「舞台」欄指定角色位置。"
+        )
         pos_row.addWidget(self._combo_char_pos, 1)
         char_props_layout.addLayout(pos_row)
         # 服裝列表
