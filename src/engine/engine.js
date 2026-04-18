@@ -192,7 +192,8 @@
     var bgFile = scene.background;
     if (bgFile) {
       var bgUrl = isDataUri(bgFile) ? bgFile : ASSETS_DIR + bgFile;
-      var newBg = "url(" + bgUrl + ")";
+      // 檔名含空白或特殊字元時 CSS url() 需用雙引號包裹、內嵌 " 轉 %22
+      var newBg = 'url("' + bgUrl.replace(/"/g, "%22") + '")';
       var currentBg = els.bg.style.backgroundImage;
       if (newBg !== currentBg) {
         if (isSkipping || CAPTURE_MODE) {

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from PyQt6.QtCore import QObject, QUrl, pyqtSignal, pyqtSlot
 from PyQt6.QtWebChannel import QWebChannel
+from PyQt6.QtWebEngineCore import QWebEnginePage
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import QVBoxLayout, QWidget
 
@@ -19,7 +20,7 @@ _QRC_WEBCHANNEL = '<script src="qrc:///qtwebchannel/qwebchannel.js"></script>'
 
 
 class PreviewBridge(QObject):
-    """Python←JS 橋接：Preview 推進台詞時通知 Python 端。"""
+    """Python←JS 橋接：Preview 推進文字時通知 Python 端。"""
 
     dialogue_advanced = pyqtSignal(int, int)  # (scene_index, dialogue_index)
     stage_slot_clicked = pyqtSignal(int, int, str, str)  # (scene_idx, dlg_idx, position, action)
@@ -31,6 +32,22 @@ class PreviewBridge(QObject):
     @pyqtSlot(int, int, str, str)
     def on_stage_slot_clicked(self, scene_idx: int, dlg_idx: int, position: str, action: str) -> None:
         self.stage_slot_clicked.emit(scene_idx, dlg_idx, position, action)
+
+
+class _LoggingPage(QWebEnginePage):
+    """將 JS console.log / warning / error 轉至 Python stderr，方便除錯。"""
+
+    _LEVEL_NAMES = {
+        QWebEnginePage.JavaScriptConsoleMessageLevel.InfoMessageLevel: "INFO",
+        QWebEnginePage.JavaScriptConsoleMessageLevel.WarningMessageLevel: "WARN",
+        QWebEnginePage.JavaScriptConsoleMessageLevel.ErrorMessageLevel: "ERROR",
+    }
+
+    def javaScriptConsoleMessage(self, level, message, line, source):
+        import sys
+        name = self._LEVEL_NAMES.get(level, "LOG")
+        src = source.rsplit("/", 1)[-1] if source else "?"
+        print(f"[WebEngine {name}] {src}:{line} {message}", file=sys.stderr)
 
 
 class LetterboxContainer(QWidget):
@@ -78,6 +95,7 @@ class PreviewWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         self.web_view = QWebEngineView()
+        self.web_view.setPage(_LoggingPage(self.web_view))
         self.web_view.setHtml(self._placeholder_html())
 
         # QWebChannel：Python←JS 雙向通訊
