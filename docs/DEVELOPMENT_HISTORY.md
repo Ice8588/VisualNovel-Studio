@@ -63,6 +63,34 @@
 
 ---
 
+## Phase D 紀錄（2026-04-18）
+
+### 成果（D1 / D2 / D3 / D4 / D5；漸變刪除、D6 跳過）
+- **D1 文字效果多選**：
+  - 新增 [`src/core/effects.py`](../src/core/effects.py) 作為 Python / JS 雙端共同的 `TEXT_EFFECTS` 定義單一來源（bold / italic / underline / strikethrough / shake / blink）。
+  - engine.js 端新增 `TEXT_EFFECTS` 常量 + `applyTextEffects(list)` 為 `#dialogue-text` 加 `fx-{key}` class；`style.css` 加對應規則與 `@keyframes vn-shake`、`vn-blink`。
+  - `center_panel.py` 新增 `_EffectsMenuButton`：PushButton 觸發 QMenu 可勾選項目，`effects_changed` signal 通知 row 寫回 `dlg.effects`。
+  - 新增 [`tests/test_effects_sync.py`](../tests/test_effects_sync.py) 以 regex 抽 engine.js 的 key 清單，斷言與 Python 端集合相同。
+  - **漸變（gradient）依使用者指示從選項中刪除**（語意分歧且 CSS `background-clip: text` 跨瀏覽器行為不一致）。
+- **D2 說話 vs 畫面分離（UI 文案）**：對話表格欄位 header 加 tooltip 明示「角色 = 說話（名牌）」、「舞台 = 畫面（三槽）」；實際資料模型早已分離，只是 UI 缺引導。
+- **D3 舞台欄三槽子 cell**：新增 `_StageCellWidget`（L / C / R 三按鈕），取代原本單一 `L● C○ R○` 指示；每按鈕點擊透過 `_open_stage_picker` 觸發 `StageSlotPickerDialog`。舞台欄寬 120 → 170。
+- **D4 角色色背景**：以 `_hex_to_qcolor(name_color, alpha=56)` + `_contrast_text_qcolor()`（YIQ 公式）為 `# 索引` 與「文字」兩欄上色，形成行色帶；其他 cellWidget 欄（角色 / 服裝 / 差分 / 效果 / 舞台）刻意不染色以避免與既有 QSS 衝突。
+- **D5 拖曳放置線**：`_DraggableTable` 新增自訂 `dragMoveEvent`/`paintEvent`，以 3px `#46B4DC` 線繪於插入位置（取代 Qt 預設指標）。
+
+### 驗證
+- `QT_QPA_PLATFORM=offscreen python -m pytest tests/` → 117 passed（新增 1 個 sync 測試）。
+- Headless smoke：`from src.ui.main_window import MainWindow; MainWindow().show()` 不崩潰（WebEngine 回退 software rendering 為 Linux/headless 正常行為）。
+
+### 跳過 / 刪除項目
+- **D6 POC spike**：依使用者決定跳過；現有 `QTableWidget` + delegate 組合已承載 D1~D5 全部功能。
+- **漸變文字效果**：依使用者決定刪除；Python / JS 端同步不再宣告 `gradient` key。
+
+### 給 CODEX 的備忘
+- 之後若要加新效果：(1) 於 `effects.py::TEXT_EFFECTS` 增筆；(2) engine.js 同名 TEXT_EFFECTS 加同 key；(3) style.css 加 `#dialogue-text.fx-{key}` 規則（及 `@keyframes` 若為動畫）；(4) `test_effects_sync.py` 自動守護；(5) CAPTURE_MODE 已透過 `* { animation: none }` 統一抑制動畫，影片導出無需額外處理。
+- D4 若要擴展到全欄上色，需解決 cellWidget 的 QSS 層級問題（可考慮 proxy style 或 custom viewport paint），Phase E 之後可視需求再加。
+
+---
+
 ## Phase C 紀錄（2026-04-18）
 
 ### 成果

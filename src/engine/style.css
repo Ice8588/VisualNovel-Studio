@@ -226,6 +226,31 @@ body.capture-mode #stage-overlay { display: none !important; }
   opacity: 0.7;
 }
 
+/* D1 文字效果：整個對話文字層加 fx-* class，同時可套多種 */
+#dialogue-text.fx-bold          { font-weight: 700; }
+#dialogue-text.fx-italic        { font-style: italic; }
+#dialogue-text.fx-underline     { text-decoration: underline; }
+#dialogue-text.fx-strikethrough { text-decoration: line-through; }
+#dialogue-text.fx-underline.fx-strikethrough { text-decoration: underline line-through; }
+
+@keyframes vn-shake {
+  0%   { transform: translate(0, 0); }
+  20%  { transform: translate(-1px, 1px); }
+  40%  { transform: translate(1px, -1px); }
+  60%  { transform: translate(-1px, -1px); }
+  80%  { transform: translate(1px, 1px); }
+  100% { transform: translate(0, 0); }
+}
+#dialogue-text.fx-shake { animation: vn-shake 0.25s linear infinite; }
+
+@keyframes vn-blink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.3; }
+}
+#dialogue-text.fx-blink { animation: vn-blink 1s ease-in-out infinite; }
+
+/* Capture Mode 下已有 `* { animation: none !important }` 抑制，這裡不需額外處理 */
+
 /* ── Quick Menu（對話框下方按鈕列） ── */
 
 #quick-menu {

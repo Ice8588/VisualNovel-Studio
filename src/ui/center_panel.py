@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from PyQt6.QtCore import QEvent, QObject, Qt, pyqtSignal
-from PyQt6.QtGui import QAction, QColor, QIcon, QKeySequence, QPixmap
+from PyQt6.QtCore import QEvent, QObject, QRect, Qt, pyqtSignal
+from PyQt6.QtGui import QAction, QBrush, QColor, QIcon, QKeySequence, QPixmap
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -25,6 +25,7 @@ from PyQt6.QtWidgets import (
 )
 from qfluentwidgets import LineEdit, PushButton
 
+from src.core.effects import TEXT_EFFECTS
 from src.core.models import Character, Dialogue, Project, Scene
 from src.ui.preview_widget import PreviewWidget
 from src.ui.empty_state import EmptyStateWidget
@@ -33,12 +34,9 @@ NONE_LABEL = "(無)"
 NARRATION_LABEL = "(旁白)"
 UNASSIGNED_LABEL = "(未選取)"
 
-EFFECT_OPTIONS = ["(無)", "bold", "italic", "underline", "strikethrough", "shake", "blink", "gradient"]
-EFFECT_DISPLAY = {
-    "(無)": "(無)", "bold": "粗體", "italic": "斜體", "underline": "底線",
-    "strikethrough": "刪除線", "shake": "顫抖", "blink": "閃爍", "gradient": "漸變",
-}
-EFFECT_DISPLAY_INV = {v: k for k, v in EFFECT_DISPLAY.items()}
+# 單一來源：src/core/effects.py；engine.js 端常量由 tests/test_effects_sync.py 守護
+EFFECT_KEY_ORDER: list[str] = [k for k, _ in TEXT_EFFECTS]
+EFFECT_DISPLAY: dict[str, str] = dict(TEXT_EFFECTS)
 
 
 class _MultilineDelegate(QStyledItemDelegate):
@@ -111,6 +109,125 @@ class _HoverFilter(QObject):
         return False
 
 
+def _hex_to_qcolor(hex_color: str, alpha: int = 64) -> QColor:
+    """把 #RRGGBB 轉 QColor 並附 alpha（0-255）；非法 hex 回傳預設藍。"""
+    try:
+        c = QColor(hex_color)
+        if not c.isValid():
+            c = QColor("#4682B4")
+    except Exception:
+        c = QColor("#4682B4")
+    c.setAlpha(alpha)
+    return c
+
+
+def _contrast_text_qcolor(bg_hex: str) -> QColor:
+    """依 YIQ 公式選擇深 / 淺字色，確保在該背景下可讀。"""
+    try:
+        c = QColor(bg_hex)
+        if not c.isValid():
+            c = QColor("#4682B4")
+    except Exception:
+        c = QColor("#4682B4")
+    r, g, b = c.red(), c.green(), c.blue()
+    yiq = (r * 299 + g * 587 + b * 114) / 1000
+    return QColor(0, 0, 0) if yiq >= 128 else QColor(255, 255, 255)
+
+
+class _StageCellWidget(QWidget):
+    """D3：舞台欄三槽（L/C/R）子元件；每槽為按鈕，顯示角色名或「+」，點擊開 picker。"""
+
+    slot_clicked = pyqtSignal(str)  # position: "left" / "center" / "right"
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        layout = QHBoxLayout()
+        layout.setContentsMargins(2, 2, 2, 2)
+        layout.setSpacing(2)
+        self._buttons: dict[str, PushButton] = {}
+        for pos in ("left", "center", "right"):
+            btn = PushButton("+")
+            btn.setObjectName("tableCombo")
+            btn.setFixedHeight(24)
+            btn.setMinimumWidth(40)
+            btn.setToolTip({"left": "左槽", "center": "中槽", "right": "右槽"}[pos])
+            btn.clicked.connect(lambda _checked=False, p=pos: self.slot_clicked.emit(p))
+            layout.addWidget(btn)
+            self._buttons[pos] = btn
+        self.setLayout(layout)
+
+    def set_stage(self, stage: dict) -> None:
+        for pos, btn in self._buttons.items():
+            slot = (stage or {}).get(pos)
+            if slot and slot.get("character"):
+                # 縮短角色名避免擠出
+                name = slot["character"]
+                if len(name) > 3:
+                    name = name[:2] + "…"
+                btn.setText(name)
+                btn.setToolTip(
+                    f"{ {'left':'左槽','center':'中槽','right':'右槽'}[pos] }：{slot['character']}"
+                    + (f"｜{slot.get('costume')}" if slot.get("costume") else "")
+                    + (f"｜{slot.get('sprite')}" if slot.get("sprite") else "")
+                )
+            else:
+                btn.setText("+")
+                btn.setToolTip({"left": "左槽（空）", "center": "中槽（空）", "right": "右槽（空）"}[pos])
+
+
+class _EffectsMenuButton(PushButton):
+    """D1：多選文字效果按鈕；點擊展開可勾選選單，按鈕文字顯示目前效果數量。"""
+
+    effects_changed = pyqtSignal(list)  # list[str] of effect keys
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self._selected: list[str] = []
+        self.setObjectName("tableCombo")
+        self._menu = QMenu(self)
+        self._actions: dict[str, QAction] = {}
+        for key in EFFECT_KEY_ORDER:
+            act = QAction(EFFECT_DISPLAY.get(key, key), self._menu)
+            act.setCheckable(True)
+            act.toggled.connect(lambda _checked, k=key: self._on_toggled(k))
+            self._menu.addAction(act)
+            self._actions[key] = act
+        self.clicked.connect(self._show_menu)
+        self._refresh_label()
+
+    def _show_menu(self) -> None:
+        pos = self.mapToGlobal(self.rect().bottomLeft())
+        self._menu.exec(pos)
+
+    def _on_toggled(self, key: str) -> None:
+        # 取所有勾選 action 的 key（維持 EFFECT_KEY_ORDER 排序）
+        new_selected = [k for k in EFFECT_KEY_ORDER if self._actions[k].isChecked()]
+        if new_selected == self._selected:
+            return
+        self._selected = new_selected
+        self._refresh_label()
+        self.effects_changed.emit(list(self._selected))
+
+    def set_effects(self, effects: list[str]) -> None:
+        self._selected = [k for k in EFFECT_KEY_ORDER if k in effects]
+        for key, act in self._actions.items():
+            act.blockSignals(True)
+            act.setChecked(key in self._selected)
+            act.blockSignals(False)
+        self._refresh_label()
+
+    def get_effects(self) -> list[str]:
+        return list(self._selected)
+
+    def _refresh_label(self) -> None:
+        if not self._selected:
+            self.setText(NONE_LABEL)
+        elif len(self._selected) == 1:
+            self.setText(EFFECT_DISPLAY.get(self._selected[0], self._selected[0]))
+        else:
+            self.setText(f"{EFFECT_DISPLAY.get(self._selected[0], self._selected[0])} +{len(self._selected) - 1}")
+
+
 class _BatchToolbar(QWidget):
     """多選 ≥2 行時浮現的批次操作列。"""
 
@@ -143,7 +260,10 @@ class _BatchToolbar(QWidget):
 
 
 class _DraggableTable(QTableWidget):
-    """自訂拖曳排序的 QTableWidget，不依賴 Qt InternalMove 的 visual/logical 映射。"""
+    """自訂拖曳排序的 QTableWidget，不依賴 Qt InternalMove 的 visual/logical 映射。
+
+    D5：在拖曳過程中以粗線繪出插入位置（Qt 預設指標太細、易看不見）。
+    """
 
     row_moved = pyqtSignal(int, int)  # (from_row, to_row)
 
@@ -155,7 +275,9 @@ class _DraggableTable(QTableWidget):
         self.setAcceptDrops(True)
         self.viewport().setAcceptDrops(True)
         self.setDragDropOverwriteMode(False)
+        self.setDropIndicatorShown(False)  # 用自訂線蓋過預設指標
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self._drop_line_y: int = -1  # 自訂插入線的 y 座標（viewport 內）；-1 = 不畫
 
     def startDrag(self, supportedActions):
         row = self.currentRow()
@@ -163,7 +285,44 @@ class _DraggableTable(QTableWidget):
             self.selectRow(row)
         super().startDrag(supportedActions)
 
+    def dragMoveEvent(self, event) -> None:
+        # 更新插入線位置
+        pos = event.position().toPoint()
+        to_index = self.indexAt(pos)
+        if to_index.isValid():
+            rect = self.visualRect(to_index)
+            if pos.y() > rect.center().y():
+                y = rect.bottom()
+            else:
+                y = rect.top()
+        else:
+            # 未指向有效 row → 放在最後
+            y = self.viewport().height() - 1
+        if y != self._drop_line_y:
+            self._drop_line_y = y
+            self.viewport().update()
+        event.accept()
+
+    def dragLeaveEvent(self, event) -> None:
+        self._drop_line_y = -1
+        self.viewport().update()
+        super().dragLeaveEvent(event)
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        if self._drop_line_y < 0:
+            return
+        from PyQt6.QtGui import QPainter, QPen
+        painter = QPainter(self.viewport())
+        pen = QPen(QColor(70, 180, 220))
+        pen.setWidth(3)
+        painter.setPen(pen)
+        painter.drawLine(0, self._drop_line_y, self.viewport().width(), self._drop_line_y)
+        painter.end()
+
     def dropEvent(self, event) -> None:
+        self._drop_line_y = -1
+        self.viewport().update()
         from_row = self.currentRow()
         to_index = self.indexAt(event.position().toPoint())
         if to_index.isValid():
@@ -266,6 +425,18 @@ class CenterPanel(QWidget):
         self.dialogue_table.setHorizontalHeaderLabels(
             ["#", "文字", "角色", "服裝", "差分", "效果", "舞台"]
         )
+        # D2：UI 文案明示「角色」= 說話角色（決定名牌）、「舞台」= 畫面角色（三槽）
+        _header_tooltips = {
+            2: "說話角色：決定此句名牌的顯示名稱與顏色。",
+            3: "說話角色的服裝（對應 Costume）。",
+            4: "說話角色此服裝下的立繪差分。",
+            5: "文字效果（可多選）：粗體 / 斜體 / 底線 / 刪除線 / 顫抖 / 閃爍。",
+            6: "舞台（畫面角色）：左 / 中 / 右三槽獨立指定。說話者不等於畫面出場者。",
+        }
+        for col, tip in _header_tooltips.items():
+            hdr_item = self.dialogue_table.horizontalHeaderItem(col)
+            if hdr_item is not None:
+                hdr_item.setToolTip(tip)
         header = self.dialogue_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
@@ -279,7 +450,7 @@ class CenterPanel(QWidget):
         self.dialogue_table.setColumnWidth(3, 90)
         self.dialogue_table.setColumnWidth(4, 90)
         self.dialogue_table.setColumnWidth(5, 100)
-        self.dialogue_table.setColumnWidth(6, 120)
+        self.dialogue_table.setColumnWidth(6, 170)
         self.dialogue_table.verticalHeader().setDefaultSectionSize(40)
         self.dialogue_table.verticalHeader().setVisible(False)
         self.dialogue_table.setSelectionMode(
@@ -474,7 +645,17 @@ class CenterPanel(QWidget):
             self.dialogue_table.setItem(row, 0, idx_item)
 
             # 欄 1：文字（可編輯，multiline delegate）
-            self.dialogue_table.setItem(row, 1, QTableWidgetItem(dlg.text))
+            text_item = QTableWidgetItem(dlg.text)
+            # D4：以說話角色的 name_color 上色（半透明），旁白/未選取維持預設
+            char_obj_for_color = self._find_character(dlg.character) if dlg.character else None
+            if char_obj_for_color is not None:
+                bg = _hex_to_qcolor(char_obj_for_color.name_color, alpha=56)
+                text_item.setBackground(QBrush(bg))
+                # 文字色用 YIQ 對比（基底為角色色 + 表格背景疊合，這裡直接用角色色估算）
+                text_item.setForeground(QBrush(_contrast_text_qcolor(char_obj_for_color.name_color)))
+                # 同步對 # 索引欄也上色，形成行色帶
+                idx_item.setBackground(QBrush(bg))
+            self.dialogue_table.setItem(row, 1, text_item)
 
             # 欄 2：角色 ComboBox（所有行都有）
             char_combo = QComboBox()
@@ -544,30 +725,21 @@ class CenterPanel(QWidget):
                 self.dialogue_table.setItem(row, 3, narr_item)
                 self.dialogue_table.setSpan(row, 3, 1, 2)
 
-            # 欄 5：效果（下拉選單）
-            effect_combo = QComboBox()
-            effect_combo.setObjectName("tableCombo")
-            for k, v in EFFECT_DISPLAY.items():
-                effect_combo.addItem(v, k)
-            current_effect = dlg.effects[0] if dlg.effects else "(無)"
-            eidx = effect_combo.findData(current_effect)
-            effect_combo.setCurrentIndex(max(0, eidx))
-            effect_combo.currentIndexChanged.connect(
-                lambda _, r=row: self._on_effect_combo_changed(r)
+            # 欄 5：文字效果（D1 多選按鈕）
+            effect_btn = _EffectsMenuButton()
+            effect_btn.set_effects(dlg.effects or [])
+            effect_btn.effects_changed.connect(
+                lambda effects, r=row: self._on_effects_changed(r, effects)
             )
-            self.dialogue_table.setCellWidget(row, 5, effect_combo)
+            self.dialogue_table.setCellWidget(row, 5, effect_btn)
 
-            # 欄 6：舞台槽位指示（L/C/R，● 有角色 ○ 空）
-            stage = dlg.stage
-            parts = [
-                "L●" if stage.get("left") else "L○",
-                "C●" if stage.get("center") else "C○",
-                "R●" if stage.get("right") else "R○",
-            ]
-            stage_item = QTableWidgetItem(" ".join(parts))
-            stage_item.setFlags(stage_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            stage_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.dialogue_table.setItem(row, 6, stage_item)
+            # 欄 6：舞台三槽（D3）— 每槽 button，點擊開 picker
+            stage_widget = _StageCellWidget()
+            stage_widget.set_stage(dlg.stage)
+            stage_widget.slot_clicked.connect(
+                lambda pos, r=row: self._open_stage_picker(r, pos)
+            )
+            self.dialogue_table.setCellWidget(row, 6, stage_widget)
 
         self._updating = False
 
@@ -586,17 +758,13 @@ class CenterPanel(QWidget):
             dlg.text = value
             self.project_changed.emit()
 
-    def _on_effect_combo_changed(self, row: int) -> None:
+    def _on_effects_changed(self, row: int, effects: list[str]) -> None:
         if self._updating:
             return
         scene = self._get_current_scene()
         if not scene or row >= len(scene.dialogues):
             return
-        combo = self.dialogue_table.cellWidget(row, 5)
-        if not combo:
-            return
-        key = combo.currentData()
-        scene.dialogues[row].effects = [] if key == "(無)" else [key]
+        scene.dialogues[row].effects = list(effects)
         self.project_changed.emit()
 
     def _on_char_combo_changed(self, row: int) -> None:
@@ -910,6 +1078,11 @@ class CenterPanel(QWidget):
         self.add_dialogues_to_current_scene(new_dialogues, insert_after=insert_after)
 
     # ── 舞台槽位 ──
+
+    def _open_stage_picker(self, row: int, position: str) -> None:
+        """D3：從表格舞台欄按鈕開啟 picker（等同 preview overlay 的 add/swap 行為）。"""
+        scene_idx = self._current_scene_index
+        self._on_stage_slot_clicked(scene_idx, row, position, "add")
 
     def _on_stage_slot_clicked(self, scene_idx: int, dlg_idx: int, position: str, action: str) -> None:
         scene = self._get_current_scene()
