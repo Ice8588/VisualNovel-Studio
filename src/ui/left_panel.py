@@ -203,8 +203,8 @@ class LeftPanel(QWidget):
         self.combo_background = ComboBox()
         self.combo_background.addItem(NONE_LABEL)
         bg_row.addWidget(self.combo_background, 1)
+        # 匯入按鈕：不設 fixed 寬，讓字體放大時不裁切
         self.btn_import_bg = PushButton("匯入")
-        self.btn_import_bg.setFixedWidth(50)
         bg_row.addWidget(self.btn_import_bg)
         props_layout.addLayout(bg_row)
         bgm_row = QHBoxLayout()
@@ -213,7 +213,6 @@ class LeftPanel(QWidget):
         self.combo_bgm.addItem(NONE_LABEL)
         bgm_row.addWidget(self.combo_bgm, 1)
         self.btn_import_music = PushButton("匯入")
-        self.btn_import_music.setFixedWidth(50)
         bgm_row.addWidget(self.btn_import_music)
         props_layout.addLayout(bgm_row)
         effect_row = QHBoxLayout()

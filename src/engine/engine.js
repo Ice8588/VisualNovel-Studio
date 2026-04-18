@@ -131,6 +131,12 @@
       setupStageOverlay();
     }
 
+    // 視窗 resize（LetterboxContainer 改變 WebView 尺寸時觸發）→ 重新量測字框寬度
+    window.addEventListener("resize", function () {
+      if (isTyping) return;  // typewriter 已在 setInterval 內每步呼叫
+      sizeDialogueBox();
+    });
+
     loadScript();
   }
 
@@ -173,6 +179,8 @@
       els.dialogueBox.style.backgroundColor =
         "rgba(20,20,40," + gs.dialogue_box_opacity + ")";
     }
+    // 字體變動後重新量測字框寬度
+    sizeDialogueBox();
   }
 
   function buildCharactersMap() {
@@ -327,6 +335,7 @@
     // Skip / Capture 模式：跳過打字機，直接顯示完整文字
     if (isSkipping || CAPTURE_MODE) {
       els.dialogueText.innerHTML = mdToHtml(d.text);
+      sizeDialogueBox();
       isTyping = false;
     } else {
       typeText(els.dialogueText, d.text);
@@ -440,6 +449,51 @@
 
   function isDataUri(str) {
     return str && str.indexOf("data:") === 0;
+  }
+
+  // 字框寬度量測器（隱藏的 span，用來取得文字在 nowrap 下的真實像素寬）
+  var _measureSpan = null;
+  function getMeasureSpan() {
+    if (!_measureSpan) {
+      _measureSpan = document.createElement("span");
+      _measureSpan.style.position = "absolute";
+      _measureSpan.style.visibility = "hidden";
+      _measureSpan.style.whiteSpace = "nowrap";
+      _measureSpan.style.pointerEvents = "none";
+      _measureSpan.style.top = "-9999px";
+      _measureSpan.style.left = "0";
+      document.body.appendChild(_measureSpan);
+    }
+    return _measureSpan;
+  }
+
+  // 依當前 #dialogue-text / #name-plate 內容量測字框「若不換行」的寬度，
+  // 然後把結果（夾在 min/max 之間）顯式寫回 #dialogue-box.style.width。
+  // 這樣 typewriter 每次 innerHTML 更新都能保證字框重新 layout。
+  function sizeDialogueBox() {
+    if (!els.dialogueBox || !els.dialogueText || !els.container) return;
+    var measure = getMeasureSpan();
+    var cs = window.getComputedStyle(els.dialogueText);
+    measure.style.fontSize = cs.fontSize;
+    measure.style.fontFamily = cs.fontFamily;
+    measure.style.fontWeight = cs.fontWeight;
+    measure.style.lineHeight = cs.lineHeight;
+    measure.innerHTML = els.dialogueText.innerHTML || "";
+    var textW = measure.offsetWidth;
+
+    var nameW = 0;
+    if (els.namePlate && els.namePlate.style.visibility === "visible") {
+      nameW = els.namePlate.offsetWidth;
+    }
+
+    var natural = Math.max(textW, nameW);
+    // padding 14px 22px → 水平 44、box-sizing border-box 下 width 需含之
+    var pad = 44;
+    var containerW = els.container.clientWidth;
+    var maxW = Math.max(120, containerW - 48);
+    var minW = 80;  // 很短的「你好。」也看得出字框貼合
+    var target = Math.max(minW, Math.min(maxW, natural + pad));
+    els.dialogueBox.style.width = target + "px";
   }
 
   // D1：文字效果 — 依 d.effects 陣列套用 fx-{key} class；未知 key 忽略
@@ -562,17 +616,21 @@
     isTyping = true;
     var htmlText = mdToHtml(text);
     element.innerHTML = "";
+    // 初始化字框寬度（空內容 → min-width）
+    sizeDialogueBox();
     var i = 0;
     var plainText = text;
     typewriterTimer = setInterval(function () {
       i++;
       if (i >= plainText.length) {
         element.innerHTML = htmlText;
+        sizeDialogueBox();
         clearInterval(typewriterTimer);
         isTyping = false;
         scheduleAutoAdvance(plainText);
       } else {
         element.innerHTML = mdToHtml(plainText.substring(0, i));
+        sizeDialogueBox();
       }
     }, TYPEWRITER_SPEED);
   }
@@ -583,6 +641,7 @@
     if (scene && dialogueIndex < scene.dialogues.length) {
       var text = scene.dialogues[dialogueIndex].text;
       els.dialogueText.innerHTML = mdToHtml(text);
+      sizeDialogueBox();
       scheduleAutoAdvance(text);
     }
     isTyping = false;
