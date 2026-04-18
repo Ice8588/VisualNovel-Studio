@@ -12,6 +12,18 @@
   var SKIP_INTERVAL = 100;
   var FADE_DURATION = 500;
 
+  // 文字效果鍵集合 — 必須與 src/core/effects.py::TEXT_EFFECTS 一致
+  // （tests/test_effects_sync.py 斷言兩端 key 集合相同）
+  var TEXT_EFFECTS = [
+    {key: "bold",          display: "粗體"},
+    {key: "italic",        display: "斜體"},
+    {key: "underline",     display: "底線"},
+    {key: "strikethrough", display: "刪除線"},
+    {key: "shake",         display: "顫抖"},
+    {key: "blink",         display: "閃爍"},
+  ];
+  var TEXT_EFFECT_KEYS = TEXT_EFFECTS.map(function (e) { return e.key; });
+
   // ── Capture Mode（影片導出用，跳過動畫/音訊） ──
   var CAPTURE_MODE = (typeof window.VN_CAPTURE_MODE !== 'undefined' && window.VN_CAPTURE_MODE);
   if (CAPTURE_MODE) {
@@ -306,6 +318,9 @@
       renderLegacySprite(d, charInfo);
     }
 
+    // 套用文字效果（D1 多選）：對 #dialogue-text 加 fx-{key} class
+    applyTextEffects(d.effects || []);
+
     // Skip / Capture 模式：跳過打字機，直接顯示完整文字
     if (isSkipping || CAPTURE_MODE) {
       els.dialogueText.innerHTML = mdToHtml(d.text);
@@ -422,6 +437,21 @@
 
   function isDataUri(str) {
     return str && str.indexOf("data:") === 0;
+  }
+
+  // D1：文字效果 — 依 d.effects 陣列套用 fx-{key} class；未知 key 忽略
+  function applyTextEffects(effects) {
+    if (!els.dialogueText) return;
+    // 先清除所有現有 fx-* class
+    TEXT_EFFECT_KEYS.forEach(function (k) {
+      els.dialogueText.classList.remove("fx-" + k);
+    });
+    if (!Array.isArray(effects)) return;
+    effects.forEach(function (key) {
+      if (TEXT_EFFECT_KEYS.indexOf(key) >= 0) {
+        els.dialogueText.classList.add("fx-" + key);
+      }
+    });
   }
 
   // 將 #RRGGBB / #RGB 轉 rgba(r, g, b, alpha)；非合法 hex 回傳預設藍色半透明
