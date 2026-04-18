@@ -171,16 +171,21 @@ body.capture-mode #stage-overlay { display: none !important; }
 
 /* ── 對話框 ── */
 
+/* E1：字框隨文字長度自動伸縮；水平置中、左右保留邊距 */
 #dialogue-box {
   position: absolute;
   bottom: 32px;
-  left: 0;
-  right: 0;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 10;
   background: rgba(20, 20, 40, 0.85);
   border-top: 2px solid rgba(70, 130, 180, 0.4);
-  padding: 20px 30px;
-  min-height: 140px;
+  padding: 16px 24px;
+  min-height: 100px;
+  width: max-content;
+  max-width: calc(100% - 64px);
+  min-width: 240px;
+  border-radius: 4px;
 }
 
 /* B7：名牌長度貼合文字，背景由 engine.js 動態塞入半透明 name_color */

@@ -63,6 +63,29 @@
 
 ---
 
+## Phase E 紀錄（2026-04-18）
+
+### 成果
+- **E1 字框 auto-width**：`style.css` 將 `#dialogue-box` 改為 `width: max-content; max-width: calc(100% - 64px); min-width: 240px; left: 50%; transform: translateX(-50%); padding: 16px 24px; border-radius: 4px`。短台詞變浮動貼合、長台詞觸發 max-width 自動換行，不超出預覽容器。
+- **E2 字體 14-32 夾住**：
+  - `GameSettings.from_dict` 把 `dialogue_font_size` / `name_font_size` 夾至 [14, 32]；舊檔不合法值自動修正。
+  - engine.js `applyGameSettings` 同樣 clamp（雙保險，資料 / 呈現都不會爆）。
+  - 新增 3 個測試（`TestGameSettings`）：預設值、out-of-range 夾住、in-range 不變。
+- **既有 UI 字體 14-32** 選單（Phase A verify pass 已記錄）預設 18 不變。
+
+### 驗證
+- `QT_QPA_PLATFORM=offscreen python -m pytest tests/` → 120 passed（新增 3 個 GameSettings）。
+- 目視需確認（CODEX）：
+  - 極短台詞（例：「好。」）字框寬度貼合。
+  - 極長台詞（100+ 字）字框觸發換行但不超過畫面 96% 寬。
+  - 影片導出（CAPTURE_MODE）的 MP4 每張截幀字框位置與預覽一致（字框 `translateX(-50%)` 居中在 CAPTURE_MODE 下動畫被抑制，不會有位移瑕疵）。
+
+### 給 CODEX 的備忘
+- 字框改為 auto-width 會顯著影響 MP4 視覺佈局：舊專案（字框原本填滿寬度）轉新版後，短台詞會看起來「窗格漂浮」。若需回退，修改 `style.css::#dialogue-box` 把 `width` 拿掉、改回 `left:0; right:0` 即可。
+- E1 未新增 `game_settings.dialogue_box_width_mode` 欄位（使用者無此要求；若之後要「滿寬 vs 貼合」雙模，可之後再擴充）。
+
+---
+
 ## Phase D 紀錄（2026-04-18）
 
 ### 成果（D1 / D2 / D3 / D4 / D5；漸變刪除、D6 跳過）
