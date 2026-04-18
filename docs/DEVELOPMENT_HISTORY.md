@@ -63,6 +63,22 @@
 
 ---
 
+## Phase F 紀錄（2026-04-18）
+
+### 成果
+- **F1 場景背景不顯示於預覽**：engine.js 背景 CSS `url(...)` 未引號化，檔名含空白（常見 Windows `D:\VisualNovel Studio\assets\my bg.png`）時 CSS 解析失敗。修正為 `url("...")` 並 escape 內嵌雙引號 → `engine.js:195-196`。
+- **F2 LOG 基礎建設**：新增 `_LoggingPage(QWebEnginePage)` 捕捉 JS `console.log` / `warning` / `error`，輸出到 Python `stderr`；任何後續 Phase 的 JS bug 都可透過終端觀察。
+
+### 驗證
+- `QT_QPA_PLATFORM=offscreen python -m pytest tests/` → 106 passed。
+- 手動煙測：啟 `python main.py`，匯入含空白路徑的背景圖，確認終端出現 `[WebEngine INFO/WARN/ERROR]` 字樣且預覽背景正常呈現（CODEX 需於 Windows 環境目視驗證）。
+
+### 給 CODEX / 下一位的備忘
+- 若 engine 新增其他 CSS `url(...)` 引用（例如 effects.js 可能在 overlay 元素塞圖），同樣要用雙引號包裹。
+- sprite `<img src>` 與 BGM `new Audio(src)` 不受此 bug 影響（屬性值會自動處理）。
+
+---
+
 ## Phase A 紀錄（2026-04-18）
 
 ### 成果
