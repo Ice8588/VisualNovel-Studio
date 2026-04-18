@@ -95,16 +95,18 @@
   pointer-events: none;
 }
 
+/* B6：槽位按鈕垂直置中於預覽畫面，永遠可見（填滿槽位時自動顯示 ▼） */
 .slot-control {
   position: absolute;
-  bottom: 10%;
+  top: 50%;
   width: 80px;
   height: 80px;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
   pointer-events: auto;
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 2px;
 }
 
 .slot-control[data-position="left"]   { left: 25%; }
@@ -143,12 +145,12 @@
   margin: 2px;
 }
 
-.slot-control.filled {
-  flex-direction: column;
+/* B6：槽位已填時 ▼ 永遠顯示（非 hover 也顯示），✕ 維持 hover 才顯示 */
+.slot-control.filled .btn-swap {
+  display: inline-block;
 }
 
-.slot-control.filled:hover .btn-clear,
-.slot-control.filled:hover .btn-swap {
+.slot-control.filled:hover .btn-clear {
   display: inline-block;
 }
 
@@ -181,17 +183,23 @@ body.capture-mode #stage-overlay { display: none !important; }
   min-height: 140px;
 }
 
+/* B7：名牌長度貼合文字，背景由 engine.js 動態塞入半透明 name_color */
 #name-plate {
-  display: block;
+  display: inline-block;
   visibility: hidden;
-  background: rgba(70, 130, 180, 0.9);
+  background: rgba(70, 130, 180, 0.6);
   color: #fff;
-  padding: 4px 16px;
+  padding: 4px 14px;
   margin-bottom: 8px;
   border-radius: 4px;
   font-size: 16px;
   font-weight: bold;
   min-height: 28px;
+  line-height: 20px;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 #dialogue-text {
@@ -353,4 +361,59 @@ body.capture-mode #stage-overlay { display: none !important; }
   color: #aaa;
   font-size: 28px;
   letter-spacing: 8px;
+}
+
+/* ── B4：淺色預覽模式（僅作用於 preview；匯出時 body 無此 class） ── */
+
+body.preview-light #game-container {
+  background: #f5f5f7;
+}
+
+body.preview-light #dialogue-box {
+  background: rgba(255, 255, 255, 0.9);
+  border-top: 2px solid rgba(70, 130, 180, 0.4);
+}
+
+body.preview-light #dialogue-text {
+  color: #222;
+}
+
+body.preview-light #dialogue-text strong {
+  color: #000;
+}
+
+body.preview-light #quick-menu {
+  background: rgba(240, 240, 245, 0.8);
+}
+
+body.preview-light #quick-menu button {
+  color: rgba(60, 60, 70, 0.9);
+}
+
+body.preview-light #quick-menu button:hover {
+  color: #000;
+}
+
+body.preview-light #history-panel {
+  background: rgba(245, 245, 248, 0.97);
+}
+
+body.preview-light #history-panel .history-text {
+  color: #333;
+}
+
+body.preview-light #history-panel .history-narration {
+  color: #888;
+}
+
+body.preview-light #btn-close-history {
+  background: rgba(0, 0, 0, 0.05);
+  color: #333;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+body.preview-light .slot-control .btn-add {
+  border-color: #555;
+  background: rgba(255, 255, 255, 0.4);
+  color: #333;
 }

@@ -88,7 +88,19 @@ class PreviewWidget(QWidget):
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
         self._temp_dir: tempfile.TemporaryDirectory | None = None
+        self._theme_name: str = "dark"  # 影響 body class（preview-dark / preview-light）
+        self._last_project: Project | None = None
         self._setup_ui()
+
+    def set_theme(self, theme_name: str) -> None:
+        """設定預覽主題（dark / light），若已載入 project 會觸發重繪。"""
+        if theme_name not in ("dark", "light"):
+            theme_name = "dark"
+        if theme_name == self._theme_name:
+            return
+        self._theme_name = theme_name
+        if self._last_project is not None:
+            self.reload_preview(self._last_project)
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout()
@@ -111,6 +123,7 @@ class PreviewWidget(QWidget):
 
     def reload_preview(self, project: Project) -> None:
         """將 engine 檔案 + script data + assets 寫入暫存目錄並載入預覽。"""
+        self._last_project = project
         # 清理前一次的暫存目錄
         if self._temp_dir:
             self._temp_dir.cleanup()
@@ -134,7 +147,7 @@ class PreviewWidget(QWidget):
                     src.read_text(encoding="utf-8"), encoding="utf-8"
                 )
 
-        # 複製 index.html 並注入 SCRIPT_DATA（解決 file:// fetch 限制）
+        # 複製 index.html 並注入 SCRIPT_DATA（解決 file:// fetch 限制）+ preview 主題 class
         index_src = ENGINE_DIR / "index.html"
         if index_src.exists():
             html = index_src.read_text(encoding="utf-8")
@@ -144,6 +157,9 @@ class PreviewWidget(QWidget):
                 + ";</script>"
             )
             html = html.replace("</head>", inline_script + "\n</head>")
+            # B4：注入 preview-dark / preview-light class 到 <body>
+            preview_class = f"preview-{self._theme_name}"
+            html = html.replace("<body>", f'<body class="{preview_class}">')
             (temp_path / "index.html").write_text(html, encoding="utf-8")
 
         # 複製素材

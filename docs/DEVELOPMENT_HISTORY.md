@@ -63,6 +63,35 @@
 
 ---
 
+## Phase B 紀錄（2026-04-18）
+
+### 成果（B4/B5/B6/B7；B1/B2/B3 先前已完成）
+- **B4 淺色預覽**：
+  - `PreviewWidget` 新增 `_theme_name` 與 `set_theme(theme)`；`reload_preview` 將 `<body>` 注入 `preview-dark` / `preview-light` class。
+  - `MainWindow._apply_theme_immediate` 呼叫 `preview.set_theme()`；啟動時 `_setup_ui` 也同步初始主題。
+  - `style.css` 末段新增 `body.preview-light ...` 規則：容器背景 `#f5f5f7`、字框 `rgba(255,255,255,0.9)`、深色字、Quick Menu / History 面板、槽位按鈕均做對應。
+- **B5 預覽/文字列表 50/50**：`center_panel.py` splitter `setStretchFactor(1,1)` + `setSizes([400,400])`。
+- **B6 槽位按鈕垂直置中、▼ 常駐**：`.slot-control` 改 `top:50%; transform: translate(-50%,-50%)`；`.slot-control.filled .btn-swap` 無 hover 也顯示，`.btn-clear` 維持 hover 才出現。
+- **B7 名牌貼合文字 + 半透明名色**：`#name-plate` 改 `display:inline-block`，CSS 內建 fallback `rgba(70,130,180,0.6)`；engine.js 新增 `hexToRgba(hex, alpha)` helper，`showDialogue` 動態塞 `rgba(name_color, 0.6)` 到 `background`。
+
+### 驗證
+- `QT_QPA_PLATFORM=offscreen python -m pytest tests/` → 106 passed。
+- 目視需確認：
+  - 切換深 / 淺主題後預覽跟著變（B4）。
+  - 長短角色名字的名牌寬度貼合（B7）。
+  - 舞台上有 / 無角色皆能看到槽位控件（B6）。
+
+### 已完成（計畫書以為要做但實際已在的項目）
+- B1 工具列「設定」項已不存在。
+- B2 快捷鍵已改用 `setShortcut()` 與 action text 分離。
+- B3 預覽上方即時控件（字體 / 名牌 / 透明度）已存在，MainWindow `_on_game_setting_changed` 即時同步 `game_settings` 並 `reload_preview`。
+
+### 給 CODEX 的備忘
+- B4 僅作用於 Preview 模式（`<body class="preview-light/dark">`）；MP4 匯出時 `webengine_capture.py` 走獨立路徑、`<body>` 不帶此 class → 截幀不會被淺色覆蓋（這是刻意行為）。
+- B7 `hexToRgba` 對非合法 hex 回傳預設藍色半透明，避免非預期的角色色崩壞版面。
+
+---
+
 ## Phase F 紀錄（2026-04-18）
 
 ### 成果

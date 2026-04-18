@@ -282,15 +282,12 @@
       showUi();
     }
 
-    // 名稱牌
+    // 名稱牌（B7：半透明背景 + 寬度貼合文字）
     if (d.character) {
       els.namePlate.textContent = d.character;
       els.namePlate.style.visibility = "visible";
-      if (charInfo && charInfo.name_color) {
-        els.namePlate.style.background = charInfo.name_color;
-      } else {
-        els.namePlate.style.background = "rgba(70, 130, 180, 0.9)";
-      }
+      var hex = charInfo && charInfo.name_color ? charInfo.name_color : "#4682B4";
+      els.namePlate.style.background = hexToRgba(hex, 0.6);
     } else {
       els.namePlate.textContent = "";
       els.namePlate.style.visibility = "hidden";
@@ -425,6 +422,22 @@
 
   function isDataUri(str) {
     return str && str.indexOf("data:") === 0;
+  }
+
+  // 將 #RRGGBB / #RGB 轉 rgba(r, g, b, alpha)；非合法 hex 回傳預設藍色半透明
+  function hexToRgba(hex, alpha) {
+    if (typeof hex !== "string") return "rgba(70, 130, 180, " + alpha + ")";
+    var h = hex.trim().replace(/^#/, "");
+    if (h.length === 3) {
+      h = h.split("").map(function (c) { return c + c; }).join("");
+    }
+    if (!/^[0-9a-fA-F]{6}$/.test(h)) {
+      return "rgba(70, 130, 180, " + alpha + ")";
+    }
+    var r = parseInt(h.substring(0, 2), 16);
+    var g = parseInt(h.substring(2, 4), 16);
+    var b = parseInt(h.substring(4, 6), 16);
+    return "rgba(" + r + ", " + g + ", " + b + ", " + alpha + ")";
   }
 
   // ── 舞台 overlay（Preview 模式） ──
