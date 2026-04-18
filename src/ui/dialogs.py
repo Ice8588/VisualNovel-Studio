@@ -8,6 +8,7 @@ from pathlib import Path
 from PyQt6.QtCore import Qt, QSize, pyqtSignal
 from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtWidgets import (
+    QAbstractItemView,
     QCheckBox,
     QDialog,
     QDialogButtonBox,
@@ -22,6 +23,7 @@ from PyQt6.QtWidgets import (
     QListWidgetItem,
     QMessageBox,
     QPlainTextEdit,
+    QPushButton,
     QRadioButton,
     QSplitter,
     QTableWidget,
@@ -348,7 +350,7 @@ _PRESET_COLORS = [
 
 
 class CharacterEditorDialog(QDialog):
-    """新增或編輯角色：名稱、名牌顏色、預設立繪。"""
+    """新增或編輯角色：名稱、名牌顏色、預設立繪；支援拖曳圖片與角色卡匯入匯出。"""
 
     def __init__(
         self,
@@ -361,6 +363,10 @@ class CharacterEditorDialog(QDialog):
         self._project_dir = project_dir or Path(tempfile.gettempdir()) / "vnstudio_unsaved"
         self._selected_color = "#4682B4"
         self._sprite_filename: str | None = None
+        # C6：若透過角色卡匯入，除主立繪外還可能夾帶額外差分，存在這裡作為 get_character() 的 costumes 輸出
+        self._extra_costumes: list[Costume] = []
+        self._loaded_from_card: bool = False
+        self.setAcceptDrops(True)
         self.setWindowTitle("編輯角色" if character else "新增角色")
         self.setMinimumWidth(420)
         self._setup_ui()
@@ -428,6 +434,17 @@ class CharacterEditorDialog(QDialog):
         sprite_group.setLayout(sprite_layout)
         layout.addWidget(sprite_group)
 
+        # C6 角色卡按鈕列
+        card_row = QHBoxLayout()
+        self.btn_import_card = PushButton("從角色卡匯入…")
+        self.btn_import_card.clicked.connect(self._on_import_card)
+        self.btn_export_card = PushButton("儲存為角色卡…")
+        self.btn_export_card.clicked.connect(self._on_export_card)
+        card_row.addWidget(self.btn_import_card)
+        card_row.addWidget(self.btn_export_card)
+        card_row.addStretch()
+        layout.addLayout(card_row)
+
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
@@ -492,6 +509,109 @@ class CharacterEditorDialog(QDialog):
         self._lbl_sprite_name.setText("（無）")
         self._sprite_preview.clear()
         self._sprite_preview.setText("尚未選擇圖片")
+        self._extra_costumes = []
+        self._loaded_from_card = False
+
+    # ── C2：拖曳圖片到對話框任何位置即匯入為立繪 ──
+
+    def dragEnterEvent(self, event) -> None:
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event) -> None:
+        from src.core.asset_manager import import_asset
+        for url in event.mimeData().urls():
+            if not url.isLocalFile():
+                continue
+            p = Path(url.toLocalFile())
+            if p.suffix.lower() not in (".png", ".jpg", ".jpeg"):
+                continue
+            try:
+                filename = import_asset(p, "sprites", self._project_dir)
+            except (ValueError, FileNotFoundError, OSError) as e:
+                QMessageBox.warning(self, "匯入失敗", str(e))
+                continue
+            self._sprite_filename = filename
+            self._lbl_sprite_name.setText(p.stem)
+            pm = QPixmap(str(p)).scaled(
+                116, 136, Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            self._sprite_preview.setPixmap(pm)
+            break  # 多檔拖入時只接受第一張（單一預設立繪）
+        event.acceptProposedAction()
+
+    # ── C6：角色卡匯入 / 匯出 ──
+
+    def _on_import_card(self) -> None:
+        from src.core.character_library import list_cards, load_card, get_library_dir
+
+        lib_dir = get_library_dir()
+        cards = list_cards(lib_dir)
+        if not cards:
+            QMessageBox.information(
+                self, "沒有角色卡",
+                f"資料庫為空：{lib_dir}\n\n可先在另一個專案『儲存為角色卡…』後匯入。",
+            )
+            return
+
+        # 允許選目錄外的卡
+        path, _ = QFileDialog.getOpenFileName(
+            self, "選擇角色卡",
+            str(lib_dir),
+            "角色卡 (*.vncard);;所有檔案 (*)",
+        )
+        if not path:
+            return
+
+        try:
+            char, _written = load_card(Path(path), self._project_dir / "assets")
+        except (FileNotFoundError, ValueError) as e:
+            QMessageBox.warning(self, "匯入失敗", str(e))
+            return
+
+        # 覆蓋目前編輯值
+        self.edit_name.setText(char.name)
+        self._apply_color(char.name_color)
+        if char.costumes and char.costumes[0].expressions:
+            first = char.costumes[0].expressions[0]
+            self._sprite_filename = first.filename
+            self._lbl_sprite_name.setText(first.label)
+            full = self._project_dir / "assets" / first.filename
+            if full.exists():
+                pm = QPixmap(str(full)).scaled(
+                    116, 136, Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+                self._sprite_preview.setPixmap(pm)
+        # 保留所有服裝（含差分）供 get_character 使用
+        self._extra_costumes = list(char.costumes)
+        self._loaded_from_card = True
+
+    def _on_export_card(self) -> None:
+        from src.core.character_library import save_card
+
+        # 必須先有名稱與立繪
+        name = self.edit_name.text().strip()
+        if not name:
+            QMessageBox.warning(self, "缺少名稱", "請先輸入角色名稱才能匯出角色卡。")
+            return
+        if not self._sprite_filename and not self._extra_costumes:
+            QMessageBox.warning(self, "缺少立繪", "請先匯入至少一張立繪才能匯出角色卡。")
+            return
+
+        # 編輯中的角色（未 accept）先組一個臨時 Character 出去
+        char = self.get_character()
+        assets_dir = self._project_dir / "assets"
+        try:
+            path = save_card(char, assets_dir)
+        except (OSError, ValueError) as e:
+            QMessageBox.warning(self, "儲存失敗", str(e))
+            return
+        QMessageBox.information(
+            self, "角色卡已儲存",
+            f"角色卡已寫入：\n{path}\n\n日後可在其他專案透過『從角色卡匯入』復用。",
+        )
 
     def _validate_and_accept(self) -> None:
         name = self.edit_name.text().strip()
@@ -503,6 +623,9 @@ class CharacterEditorDialog(QDialog):
     def get_character(self) -> Character:
         name = self.edit_name.text().strip()
         color = self._selected_color or "#4682B4"
+        # 若透過角色卡匯入、且未手動覆寫立繪 → 保留卡內所有服裝
+        if self._loaded_from_card and self._extra_costumes:
+            return Character(name=name, name_color=color, costumes=list(self._extra_costumes))
         sprites = []
         if self._sprite_filename:
             label = self._lbl_sprite_name.text() or "預設"
@@ -511,7 +634,6 @@ class CharacterEditorDialog(QDialog):
         return Character(
             name=name,
             name_color=color,
-            position="center",
             costumes=[default_costume] if sprites else [],
         )
 
@@ -557,15 +679,20 @@ class CostumeEditorDialog(QDialog):
         left_widget.setLayout(left_layout)
         splitter.addWidget(left_widget)
 
-        # 右側：立繪差分列表（接受拖曳）
+        # 右側：立繪差分列表（接受拖曳；C3 雙擊可改 label）
         right_widget = _DroppableExprWidget(self)
         right_widget.files_dropped.connect(self._on_files_dropped)
         right_layout = QVBoxLayout()
         right_layout.setContentsMargins(4, 0, 0, 0)
-        right_layout.addWidget(QLabel("立繪差分（可拖曳圖片匯入）:"))
+        right_layout.addWidget(QLabel("立繪差分（可拖曳圖片匯入；雙擊標籤可改名）:"))
         self._expr_list = QListWidget()
         self._expr_list.setIconSize(QSize(48, 48))
         self._expr_list.setMinimumWidth(200)
+        self._expr_list.setEditTriggers(
+            QAbstractItemView.EditTrigger.DoubleClicked
+            | QAbstractItemView.EditTrigger.EditKeyPressed
+        )
+        self._expr_list.itemChanged.connect(self._on_expr_label_changed)
         right_layout.addWidget(self._expr_list)
         expr_btns = QHBoxLayout()
         btn_add_expr = PushButton("新增差分")
@@ -601,10 +728,13 @@ class CostumeEditorDialog(QDialog):
             self._expr_list.clear()
 
     def _on_costume_selected(self, row: int) -> None:
+        self._expr_list.blockSignals(True)
         self._expr_list.clear()
         if 0 <= row < len(self._costumes):
             for sv in self._costumes[row].expressions:
                 item = QListWidgetItem(sv.label)
+                # C3：標記此 item 可編輯（雙擊即進入 label 編輯）
+                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
                 item.setData(Qt.ItemDataRole.UserRole, sv.filename)
                 if sv.filename:
                     path = self._project_dir / "assets" / sv.filename
@@ -616,6 +746,25 @@ class CostumeEditorDialog(QDialog):
                         )
                         item.setIcon(QIcon(pm))
                 self._expr_list.addItem(item)
+        self._expr_list.blockSignals(False)
+
+    def _on_expr_label_changed(self, item: QListWidgetItem) -> None:
+        """C3：雙擊結束後把新 label 寫回 SpriteVariant。"""
+        cos_row = self._costume_list.currentRow()
+        expr_row = self._expr_list.row(item)
+        if not (0 <= cos_row < len(self._costumes)):
+            return
+        expressions = self._costumes[cos_row].expressions
+        if not (0 <= expr_row < len(expressions)):
+            return
+        new_label = item.text().strip()
+        if not new_label:
+            # 空字串還原
+            self._expr_list.blockSignals(True)
+            item.setText(expressions[expr_row].label)
+            self._expr_list.blockSignals(False)
+            return
+        expressions[expr_row].label = new_label
 
     def _on_add_costume(self) -> None:
         default_name = f"服裝{len(self._costumes) + 1}"
