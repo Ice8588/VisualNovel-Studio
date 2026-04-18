@@ -160,13 +160,13 @@
   function applyGameSettings() {
     if (!scriptData || !scriptData.game_settings) return;
     var gs = scriptData.game_settings;
-    // E2：字體大小夾至 [14, 32]，避免使用者匯入舊檔帶入異常值
+    // 字體大小夾至 [14, 28]，避免使用者匯入舊檔帶入異常值
     if (gs.dialogue_font_size && els.dialogueText) {
-      var dlgSize = Math.max(14, Math.min(32, gs.dialogue_font_size));
+      var dlgSize = Math.max(14, Math.min(28, gs.dialogue_font_size));
       els.dialogueText.style.fontSize = dlgSize + "px";
     }
     if (gs.name_font_size && els.namePlate) {
-      var nameSize = Math.max(14, Math.min(32, gs.name_font_size));
+      var nameSize = Math.max(14, Math.min(28, gs.name_font_size));
       els.namePlate.style.fontSize = nameSize + "px";
     }
     if (gs.dialogue_box_opacity != null && els.dialogueBox) {

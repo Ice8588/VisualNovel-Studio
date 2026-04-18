@@ -110,7 +110,7 @@ class MainWindow(QMainWindow):
         self._act_light.triggered.connect(lambda: self._apply_theme_immediate("light"))
 
         font_menu = view_menu.addMenu("UI 字體大小")
-        for size in [14, 16, 18, 20, 22, 24, 26, 28, 30, 32]:
+        for size in [14, 16, 18, 20, 22, 24, 26, 28]:
             act = font_menu.addAction(f"{size}px")
             act.setCheckable(True)
             act.setChecked(size == self._font_size)

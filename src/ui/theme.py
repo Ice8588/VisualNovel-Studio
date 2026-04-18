@@ -20,6 +20,11 @@ QMenuBar {{
     color: #ddd;
     border-bottom: 1px solid #3c3c3c;
     font-size: {font_size}px;
+    padding: 2px 4px;
+}}
+QMenuBar::item {{
+    padding: 6px 14px;
+    background: transparent;
 }}
 QMenuBar::item:selected {{
     background-color: #4682B4;
@@ -29,6 +34,10 @@ QMenu {{
     background-color: #2b2b2b;
     color: #ddd;
     border: 1px solid #3c3c3c;
+    padding: 4px;
+}}
+QMenu::item {{
+    padding: 6px 22px 6px 18px;
 }}
 QMenu::item:selected {{
     background-color: #4682B4;
@@ -43,7 +52,7 @@ QPushButton {{
     background-color: #3c3c3c;
     color: #ddd;
     border: 1px solid #555;
-    padding: 5px 12px;
+    padding: 7px 16px;
     border-radius: 3px;
     font-size: {font_size}px;
 }}
@@ -63,7 +72,7 @@ QComboBox {{
     background-color: #3c3c3c;
     color: #ddd;
     border: 1px solid #555;
-    padding: 4px 8px;
+    padding: 6px 28px 6px 12px;
     border-radius: 3px;
     font-size: {font_size}px;
 }}
@@ -75,16 +84,21 @@ QComboBox QAbstractItemView {{
     color: #ddd;
     selection-background-color: #4682B4;
     border: 1px solid #555;
+    padding: 4px;
+}}
+QComboBox QAbstractItemView::item {{
+    padding: 6px 10px;
+    min-height: 20px;
 }}
 QComboBox::drop-down {{
     border: none;
-    width: 20px;
+    width: 22px;
 }}
 QLineEdit {{
     background-color: #1e1e1e;
     color: #ddd;
     border: 1px solid #3c3c3c;
-    padding: 4px;
+    padding: 7px 10px;
     border-radius: 3px;
     selection-background-color: #4682B4;
     font-size: {font_size}px;
@@ -135,7 +149,7 @@ QHeaderView::section {{
     background-color: #2b2b2b;
     color: #ddd;
     border: 1px solid #3c3c3c;
-    padding: 4px;
+    padding: 6px 10px;
     font-size: {font_size}px;
 }}
 QScrollBar:vertical {{
@@ -170,20 +184,26 @@ QSpinBox, QDoubleSpinBox {{
     background-color: #1e1e1e;
     color: #ddd;
     border: 1px solid #3c3c3c;
-    padding: 3px;
+    padding: 6px 24px 6px 10px;
     border-radius: 3px;
     font-size: {font_size}px;
+    min-height: 22px;
+}}
+QSpinBox::up-button, QDoubleSpinBox::up-button,
+QSpinBox::down-button, QDoubleSpinBox::down-button {{
+    width: 18px;
+    border: none;
 }}
 QCheckBox, QRadioButton {{
     color: #ddd;
-    spacing: 6px;
+    spacing: 8px;
     font-size: {font_size}px;
 }}
 QPlainTextEdit, QTextEdit {{
     background-color: #1e1e1e;
     color: #ddd;
     border: 1px solid #3c3c3c;
-    padding: 4px;
+    padding: 8px 10px;
     border-radius: 3px;
     selection-background-color: #4682B4;
     font-size: {font_size}px;
@@ -205,7 +225,7 @@ QProgressDialog {{
 QComboBox#tableCombo {{
     background: transparent;
     border: none;
-    padding: 1px 4px;
+    padding: 4px 8px;
     color: #ddd;
 }}
 QComboBox#tableCombo:hover, QComboBox#tableCombo:focus {{
@@ -260,6 +280,11 @@ QMenuBar {{
     color: #333;
     border-bottom: 1px solid #ccc;
     font-size: {font_size}px;
+    padding: 2px 4px;
+}}
+QMenuBar::item {{
+    padding: 6px 14px;
+    background: transparent;
 }}
 QMenuBar::item:selected {{
     background-color: #4682B4;
@@ -269,6 +294,10 @@ QMenu {{
     background-color: #fff;
     color: #333;
     border: 1px solid #ccc;
+    padding: 4px;
+}}
+QMenu::item {{
+    padding: 6px 22px 6px 18px;
 }}
 QMenu::item:selected {{
     background-color: #4682B4;
@@ -284,7 +313,7 @@ QPushButton {{
     background-color: #e8e8e8;
     color: #333;
     border: 1px solid #bbb;
-    padding: 5px 12px;
+    padding: 7px 16px;
     border-radius: 3px;
     font-size: {font_size}px;
 }}
@@ -305,7 +334,7 @@ QComboBox {{
     background-color: #fff;
     color: #333;
     border: 1px solid #bbb;
-    padding: 4px 8px;
+    padding: 6px 28px 6px 12px;
     border-radius: 3px;
     font-size: {font_size}px;
 }}
@@ -318,16 +347,21 @@ QComboBox QAbstractItemView {{
     selection-background-color: #4682B4;
     selection-color: #fff;
     border: 1px solid #ccc;
+    padding: 4px;
+}}
+QComboBox QAbstractItemView::item {{
+    padding: 6px 10px;
+    min-height: 20px;
 }}
 QComboBox::drop-down {{
     border: none;
-    width: 20px;
+    width: 22px;
 }}
 QLineEdit {{
     background-color: #fff;
     color: #333;
     border: 1px solid #ccc;
-    padding: 4px;
+    padding: 7px 10px;
     border-radius: 3px;
     selection-background-color: #4682B4;
     selection-color: #fff;
@@ -379,7 +413,7 @@ QHeaderView::section {{
     background-color: #f0f0f0;
     color: #333;
     border: 1px solid #ccc;
-    padding: 4px;
+    padding: 6px 10px;
     font-size: {font_size}px;
 }}
 QScrollBar:vertical {{
@@ -414,20 +448,26 @@ QSpinBox, QDoubleSpinBox {{
     background-color: #fff;
     color: #333;
     border: 1px solid #ccc;
-    padding: 3px;
+    padding: 6px 24px 6px 10px;
     border-radius: 3px;
     font-size: {font_size}px;
+    min-height: 22px;
+}}
+QSpinBox::up-button, QDoubleSpinBox::up-button,
+QSpinBox::down-button, QDoubleSpinBox::down-button {{
+    width: 18px;
+    border: none;
 }}
 QCheckBox, QRadioButton {{
     color: #333;
-    spacing: 6px;
+    spacing: 8px;
     font-size: {font_size}px;
 }}
 QPlainTextEdit, QTextEdit {{
     background-color: #fff;
     color: #333;
     border: 1px solid #ccc;
-    padding: 4px;
+    padding: 8px 10px;
     border-radius: 3px;
     selection-background-color: #4682B4;
     selection-color: #fff;
@@ -450,7 +490,7 @@ QProgressDialog {{
 QComboBox#tableCombo {{
     background: transparent;
     border: none;
-    padding: 1px 4px;
+    padding: 4px 8px;
     color: #333;
 }}
 QComboBox#tableCombo:hover, QComboBox#tableCombo:focus {{
@@ -523,8 +563,13 @@ def save_preference(theme_name: str, font_size: int) -> None:
 
 
 def load_preference() -> tuple[str, int]:
-    """從 QSettings 讀取主題偏好，預設深色 14px。"""
+    """從 QSettings 讀取主題偏好，預設深色 18px；上限夾至 28。"""
     settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
     theme = settings.value("theme", "dark")
-    font_size = int(settings.value("font_size", 18))
+    try:
+        font_size = int(settings.value("font_size", 18))
+    except (TypeError, ValueError):
+        font_size = 18
+    # UI 字體上限 28px（避免元件裁切）；低於 14 也視為不合理，夾回 14
+    font_size = max(14, min(28, font_size))
     return theme, font_size
