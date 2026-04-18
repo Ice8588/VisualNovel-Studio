@@ -42,7 +42,7 @@ EFFECT_DISPLAY_INV = {v: k for k, v in EFFECT_DISPLAY.items()}
 
 
 class _MultilineDelegate(QStyledItemDelegate):
-    """台詞欄 delegate：用 QPlainTextEdit 允許 Enter 換行。"""
+    """文字欄 delegate：用 QPlainTextEdit 允許 Enter 換行。"""
 
     def createEditor(self, parent, option, index):
         editor = QPlainTextEdit(parent)
@@ -260,11 +260,11 @@ class CenterPanel(QWidget):
         self._batch_toolbar.batch_delete.connect(self._on_batch_delete_selected)
         dialogue_layout.addWidget(self._batch_toolbar)
 
-        # 對話表格：7 欄（#、台詞、角色、服裝、表情、效果、舞台）
+        # 對話表格：7 欄（#、文字、角色、服裝、差分、效果、舞台）
         self.dialogue_table = _DraggableTable()
         self.dialogue_table.setColumnCount(7)
         self.dialogue_table.setHorizontalHeaderLabels(
-            ["#", "台詞", "角色", "服裝", "差分", "效果", "舞台"]
+            ["#", "文字", "角色", "服裝", "差分", "效果", "舞台"]
         )
         header = self.dialogue_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
@@ -291,7 +291,7 @@ class CenterPanel(QWidget):
         self.dialogue_table.setItemDelegateForColumn(0, self._index_delegate)
         self._hover_filter = _HoverFilter(self.dialogue_table, self._index_delegate)
 
-        # 台詞欄 multiline delegate
+        # 文字欄 multiline delegate
         self._multiline_delegate = _MultilineDelegate()
         self.dialogue_table.setItemDelegateForColumn(1, self._multiline_delegate)
 
@@ -453,7 +453,7 @@ class CenterPanel(QWidget):
     # ── 對話表格 ──
 
     def _refresh_dialogue_table(self) -> None:
-        """重建對話表格。6 欄：#、台詞、角色、服裝、表情、效果。"""
+        """重建對話表格。7 欄：#、文字、角色、服裝、差分、效果、舞台。"""
         self._updating = True
         self.dialogue_table.clearSpans()
         self.dialogue_table.setRowCount(0)
@@ -471,7 +471,7 @@ class CenterPanel(QWidget):
             idx_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self.dialogue_table.setItem(row, 0, idx_item)
 
-            # 欄 1：台詞（可編輯，multiline delegate）
+            # 欄 1：文字（可編輯，multiline delegate）
             self.dialogue_table.setItem(row, 1, QTableWidgetItem(dlg.text))
 
             # 欄 2：角色 ComboBox（所有行都有）
@@ -580,7 +580,7 @@ class CenterPanel(QWidget):
         item = self.dialogue_table.item(row, column)
         value = item.text() if item else ""
 
-        if column == 1:  # 台詞欄
+        if column == 1:  # 文字欄
             dlg.text = value
             self.project_changed.emit()
 

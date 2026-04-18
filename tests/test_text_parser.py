@@ -84,6 +84,17 @@ class TestClassifyLines:
         result = _classify_lines(lines)
         assert len(result) == 1
 
+    def test_parsed_dialogue_has_no_assigned_character(self):
+        """解析出的 dialogue 行 character 應為 None（UI 顯示為「(未選取)」）。"""
+        lines = ["「我決定了。」", "他笑了。", "「你呢？」"]
+        result = _classify_lines(lines)
+        assert result[0].type == "dialogue"
+        assert result[0].character is None
+        assert result[1].type == "narration"
+        assert result[1].character is None
+        assert result[2].type == "dialogue"
+        assert result[2].character is None
+
 
 class TestParseFile:
     def test_parse_basic_txt(self):

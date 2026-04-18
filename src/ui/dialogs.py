@@ -517,7 +517,7 @@ class CharacterEditorDialog(QDialog):
 
 
 class CostumeEditorDialog(QDialog):
-    """服裝/表情分層編輯器：左側服裝列表，右側表情差分，支援拖曳匯入圖片。"""
+    """服裝/差分分層編輯器：左側服裝列表，右側立繪差分，支援拖曳匯入圖片。"""
 
     def __init__(
         self,
@@ -557,19 +557,19 @@ class CostumeEditorDialog(QDialog):
         left_widget.setLayout(left_layout)
         splitter.addWidget(left_widget)
 
-        # 右側：表情差分列表（接受拖曳）
+        # 右側：立繪差分列表（接受拖曳）
         right_widget = _DroppableExprWidget(self)
         right_widget.files_dropped.connect(self._on_files_dropped)
         right_layout = QVBoxLayout()
         right_layout.setContentsMargins(4, 0, 0, 0)
-        right_layout.addWidget(QLabel("表情差分（可拖曳圖片匯入）:"))
+        right_layout.addWidget(QLabel("立繪差分（可拖曳圖片匯入）:"))
         self._expr_list = QListWidget()
         self._expr_list.setIconSize(QSize(48, 48))
         self._expr_list.setMinimumWidth(200)
         right_layout.addWidget(self._expr_list)
         expr_btns = QHBoxLayout()
-        btn_add_expr = PushButton("新增表情")
-        btn_rem_expr = PushButton("移除表情")
+        btn_add_expr = PushButton("新增差分")
+        btn_rem_expr = PushButton("移除差分")
         btn_add_expr.clicked.connect(self._on_add_expression)
         btn_rem_expr.clicked.connect(self._on_remove_expression)
         expr_btns.addWidget(btn_add_expr)
@@ -636,7 +636,7 @@ class CostumeEditorDialog(QDialog):
         if cos_row < 0 or cos_row >= len(self._costumes):
             return
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "選擇表情圖片", "", "圖片 (*.png *.jpg *.jpeg)"
+            self, "選擇差分圖片", "", "圖片 (*.png *.jpg *.jpeg)"
         )
         if not file_path:
             return
@@ -669,7 +669,7 @@ class CostumeEditorDialog(QDialog):
             QMessageBox.warning(self, "匯入失敗", str(e))
             return
         label, ok = QInputDialog.getText(
-            self, "表情標籤", "標籤名稱:", text=file_path.stem
+            self, "差分標籤", "標籤名稱:", text=file_path.stem
         )
         if not ok or not label.strip():
             return
@@ -864,7 +864,7 @@ class GameSettingsDialog(QDialog):
 
 
 class StageSlotPickerDialog(QDialog):
-    """為單一舞台槽位（left/center/right）選取角色 + 服裝 + 表情。"""
+    """為單一舞台槽位（left/center/right）選取角色 + 服裝 + 差分。"""
 
     def __init__(
         self,
@@ -892,9 +892,9 @@ class StageSlotPickerDialog(QDialog):
         self._combo_costume = ComboBox()
         form.addRow("服裝:", self._combo_costume)
 
-        # 表情
+        # 差分
         self._combo_sprite = ComboBox()
-        form.addRow("表情:", self._combo_sprite)
+        form.addRow("差分:", self._combo_sprite)
 
         layout.addLayout(form)
 

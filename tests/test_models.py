@@ -101,11 +101,13 @@ class TestProject:
         assert p.project_path is None
 
     def test_project_path_serialization(self):
-        p = Project(project_path=Path("D:/test/my_project.vnsproj"))
+        path = Path("D:/test/my_project.vnsproj")
+        p = Project(project_path=path)
         data = p.to_dict()
-        assert data["project_path"] == "D:\\test\\my_project.vnsproj"
+        # 序列化的字串應等於該平台下 str(path)（Windows 為反斜線、POSIX 為斜線）
+        assert data["project_path"] == str(path)
         restored = Project.from_dict(data)
-        assert restored.project_path == Path("D:/test/my_project.vnsproj")
+        assert restored.project_path == path
 
     def test_project_path_none(self):
         p = Project()

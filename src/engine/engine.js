@@ -1,7 +1,7 @@
 /**
  * VisualNovel Studio — 播放引擎
  * Vanilla JS 狀態機：載入 script data → 點擊推進 → 自動播放 → 歷史紀錄
- * 支援角色顏色/位置/表情差分、Markdown 粗斜體、視覺特效
+ * 支援角色顏色/位置/立繪差分、Markdown 粗斜體、視覺特效
  * 鍵盤操控符合視覺小說業界標準
  */
 (function () {
