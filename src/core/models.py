@@ -179,9 +179,9 @@ class GameSettings:
 
     @classmethod
     def from_dict(cls, data: dict) -> GameSettings:
-        # E2：字體大小夾至 [14, 32]；不合法舊檔自動修正
-        dlg = max(14, min(32, int(data.get("dialogue_font_size", 18))))
-        name = max(14, min(32, int(data.get("name_font_size", 16))))
+        # 字體大小夾至 [14, 28]；不合法舊檔自動修正
+        dlg = max(14, min(28, int(data.get("dialogue_font_size", 18))))
+        name = max(14, min(28, int(data.get("name_font_size", 16))))
         return cls(
             dialogue_font_size=dlg,
             name_font_size=name,

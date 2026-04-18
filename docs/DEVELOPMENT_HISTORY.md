@@ -63,6 +63,48 @@
 
 ---
 
+## Hotfix 紀錄（2026-04-19）
+
+### 預覽工具列裁切 + 所有文字框留白
+- **症狀**：
+  - 預覽工具列 `重新整理` 按鈕與 SpinBox 在 UI 字體放大後被裁切為「更斯登中」「1·」「0·」。
+  - UI 字體大小變更後工具列沒有跟著放大（fixed* 硬編尺寸蓋過）。
+  - 使用者要求所有字體上限改 28px（30/32 不需要）、所有文字框要有足夠留白。
+- **修正**：
+  - 工具列：移除 `setFixedWidth` / `setFixedHeight`，改 `setMinimumWidth(110 / 110 / 100)` + `layout.setSpacing(10)`，控件依 sizeHint 自動伸縮。
+  - 字體上限 32 → 28 統一於：
+    - `main_window.py` UI 字體選單（`[14,16,18,20,22,24,26,28]`）
+    - `theme.py::load_preference` 讀取後夾 [14, 28]
+    - `models.py::GameSettings.from_dict` 夾 [14, 28]
+    - `engine.js::applyGameSettings` 夾 [14, 28]
+    - `center_panel.py` 對話/名稱字體 SpinBox range `setRange(14, 28)`
+    - `tests/test_models.py::test_from_dict_clamps_out_of_range` 期望值同步
+  - QSS 留白擴充（`theme.py` 深 / 淺兩套）：
+    - `QPushButton`: `5px 12px` → `7px 16px`
+    - `QComboBox`: `4px 8px` → `6px 28px 6px 12px`（右側留給 dropdown 箭頭）
+    - `QComboBox QAbstractItemView::item`: 新增 `padding 6px 10px; min-height 20px`
+    - `QLineEdit`: `4px` → `7px 10px`
+    - `QSpinBox / QDoubleSpinBox`: `3px` → `6px 24px 6px 10px` + `min-height 22px` + 明確 `up-button / down-button width 18px`
+    - `QPlainTextEdit / QTextEdit`: `4px` → `8px 10px`
+    - `QMenuBar::item` 新增 `padding 6px 14px`、`QMenu::item` `padding 6px 22px 6px 18px`
+    - `QHeaderView::section`: `4px` → `6px 10px`
+    - `QComboBox#tableCombo`（表格內嵌）: `1px 4px` → `4px 8px`
+  - 對話表格列高：40 → 56（內嵌 ComboBox padding 變大需要更高列高才不擠壓）。
+
+### 驗證
+- `QT_QPA_PLATFORM=offscreen python -m pytest tests/` → 120 passed。
+- Headless smoke（28px）sizeHint 量測：
+  - `btn_refresh` 138×54 ✓
+  - `spin_dlg_font` 163×59（min 110×36）✓
+  - `spin_opacity` 146×59 ✓
+- Headless smoke（18px）：btn 98×40、spin 128×45。皆不再裁切。
+
+### 給 CODEX 的備忘
+- 若使用者之前已存 font_size > 28 的偏好，`load_preference` 已自動夾回 28，不需手動清除 QSettings。
+- 對話表格列高變大後，若使用者覺得條目間距過大，可調整 `setDefaultSectionSize(56)` 或改用 `resizeRowsToContents()` 依實際內容高度。
+
+---
+
 ## Hotfix 紀錄（2026-04-18）
 
 ### 字框 auto-width 逐字展開修正

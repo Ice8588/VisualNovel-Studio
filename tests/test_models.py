@@ -170,10 +170,10 @@ class TestGameSettings:
         assert gs.name_font_size == 16
 
     def test_from_dict_clamps_out_of_range(self):
-        """E2：字體大小超出 [14,32] 時自動夾住。"""
+        """字體大小超出 [14,28] 時自動夾住。"""
         gs = GameSettings.from_dict({"dialogue_font_size": 10, "name_font_size": 48})
         assert gs.dialogue_font_size == 14
-        assert gs.name_font_size == 32
+        assert gs.name_font_size == 28
 
     def test_from_dict_keeps_in_range(self):
         gs = GameSettings.from_dict({"dialogue_font_size": 20, "name_font_size": 18})
