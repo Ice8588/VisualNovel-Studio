@@ -44,6 +44,12 @@ python -m PyInstaller vnstudio.spec --noconfirm
 
 新功能一律開新分支（`feature/xxx`），跑 `pytest tests/` 全過後才合併到 `main`。
 
+Headless 環境（CI / 無顯示）：`QT_QPA_PLATFORM=offscreen python -m pytest tests/`。
+
+## 開發歷程
+
+跨 Phase 的架構決策（ADR）、踩過的雷、給接手者的備忘，集中記錄於 [`docs/DEVELOPMENT_HISTORY.md`](docs/DEVELOPMENT_HISTORY.md)。新功能若涉及跨端同步或破壞性變更，結束前把摘要追加該文件。
+
 ---
 
 ## 架構概覽
@@ -96,7 +102,9 @@ Project
 
 **Stage 槽位（`Dialogue.stage`）：** 三個固定槽位 `{"left", "center", "right"}`，各自為 `None` 或 `{"character": str, "sprite": str|None, "costume": str|None}`。說話者（`Dialogue.character`）只決定名牌；畫面上顯示哪些立繪由 `stage` 決定。無 `stage` 的舊檔自動退回 legacy 單立繪（向下相容）。
 
-**`Character.position`：** legacy 欄位，新路徑（有 stage）不使用，但為向下相容請保留。
+**`Character.position`：** legacy 欄位，新路徑不用。`to_dict()` 不再寫出此欄位；`from_dict()` 仍讀以相容舊檔；`to_script_json()` 仍輸出供 engine legacy 路徑使用（新檔 default `"center"`）。
+
+**`Dialogue.effects`：** 文字效果 key list（見 `src/core/effects.py`）。可多選，例如 `["bold", "shake"]`。engine.js 端依陣列為 `#dialogue-text` 加 `fx-{key}` class。
 
 ---
 
@@ -120,6 +128,14 @@ def _calc_duration(text):
 ```
 
 修改任一端時**必須同步更新另一端**。同理適用於：特效名稱（rain/snow/crt/pixel_dark）、Markdown 渲染規則。
+
+### 文字效果 key 集合（Python ↔ JS）
+
+`src/core/effects.py::TEXT_EFFECTS` 與 `src/engine/engine.js::TEXT_EFFECTS` 必須字面對齊；`tests/test_effects_sync.py` 會自動守護。新增效果時同步改三處 + `style.css` 加 `#dialogue-text.fx-{key}` 規則。
+
+### 角色卡（.vncard）
+
+`src/core/character_library.py` 打包 `Character` + 立繪為 zip（`character.json` + `assets/`），預設存於 `~/.vnstudio/character_cards/`。匯入時立繪檔名衝突會自動 rename 並同步 `SpriteVariant.filename`。
 
 ---
 
