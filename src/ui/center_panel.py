@@ -372,8 +372,10 @@ class CenterPanel(QWidget):
 
         splitter.addWidget(preview_container)
         splitter.addWidget(dialogue_widget)
-        splitter.setStretchFactor(0, 2)
-        splitter.setStretchFactor(1, 3)
+        # B5：預覽與文字列表初始 50/50（SizeHint 產生前 setStretchFactor 已生效）
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 1)
+        splitter.setSizes([400, 400])
 
         layout.addWidget(splitter)
         self.setLayout(layout)

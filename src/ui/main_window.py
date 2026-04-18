@@ -67,6 +67,8 @@ class MainWindow(QMainWindow):
 
         self.left_panel.set_project(self._project)
         self.center_panel.set_project(self._project)
+        # B4：啟動時套用目前主題到預覽（後續 reload_preview 會以此注入 body class）
+        self.center_panel.preview.set_theme(self._theme_name)
 
     def _setup_menu(self) -> None:
         menu_bar = QMenuBar()
@@ -285,6 +287,8 @@ class MainWindow(QMainWindow):
         app = QApplication.instance()
         apply_theme(app, self._theme_name, self._font_size)
         save_preference(self._theme_name, self._font_size)
+        # B4：同步預覽主題並觸發重載
+        self.center_panel.preview.set_theme(self._theme_name)
 
     def _apply_font_size_immediate(self, size: int) -> None:
         self._font_size = size
