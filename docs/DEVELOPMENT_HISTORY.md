@@ -63,6 +63,35 @@
 
 ---
 
+## Hotfix 紀錄（2026-04-19 b）
+
+### 匯入按鈕裁切 + 字框仍不動態
+- **症狀**：
+  - 左側 Inspector 的「匯入」按鈕（背景/BGM 列）在 28px 字體下被裁切成「匯)」。原因：`setFixedWidth(50)` 鎖死寬度，字體放大後容不下「匯入」二字。
+  - 字框 `width: fit-content` 在 QtWebEngine typewriter innerHTML 逐字更新時不會逐步重新 layout（WebEngine 的 reflow cache），使用者看到字框大小、位置永遠相同。
+- **修正**：
+  - 左側 Inspector「匯入」按鈕：移除 `setFixedWidth(50)`（背景 / BGM 兩處），讓 sizeHint 決定寬度。
+  - 搜尋箭頭按鈕（`btn_search_prev/next`）：`setFixedWidth(30)` → `setMinimumWidth(40)`。
+  - 舞台槽按鈕（`_StageCellWidget`）：移除 `setFixedHeight(24)`。
+  - **字框動態寬度改由 JS 顯式量測**：
+    - `style.css` 拿掉 `#dialogue-box` 的 `width: fit-content / min-width / max-content` 規則，改由 JS 控制。
+    - `engine.js` 新增 `sizeDialogueBox()`：建立隱藏 `<span>` 複製 `#dialogue-text` 字型，設 `white-space: nowrap` 量測文字「若不換行」的真實像素寬，加 padding 44，夾在 [80, container-48]，寫回 `#dialogue-box.style.width`。
+    - 呼叫點：`typeText` 每次 innerHTML 更新、`skipTypewriter`、`showDialogue` 的 Capture/Skip 分支、`applyGameSettings` 變更字體後、`window.resize`。
+    - CSS 新增 `transition: width 0.08s ease-out;` 讓寬度變化平滑（不會閃爍）。
+- **驗證**：
+  - `pytest tests/` → 120 passed。
+  - 目視煙測（使用者端）：
+    1. 短台詞「好。」→ 字框約 120-160px（貼合文字 + min 80 floor）。
+    2. 中台詞「這真的是我想做的事嗎？」→ 字框明顯加寬。
+    3. 長台詞（100+ 字）→ 字框達 max-width，文字內部換行、box 高度增加、寬度停在 container-48。
+    4. typewriter 過程字框每字都加寬一點點（transition 平滑）。
+- **給 CODEX 的備忘**：
+  - 量測 span 附加到 `document.body`，僅建立一次（lazy singleton）；不需清理。
+  - 量測用 `innerHTML`（含 `<strong>/<em>` 等 mdToHtml 產物），確保粗體／斜體樣式的寬度差被涵蓋。
+  - 若以後要把字框貼齊左 / 右（非置中），修改 CSS `left` 與 `transform` 即可，JS 量測不受影響。
+
+---
+
 ## Hotfix 紀錄（2026-04-19）
 
 ### 預覽工具列裁切 + 所有文字框留白

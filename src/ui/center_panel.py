@@ -148,7 +148,6 @@ class _StageCellWidget(QWidget):
         for pos in ("left", "center", "right"):
             btn = PushButton("+")
             btn.setObjectName("tableCombo")
-            btn.setFixedHeight(24)
             btn.setMinimumWidth(40)
             btn.setToolTip({"left": "左槽", "center": "中槽", "right": "右槽"}[pos])
             btn.clicked.connect(lambda _checked=False, p=pos: self.slot_clicked.emit(p))
@@ -401,8 +400,9 @@ class CenterPanel(QWidget):
         self.search_input.setPlaceholderText("輸入關鍵字搜尋對話…")
         self.btn_search_prev = PushButton("<")
         self.btn_search_next = PushButton(">")
-        self.btn_search_prev.setFixedWidth(30)
-        self.btn_search_next.setFixedWidth(30)
+        # 搜尋箭頭按鈕：minimumWidth 讓字體放大時不裁切
+        self.btn_search_prev.setMinimumWidth(40)
+        self.btn_search_next.setMinimumWidth(40)
         self.lbl_search_count = QLabel("")
         self.btn_search_prev.setEnabled(False)
         self.btn_search_next.setEnabled(False)

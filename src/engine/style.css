@@ -171,13 +171,10 @@ body.capture-mode #stage-overlay { display: none !important; }
 
 /* ── 對話框 ── */
 
-/* E1：字框隨文字長度自動伸縮；水平置中、左右保留邊距
-   使用 fit-content 而非 max-content：
-   - max-content：會以「不換行的最大寬度」為目標，遇到 max-width 後 text 內部被 wrap，
-     但在 typewriter innerHTML 更新時某些 WebEngine 版本不會逐字重新 layout box width，
-     造成使用者感覺「字框固定」或「文字被切」。
-   - fit-content：等同於 min(max-content, 可用寬)，逐字加字時 box 確實會跟著 reflow。
-   不設 min-height / box 高度，由 #dialogue-text 的 min-height 決定初始空間。 */
+/* 字框寬度由 engine.js::sizeDialogueBox() 顯式量測並設置
+   （fit-content / max-content 在 QtWebEngine typewriter innerHTML 更新下
+   reflow 不穩，改由 JS 量測保證每次打字都重算）。
+   CSS 只提供 max-width 作為上限、padding 與視覺樣式。 */
 #dialogue-box {
   position: absolute;
   bottom: 32px;
@@ -187,11 +184,12 @@ body.capture-mode #stage-overlay { display: none !important; }
   background: rgba(20, 20, 40, 0.85);
   border-top: 2px solid rgba(70, 130, 180, 0.4);
   padding: 14px 22px;
-  width: fit-content;
   max-width: calc(100% - 48px);
-  min-width: 160px;
   box-sizing: border-box;
   border-radius: 4px;
+  /* width 由 JS 動態設置，這裡留 auto 避免初始 flash */
+  width: auto;
+  transition: width 0.08s ease-out;
 }
 
 /* B7：名牌長度貼合文字，背景由 engine.js 動態塞入半透明 name_color
