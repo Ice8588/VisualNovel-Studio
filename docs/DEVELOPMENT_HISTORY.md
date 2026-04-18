@@ -63,6 +63,22 @@
 
 ---
 
+## Hotfix 紀錄（2026-04-18）
+
+### 字框 auto-width 逐字展開修正
+- **症狀**：Phase E 交付後使用者回報「字框被壓縮／文字比框還大被切割」、「字框大小固定，不隨 typewriter 展開」。
+- **診斷**：
+  - `width: max-content` 在 QtWebEngine 的 typewriter innerHTML 連續更新下，box 不一定每幀 reflow，視覺上像「固定」。
+  - `#name-plate` 設 `max-width: 100%` 與 `#dialogue-box` 的 `width: max-content` 形成循環約束（parent 等 child 算寬、child 又綁 parent 寬），行為不穩定。
+  - `#dialogue-text` 的 `min-height: 60px` + `#dialogue-box` 的 `min-height: 100px` 讓初始空框很高，加深「固定大小」錯覺。
+- **修正**：
+  - 改 `#dialogue-box`：`width: fit-content`、`min-width: 160px`、`max-width: calc(100% - 48px)`、移除 `min-height`，改 `padding: 14px 22px`。
+  - 改 `#dialogue-text`：`min-height: 1.6em`（一行保留）、`word-break: break-word`、明確 `white-space: normal`。
+  - 改 `#name-plate`：移除 `max-width: 100%` 與 `overflow/text-overflow` 規則，避免與父層循環依賴。
+- **驗證**：`QT_QPA_PLATFORM=offscreen pytest tests/` → 120 passed；視覺煙測需使用者確認字框逐字展開、長台詞不再切字。
+
+---
+
 ## Phase E 紀錄（2026-04-18）
 
 ### 成果
