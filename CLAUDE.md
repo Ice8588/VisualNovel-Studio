@@ -52,9 +52,15 @@ python -m PyInstaller vnstudio.spec --noconfirm
 
 | 層 | 技術 | 位置 |
 |---|---|---|
-| **桌面 GUI** | Python + PyQt6 | `src/ui/` |
+| **桌面 GUI** | Python + PyQt6 + qfluentwidgets | `src/ui/` |
 | **播放引擎** | HTML5 + Vanilla JS（無框架） | `src/engine/` |
 | **核心邏輯** | Python dataclasses + Pillow + FFmpeg | `src/core/` |
+
+**UI 面板分工：** `MainWindow` 是左右水平 Splitter（左 320px / 右佔滿）：
+- `left_panel.py`：場景列表、場景屬性（背景/BGM/特效）、角色列表
+- `center_panel.py`：引擎預覽（上）+ 對話表格（下），含角色/立繪/舞台欄
+
+**qfluentwidgets：** UI 元件庫，用於 `left_panel.py`、`center_panel.py`、`dialogs.py` 的表單元件（`ComboBox`、`LineEdit`、`PushButton` 等）。新增對話框元件時優先用 `qfluentwidgets`，不用標準 Qt 同名元件。
 
 **資料流：**
 1. 使用者匯入 `.txt`/`.docx` → `text_parser.py` 逐行分類台詞/旁白
@@ -63,6 +69,13 @@ python -m PyInstaller vnstudio.spec --noconfirm
 4. 導出：ZIP（data.js + engine）、單一 HTML（Base64）、MP4（QtWebEngine 截幀 + FFmpeg）
 
 **CORS 解法：** `file://` 下無法 `fetch("script.json")`，改用 `data.js`（`var SCRIPT_DATA = {...};`）全域變數注入。預覽用同樣手法但注入到 `<head>`。
+
+---
+
+## 專案檔案格式
+
+- **`.vnsproj`**：`project_io.py` 存讀的專案存檔（JSON），透過 `Project.to_dict()` / `Project.from_dict()` 序列化。
+- **`script.json` / `data.js`**：engine 執行時用的劇本資料。`data.js` 是導出與預覽用的 CORS-safe 版本（`var SCRIPT_DATA = {...};`），與 `.vnsproj` 格式不同，勿混淆。
 
 ---
 

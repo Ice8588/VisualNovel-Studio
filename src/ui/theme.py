@@ -526,5 +526,5 @@ def load_preference() -> tuple[str, int]:
     """從 QSettings 讀取主題偏好，預設深色 14px。"""
     settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
     theme = settings.value("theme", "dark")
-    font_size = int(settings.value("font_size", 14))
+    font_size = int(settings.value("font_size", 18))
     return theme, font_size

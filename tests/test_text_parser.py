@@ -45,7 +45,7 @@ class TestClassifyLines:
         assert result[0].type == "narration"
         assert result[0].text == "他站在窗邊。"
         assert result[1].type == "dialogue"
-        assert result[1].text == "你好嗎？"  # 去掉「」
+        assert result[1].text == "「你好嗎？」"  # 保留「」
         assert result[2].type == "narration"
 
     def test_consecutive_blank_lines(self):
@@ -64,13 +64,13 @@ class TestClassifyLines:
         assert result[0].type == "narration"
         assert result[0].text == "他轉過身，說："
         assert result[1].type == "dialogue"
-        assert result[1].text == "你知道嗎？"
+        assert result[1].text == "「你知道嗎？」"  # 保留「」
 
-    def test_dialogue_text_strips_brackets(self):
-        """台詞的 text 不含「」符號。"""
+    def test_dialogue_text_keeps_brackets(self):
+        """台詞的 text 保留「」符號。"""
         lines = ["「我已經決定了。」"]
         result = _classify_lines(lines)
-        assert result[0].text == "我已經決定了。"
+        assert result[0].text == "「我已經決定了。」"
 
     def test_narration_default_fields(self):
         """旁白的 character 和 sprite 預設為 None。"""
@@ -93,10 +93,10 @@ class TestParseFile:
         assert len(result) == 6
         assert result[0].type == "narration"
         assert result[1].type == "dialogue"
-        assert result[1].text == "你真的要走嗎？"
+        assert result[1].text.replace("「", "").replace("」", "") == "你真的要走嗎？"
         assert result[2].type == "narration"
         assert result[3].type == "dialogue"
-        assert result[3].text == "我已經決定了。"
+        assert result[3].text.replace("「", "").replace("」", "") == "我已經決定了。"
         assert result[4].type == "narration"
         assert result[5].type == "dialogue"
 
@@ -114,12 +114,12 @@ class TestParseFile:
         assert result[0].type == "narration"
         assert result[0].text == "他轉過身，說："
         assert result[1].type == "dialogue"
-        assert result[1].text == "你知道嗎？"
+        assert result[1].text == "「你知道嗎？」"
         assert result[2].type == "dialogue"
-        assert result[2].text == "這是連續空行後的台詞。"
+        assert result[2].text == "「這是連續空行後的台詞。」"
         assert result[3].type == "narration"
         assert result[4].type == "dialogue"
-        assert result[4].text == ""  # 「」的內容為空
+        assert result[4].text == "「」"  # 空引號保留
         assert result[5].type == "narration"
 
     def test_unsupported_format(self):

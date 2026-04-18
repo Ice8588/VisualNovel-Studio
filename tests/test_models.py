@@ -132,14 +132,21 @@ class TestProject:
 
     def test_next_scene_id_empty(self):
         p = Project()
-        assert p.next_scene_id() == "scene_001"
+        assert p.next_scene_id() == "場景1"
 
     def test_next_scene_id_sequential(self):
+        p = Project(scenes=[
+            Scene(id="場景1"),
+            Scene(id="場景3"),
+        ])
+        assert p.next_scene_id() == "場景4"
+
+    def test_next_scene_id_legacy_compat(self):
         p = Project(scenes=[
             Scene(id="scene_001"),
             Scene(id="scene_003"),
         ])
-        assert p.next_scene_id() == "scene_004"
+        assert p.next_scene_id() == "場景4"
 
     def test_from_dict_missing_asset_categories(self):
         """缺少部分素材分類時應自動補齊。"""

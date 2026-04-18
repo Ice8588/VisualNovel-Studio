@@ -9,7 +9,6 @@ from PyQt6.QtCore import Qt, QSize, pyqtSignal
 from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QCheckBox,
-    QColorDialog,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
@@ -341,12 +340,15 @@ class PasteTextDialog(QDialog):
 
 # ── 角色編輯對話框 ──
 
-POSITION_OPTIONS = {"左": "left", "中": "center", "右": "right"}
-POSITION_LABELS = {v: k for k, v in POSITION_OPTIONS.items()}
+# 預設名牌顏色（淺/深色皆清晰）
+_PRESET_COLORS = [
+    ("#FFFFFF", "白"), ("#222222", "黑"), ("#E05555", "紅"), ("#4682B4", "藍"),
+    ("#4CAF50", "綠"), ("#FFD700", "黃"), ("#FF8C00", "橙"), ("#9B59B6", "紫"),
+]
 
 
 class CharacterEditorDialog(QDialog):
-    """新增或編輯角色：名稱、顏色、位置、表情差分列表。"""
+    """新增或編輯角色：名稱、名牌顏色、預設立繪。"""
 
     def __init__(
         self,
@@ -357,15 +359,16 @@ class CharacterEditorDialog(QDialog):
         super().__init__(parent)
         self._original = character
         self._project_dir = project_dir or Path(tempfile.gettempdir()) / "vnstudio_unsaved"
+        self._selected_color = "#4682B4"
+        self._sprite_filename: str | None = None
         self.setWindowTitle("編輯角色" if character else "新增角色")
-        self.setMinimumWidth(480)
+        self.setMinimumWidth(420)
         self._setup_ui()
         if character:
             self._load_character(character)
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout()
-
         form = QFormLayout()
 
         # 名稱
@@ -373,195 +376,122 @@ class CharacterEditorDialog(QDialog):
         self.edit_name.setPlaceholderText("角色名稱")
         form.addRow("名稱:", self.edit_name)
 
-        # 名稱顏色
-        color_row = QHBoxLayout()
-        self.edit_color = LineEdit()
-        self.edit_color.setText("#4682B4")
-        self.edit_color.setMaximumWidth(100)
-        self.btn_pick_color = PushButton("選色…")
-        self.btn_pick_color.clicked.connect(self._on_pick_color)
-        self._color_preview = QLabel("  ")
-        self._color_preview.setFixedSize(24, 24)
-        self._update_color_preview("#4682B4")
-        color_row.addWidget(self.edit_color)
-        color_row.addWidget(self._color_preview)
-        color_row.addWidget(self.btn_pick_color)
-        color_row.addStretch()
-        form.addRow("名稱顏色:", color_row)
-
-        self.edit_color.textChanged.connect(self._update_color_preview)
-
-        # 螢幕位置
-        self.combo_position = ComboBox()
-        self.combo_position.addItems(POSITION_OPTIONS.keys())
-        self.combo_position.setCurrentText("中")
-        form.addRow("螢幕位置:", self.combo_position)
+        # 名牌顏色：預設色塊
+        color_widget = QWidget()
+        color_layout = QHBoxLayout()
+        color_layout.setContentsMargins(0, 0, 0, 0)
+        color_layout.setSpacing(4)
+        self._color_btns: list[QPushButton] = []
+        for hex_color, label in _PRESET_COLORS:
+            btn = QPushButton()
+            btn.setFixedSize(24, 24)
+            btn.setToolTip(label)
+            btn.setStyleSheet(
+                f"background-color:{hex_color}; border:2px solid #888; border-radius:3px;"
+            )
+            btn.clicked.connect(lambda _, c=hex_color: self._on_color_clicked(c))
+            color_layout.addWidget(btn)
+            self._color_btns.append(btn)
+        self._lbl_color_preview = QLabel()
+        self._lbl_color_preview.setFixedSize(60, 22)
+        self._lbl_color_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        color_layout.addSpacing(4)
+        color_layout.addWidget(self._lbl_color_preview)
+        color_layout.addStretch()
+        color_widget.setLayout(color_layout)
+        form.addRow("名牌顏色:", color_widget)
 
         layout.addLayout(form)
 
-        # 表情差分列表
-        sprite_group = QGroupBox("表情差分列表")
-        sprite_layout = QVBoxLayout()
-
-        # 水平佈局：左側 tree + 按鈕，右側預覽
-        sprite_content = QHBoxLayout()
-
-        # 左側：樹狀結構
-        left_side = QVBoxLayout()
-        self.sprite_tree = QTreeWidget()
-        self.sprite_tree.setColumnCount(2)
-        self.sprite_tree.setHeaderLabels(["標籤", ""])
-        self.sprite_tree.setIconSize(QSize(48, 48))
-        self.sprite_tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        self.sprite_tree.header().setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
-        self.sprite_tree.header().resizeSection(1, 60)
-        self.sprite_tree.setMinimumHeight(180)
-
-        # 根節點（不可選取，僅作分組標題）
-        self._sprite_root = QTreeWidgetItem(self.sprite_tree, ["立繪"])
-        self._sprite_root.setExpanded(True)
-        self._sprite_root.setFlags(
-            self._sprite_root.flags() & ~Qt.ItemFlag.ItemIsSelectable
-        )
-
-        left_side.addWidget(self.sprite_tree)
-
-        sprite_btn_layout = QHBoxLayout()
-        btn_add_sprite = PushButton("新增差分")
-        btn_remove_sprite = PushButton("移除差分")
-        btn_add_sprite.clicked.connect(self._on_add_sprite)
-        btn_remove_sprite.clicked.connect(self._on_remove_sprite)
-        sprite_btn_layout.addWidget(btn_add_sprite)
-        sprite_btn_layout.addWidget(btn_remove_sprite)
-        sprite_btn_layout.addStretch()
-        left_side.addLayout(sprite_btn_layout)
-
-        sprite_content.addLayout(left_side, 2)
-
-        # 右側：圖片預覽
-        self._sprite_preview = QLabel("選擇差分\n以預覽")
+        # 預設立繪（單張）
+        sprite_group = QGroupBox("預設立繪")
+        sprite_layout = QHBoxLayout()
+        self._sprite_preview = QLabel("尚未選擇圖片")
         self._sprite_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._sprite_preview.setMinimumSize(160, 180)
-        self._sprite_preview.setStyleSheet("border: 1px solid #555; background: #1e1e1e; color: #888;")
-        sprite_content.addWidget(self._sprite_preview, 1)
-
-        sprite_layout.addLayout(sprite_content)
+        self._sprite_preview.setFixedSize(120, 140)
+        self._sprite_preview.setStyleSheet(
+            "border:1px solid #555; background:#1e1e1e; color:#888;"
+        )
+        sprite_layout.addWidget(self._sprite_preview)
+        btn_side = QVBoxLayout()
+        self.btn_browse_sprite = PushButton("選擇圖片…")
+        self.btn_browse_sprite.clicked.connect(self._on_browse_sprite)
+        self.btn_clear_sprite = PushButton("清除")
+        self.btn_clear_sprite.clicked.connect(self._on_clear_sprite)
+        self._lbl_sprite_name = QLabel("（無）")
+        self._lbl_sprite_name.setWordWrap(True)
+        btn_side.addWidget(self.btn_browse_sprite)
+        btn_side.addWidget(self.btn_clear_sprite)
+        btn_side.addWidget(self._lbl_sprite_name)
+        btn_side.addStretch()
+        sprite_layout.addLayout(btn_side)
         sprite_group.setLayout(sprite_layout)
         layout.addWidget(sprite_group)
 
-        self.sprite_tree.currentItemChanged.connect(self._on_sprite_selected)
-
-        # 按鈕
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
         buttons.accepted.connect(self._validate_and_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
-
         self.setLayout(layout)
 
-    def _load_character(self, char: Character) -> None:
-        """載入既有角色資料。"""
-        self.edit_name.setText(char.name)
-        self.edit_color.setText(char.name_color)
-        pos_label = POSITION_LABELS.get(char.position, "中")
-        self.combo_position.setCurrentText(pos_label)
+        self._apply_color(self._selected_color)
 
-        for sv in char.sprites:
-            item = QTreeWidgetItem(self._sprite_root, [sv.label])
-            item.setData(0, Qt.ItemDataRole.UserRole, sv.filename)
-            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
-            # 載入縮圖
+    def _load_character(self, char: Character) -> None:
+        self.edit_name.setText(char.name)
+        self._apply_color(char.name_color)
+        if char.sprites:
+            sv = char.sprites[0]
+            self._sprite_filename = sv.filename
+            self._lbl_sprite_name.setText(sv.label)
             full_path = self._project_dir / "assets" / sv.filename
             if full_path.exists():
                 pm = QPixmap(str(full_path)).scaled(
-                    48, 48, Qt.AspectRatioMode.KeepAspectRatio,
+                    116, 136, Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.SmoothTransformation
                 )
-                item.setIcon(0, QIcon(pm))
-            # 瀏覽按鈕
-            btn = PushButton("瀏覽…")
-            btn.setFixedHeight(24)
-            btn.clicked.connect(lambda _, i=item: self._on_browse_sprite(i))
-            self.sprite_tree.setItemWidget(item, 1, btn)
-        self._sprite_root.setExpanded(True)
+                self._sprite_preview.setPixmap(pm)
 
-    def _on_pick_color(self) -> None:
-        from PyQt6.QtGui import QColor
-
-        initial = QColor(self.edit_color.text())
-        color = QColorDialog.getColor(initial, self, "選擇名稱顏色")
-        if color.isValid():
-            self.edit_color.setText(color.name())
-
-    def _update_color_preview(self, color_text: str) -> None:
-        self._color_preview.setStyleSheet(
-            f"background-color: {color_text}; border: 1px solid #888; border-radius: 3px;"
+    def _apply_color(self, hex_color: str) -> None:
+        self._selected_color = hex_color
+        self._lbl_color_preview.setStyleSheet(
+            f"background-color:{hex_color}; border:1px solid #888; border-radius:3px;"
         )
+        self._lbl_color_preview.setText(hex_color)
+        for btn, (c, _) in zip(self._color_btns, _PRESET_COLORS):
+            selected = c.upper() == hex_color.upper()
+            btn.setStyleSheet(
+                f"background-color:{c}; border:{('3px solid #fff' if selected else '2px solid #888')}; border-radius:3px;"
+            )
 
-    def _on_browse_sprite(self, item: QTreeWidgetItem) -> None:
-        """開啟圖片選擇對話框，複製圖片到素材目錄，更新縮圖與 UserRole。"""
+    def _on_color_clicked(self, hex_color: str) -> None:
+        self._apply_color(hex_color)
+
+    def _on_browse_sprite(self) -> None:
         from src.core.asset_manager import import_asset
-
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "選擇表情圖片", "", "圖片 (*.png *.jpg *.jpeg)"
+            self, "選擇立繪圖片", "", "圖片 (*.png *.jpg *.jpeg)"
         )
         if not file_path:
             return
         try:
             filename = import_asset(Path(file_path), "sprites", self._project_dir)
-            item.setData(0, Qt.ItemDataRole.UserRole, filename)
-            # 更新縮圖 icon
+            self._sprite_filename = filename
+            self._lbl_sprite_name.setText(Path(file_path).stem)
             pm = QPixmap(file_path).scaled(
-                48, 48, Qt.AspectRatioMode.KeepAspectRatio,
+                116, 136, Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation
             )
-            item.setIcon(0, QIcon(pm))
-            # 若此 item 正被選中，更新右側預覽
-            if self.sprite_tree.currentItem() is item:
-                self._on_sprite_selected(item, None)
+            self._sprite_preview.setPixmap(pm)
         except (ValueError, FileNotFoundError, OSError) as e:
             QMessageBox.warning(self, "匯入失敗", str(e))
 
-    def _on_add_sprite(self) -> None:
-        count = self._sprite_root.childCount()
-        default_label = f"差分{count + 1}"
-        item = QTreeWidgetItem(self._sprite_root, [default_label])
-        item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
-        # 瀏覽按鈕
-        btn = QPushButton("瀏覽…")
-        btn.setFixedHeight(24)
-        btn.clicked.connect(lambda _, i=item: self._on_browse_sprite(i))
-        self.sprite_tree.setItemWidget(item, 1, btn)
-        self.sprite_tree.setCurrentItem(item)
-        self.sprite_tree.editItem(item, 0)
-
-    def _on_remove_sprite(self) -> None:
-        current = self.sprite_tree.currentItem()
-        if current and current.parent() == self._sprite_root:
-            self._sprite_root.removeChild(current)
-            self._sprite_preview.clear()
-            self._sprite_preview.setText("選擇差分\n以預覽")
-
-    def _on_sprite_selected(self, current, _previous) -> None:
-        """選中 tree item 時更新右側圖片預覽。"""
-        if current and current.parent() == self._sprite_root:
-            filename = current.data(0, Qt.ItemDataRole.UserRole)
-            if filename:
-                full_path = self._project_dir / "assets" / filename
-                if full_path.exists():
-                    pm = QPixmap(str(full_path))
-                    scaled = pm.scaled(
-                        self._sprite_preview.width(),
-                        self._sprite_preview.height(),
-                        Qt.AspectRatioMode.KeepAspectRatio,
-                        Qt.TransformationMode.SmoothTransformation
-                    )
-                    self._sprite_preview.setPixmap(scaled)
-                    return
+    def _on_clear_sprite(self) -> None:
+        self._sprite_filename = None
+        self._lbl_sprite_name.setText("（無）")
         self._sprite_preview.clear()
-        self._sprite_preview.setText("選擇差分\n以預覽")
+        self._sprite_preview.setText("尚未選擇圖片")
 
     def _validate_and_accept(self) -> None:
         name = self.edit_name.text().strip()
@@ -571,28 +501,17 @@ class CharacterEditorDialog(QDialog):
         self.accept()
 
     def get_character(self) -> Character:
-        """從對話框欄位建立 Character 物件。"""
         name = self.edit_name.text().strip()
-        color = self.edit_color.text().strip() or "#4682B4"
-        pos_label = self.combo_position.currentText()
-        position = POSITION_OPTIONS.get(pos_label, "center")
-
+        color = self._selected_color or "#4682B4"
         sprites = []
-        for i in range(self._sprite_root.childCount()):
-            child = self._sprite_root.child(i)
-            label = child.text(0).strip()
-            filename = (child.data(0, Qt.ItemDataRole.UserRole) or "").strip()
-            if not filename:
-                continue  # 沒有選擇圖片的差分跳過
-            if not label:
-                label = f"差分{i + 1}"  # 自動補標籤
-            sprites.append(SpriteVariant(label=label, filename=filename))
-
+        if self._sprite_filename:
+            label = self._lbl_sprite_name.text() or "預設"
+            sprites.append(SpriteVariant(label=label, filename=self._sprite_filename))
         default_costume = Costume(name="預設", expressions=sprites)
         return Character(
             name=name,
             name_color=color,
-            position=position,
+            position="center",
             costumes=[default_costume] if sprites else [],
         )
 
@@ -699,7 +618,8 @@ class CostumeEditorDialog(QDialog):
                 self._expr_list.addItem(item)
 
     def _on_add_costume(self) -> None:
-        name, ok = QInputDialog.getText(self, "新增服裝", "服裝名稱:")
+        default_name = f"服裝{len(self._costumes) + 1}"
+        name, ok = QInputDialog.getText(self, "新增服裝", "服裝名稱:", text=default_name)
         if ok and name.strip():
             self._costumes.append(Costume(name=name.strip()))
             self._populate_costume_list()

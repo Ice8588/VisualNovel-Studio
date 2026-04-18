@@ -1,0 +1,181 @@
+{
+  "title": "Untitled",
+  "scenes": [
+    {
+      "id": "scene_001",
+      "background": "pixai-1637134651536530693-A beautiful night sky_7.png",
+      "bgm": null,
+      "effect": null,
+      "dialogues": [
+        {
+          "type": "narration",
+          "text": "雖然他非常喜歡吃甜食，特別是糕點上用來點綴的水果或小裝飾，但他覺得被女生餵食這種事實在過於羞恥，更何況他還是第一次見到對方。",
+          "character": null,
+          "sprite": null
+        },
+        {
+          "type": "narration",
+          "text": "名為星野的少年揮了揮手，拒絕了對方的好意。",
+          "character": null,
+          "sprite": null
+        },
+        {
+          "type": "narration",
+          "text": "淋上糖霜的草莓看起來十分可口，而且這個動作不管怎麼看，都像是要餵少年吃的樣子。",
+          "character": null,
+          "sprite": null
+        },
+        {
+          "type": "dialogue",
+          "text": "吶，星野君，你想吃吃看嗎？",
+          "character": "月",
+          "sprite": "穹月常服白絲_正面",
+          "costume": "常服"
+        },
+        {
+          "type": "narration",
+          "text": "少女將白皙的手伸到少年面前，她手中的叉子正插著一顆鮮紅色的草莓。",
+          "character": null,
+          "sprite": null
+        },
+        {
+          "type": "dialogue",
+          "text": "不了，我對甜食不感興趣。",
+          "character": "星",
+          "sprite": "星野_立繪2-removebg-preview",
+          "costume": "常服",
+          "stage": {
+            "left": {
+              "character": "星",
+              "costume": "常服",
+              "sprite": null
+            },
+            "center": null,
+            "right": null
+          }
+        },
+        {
+          "type": "narration",
+          "text": "沒錯，若是以旁人的視角來看他們，大概會認為是好朋友或是情侶出來約會吧，但實際上今天是他們兩人第一次見面。",
+          "character": null,
+          "sprite": null
+        },
+        {
+          "type": "dialogue",
+          "text": "這樣啊，真可惜……",
+          "character": null,
+          "sprite": null
+        },
+        {
+          "type": "narration",
+          "text": "少女語帶遺憾地說完後，將草莓放入自己口中，接著繼續吃著盤子上的蛋糕。",
+          "character": null,
+          "sprite": null
+        },
+        {
+          "type": "narration",
+          "text": "眼前的她有著潔白如雪的長髮，以及對上眼就彷彿靈魂被奪走的湛藍雙眸，少女的容貌更是美麗的無人能及。",
+          "character": null,
+          "sprite": null
+        },
+        {
+          "type": "narration",
+          "text": "一舉一動都彷彿吸引著他人的目光，尤其那表現得從容不迫的迷人笑容，更是令星野無法別開視線。",
+          "character": null,
+          "sprite": null
+        },
+        {
+          "type": "narration",
+          "text": "星野的眼睛不斷打量著眼前的少女，直到將每一分細節都烙印在腦中後，他得出了一個結論。",
+          "character": null,
+          "sprite": null
+        },
+        {
+          "type": "narration",
+          "text": "這傢伙──果然是魔女呢。",
+          "character": null,
+          "sprite": null
+        },
+        {
+          "type": "dialogue",
+          "text": "穹月，妳為什麼要找我出來？",
+          "character": null,
+          "sprite": null
+        },
+        {
+          "type": "dialogue",
+          "text": "當然是因為那天晚上發生的事。",
+          "character": null,
+          "sprite": null
+        },
+        {
+          "type": "narration",
+          "text": "她微微勾起嘴角，給出和星野預料中一模一樣的答案。",
+          "character": null,
+          "sprite": null
+        },
+        {
+          "type": "narration",
+          "text": "而兩人的相遇，這一切故事的開端，都要從最初的那場遊戲說起……",
+          "character": null,
+          "sprite": null
+        }
+      ]
+    }
+  ],
+  "characters": [
+    {
+      "name": "月",
+      "name_color": "#0055ff",
+      "position": "center",
+      "costumes": [
+        {
+          "name": "常服",
+          "expressions": [
+            {
+              "label": "穹月常服_正面",
+              "filename": "穹月常服_正面.png"
+            },
+            {
+              "label": "穹月常服白絲_正面",
+              "filename": "穹月常服白絲_正面.png"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "星",
+      "name_color": "#55ffff",
+      "position": "center",
+      "costumes": [
+        {
+          "name": "常服",
+          "expressions": [
+            {
+              "label": "星野_立繪2-removebg-preview",
+              "filename": "星野_立繪2-removebg-preview.png"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "assets": {
+    "backgrounds": [
+      "pixai-1637134651536530693-A beautiful night sky_7.png"
+    ],
+    "sprites": [
+      "穹月常服_正面.png",
+      "穹月常服白絲_正面.png",
+      "星野_立繪2-removebg-preview.png"
+    ],
+    "music": []
+  },
+  "project_path": "D:\\VisualNovel Studio\\tests\\01.vnsproj",
+  "game_settings": {
+    "dialogue_font_size": 18,
+    "name_font_size": 16,
+    "dialogue_box_opacity": 0.85
+  }
+}

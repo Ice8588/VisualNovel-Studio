@@ -108,7 +108,7 @@ class MainWindow(QMainWindow):
         self._act_light.triggered.connect(lambda: self._apply_theme_immediate("light"))
 
         font_menu = view_menu.addMenu("UI 字體大小")
-        for size in [12, 14, 16, 18, 20]:
+        for size in [14, 16, 18, 20, 22, 24, 26, 28, 30, 32]:
             act = font_menu.addAction(f"{size}px")
             act.setCheckable(True)
             act.setChecked(size == self._font_size)
@@ -117,10 +117,6 @@ class MainWindow(QMainWindow):
 
         view_menu.addSeparator()
         view_menu.addAction("恢復預設", self._on_restore_default_appearance)
-
-        # 設定選單（僅遊戲設定）
-        settings_menu = menu_bar.addMenu("設定")
-        settings_menu.addAction("遊戲設定…", self._on_game_settings)
 
         # 說明選單
         help_menu = menu_bar.addMenu("說明")
@@ -162,7 +158,10 @@ class MainWindow(QMainWindow):
 
         # 預覽工具列按鈕
         self.center_panel.btn_refresh_preview.clicked.connect(self._on_refresh_preview)
-        self.center_panel.btn_game_settings.clicked.connect(self._on_game_settings)
+        # 遊戲設定 SpinBox 即時同步
+        self.center_panel.spin_dlg_font.valueChanged.connect(self._on_game_setting_changed)
+        self.center_panel.spin_name_font.valueChanged.connect(self._on_game_setting_changed)
+        self.center_panel.spin_opacity.valueChanged.connect(self._on_game_setting_changed)
 
     # ── 場景切換 ──
 
@@ -216,7 +215,7 @@ class MainWindow(QMainWindow):
         for sv in self._project.characters[index].sprites:
             if sv.filename and sv.filename not in self._project.assets["sprites"]:
                 self._project.assets["sprites"].append(sv.filename)
-        self.left_panel.refresh_characters()
+        self.left_panel.refresh_characters(keep_tab=True)
         self.center_panel._refresh_dialogue_table()
         self._on_project_changed()
 
@@ -267,13 +266,13 @@ class MainWindow(QMainWindow):
         for sv in char.sprites:
             if sv.filename and sv.filename not in self._project.assets["sprites"]:
                 self._project.assets["sprites"].append(sv.filename)
-        self.left_panel.refresh_characters()
+        self.left_panel.refresh_characters(keep_tab=True)
         self.left_panel.refresh_costume_list()
         self.center_panel._refresh_dialogue_table()
         self._on_project_changed()
 
     def _on_character_property_changed(self) -> None:
-        self.left_panel.refresh_characters()
+        self.left_panel.refresh_characters(keep_tab=True)
         self.center_panel._refresh_dialogue_table()
         self._on_project_changed()
 
@@ -325,13 +324,13 @@ class MainWindow(QMainWindow):
             "支援 MP4 影片導出、HTML5 網頁導出"
         )
 
-    def _on_game_settings(self) -> None:
-        from src.ui.dialogs import GameSettingsDialog
-
-        dlg = GameSettingsDialog(self._project.game_settings, parent=self)
-        if dlg.exec() != dlg.DialogCode.Accepted:
-            return
-        self._project.game_settings = dlg.get_settings()
+    def _on_game_setting_changed(self) -> None:
+        from src.core.models import GameSettings
+        self._project.game_settings = GameSettings(
+            dialogue_font_size=self.center_panel.spin_dlg_font.value(),
+            name_font_size=self.center_panel.spin_name_font.value(),
+            dialogue_box_opacity=self.center_panel.spin_opacity.value(),
+        )
         self._on_project_changed()
 
     def _on_open_log_dir(self) -> None:
@@ -644,9 +643,22 @@ class MainWindow(QMainWindow):
         self.left_panel.set_project(self._project)
         self.center_panel.set_project(self._project)
         self._sync_asset_lists()
+        self._sync_game_settings_ui()
         self._on_refresh_preview()
         self._update_title()
         self._update_status()
+
+    def _sync_game_settings_ui(self) -> None:
+        gs = self._project.game_settings
+        self.center_panel.spin_dlg_font.blockSignals(True)
+        self.center_panel.spin_name_font.blockSignals(True)
+        self.center_panel.spin_opacity.blockSignals(True)
+        self.center_panel.spin_dlg_font.setValue(gs.dialogue_font_size)
+        self.center_panel.spin_name_font.setValue(gs.name_font_size)
+        self.center_panel.spin_opacity.setValue(gs.dialogue_box_opacity)
+        self.center_panel.spin_dlg_font.blockSignals(False)
+        self.center_panel.spin_name_font.blockSignals(False)
+        self.center_panel.spin_opacity.blockSignals(False)
 
     def _update_title(self) -> None:
         title = self._BASE_TITLE

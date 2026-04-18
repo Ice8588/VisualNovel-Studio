@@ -247,13 +247,17 @@ class Project:
         )
 
     def next_scene_id(self) -> str:
-        """產生下一個場景 ID，如 'scene_001'、'scene_002'。"""
+        """產生下一個場景名稱，如 '場景1'、'場景2'。"""
         if not self.scenes:
-            return "scene_001"
+            return "場景1"
         max_num = 0
         for scene in self.scenes:
-            # 從 scene_XXX 格式中提取數字
-            parts = scene.id.split("_")
-            if len(parts) == 2 and parts[1].isdigit():
-                max_num = max(max_num, int(parts[1]))
-        return f"scene_{max_num + 1:03d}"
+            # 支援「場景N」格式
+            if scene.id.startswith("場景") and scene.id[2:].isdigit():
+                max_num = max(max_num, int(scene.id[2:]))
+            # 相容舊格式 scene_NNN
+            else:
+                parts = scene.id.split("_")
+                if len(parts) == 2 and parts[1].isdigit():
+                    max_num = max(max_num, int(parts[1]))
+        return f"場景{max_num + 1}"

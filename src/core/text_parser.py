@@ -34,15 +34,18 @@ def _parse_docx(path: Path) -> list[str]:
     return [para.text for para in doc.paragraphs]
 
 
+UNASSIGNED_LABEL = "(未選取)"
+
+
 def _classify_lines(lines: list[str]) -> list[Dialogue]:
-    """逐行套用「」規則分類。空行跳過。"""
+    """逐行套用「」規則分類。空行跳過。「」行保留引號，角色設為未選取。"""
     result = []
     for line in lines:
         stripped = line.strip()
         if not stripped:
             continue
         if _is_dialogue_line(stripped):
-            result.append(Dialogue(type="dialogue", text=stripped[1:-1]))
+            result.append(Dialogue(type="dialogue", text=stripped, character=None))
         else:
             result.append(Dialogue(type="narration", text=stripped))
     return result

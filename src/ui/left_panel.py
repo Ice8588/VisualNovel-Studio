@@ -8,7 +8,6 @@ from PyQt6.QtCore import Qt, QSize, pyqtSignal
 from PyQt6.QtGui import QColor, QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QAbstractItemView,
-    QColorDialog,
     QGroupBox,
     QHBoxLayout,
     QInputDialog,
@@ -26,9 +25,17 @@ from qfluentwidgets import ComboBox, LineEdit, ListWidget, PushButton, Segmented
 
 from src.core.models import Character, Project, Scene
 
-_POS_OPTIONS = ["左", "中", "右"]
-_POS_TO_KEY = {"左": "left", "中": "center", "右": "right"}
-_KEY_TO_POS = {"left": "左", "center": "中", "right": "右"}
+# 預設名牌顏色（淺/深色模式下皆清晰可辨）
+PRESET_COLORS = [
+    ("#FFFFFF", "白"),
+    ("#222222", "黑"),
+    ("#E05555", "紅"),
+    ("#4682B4", "藍"),
+    ("#4CAF50", "綠"),
+    ("#FFD700", "黃"),
+    ("#FF8C00", "橙"),
+    ("#9B59B6", "紫"),
+]
 
 NONE_LABEL = "(無)"
 EFFECT_OPTIONS = [NONE_LABEL, "rain", "snow", "crt", "pixel_dark"]
@@ -231,36 +238,28 @@ class LeftPanel(QWidget):
         self._edit_char_name.setPlaceholderText("角色名稱")
         name_row.addWidget(self._edit_char_name, 1)
         char_props_layout.addLayout(name_row)
-        # 顏色（色塊本身也可點）
-        color_row = QHBoxLayout()
-        color_row.addWidget(QLabel("顏色:"))
+        # 顏色：預設色塊按鈕列
+        char_props_layout.addWidget(QLabel("名牌顏色:"))
+        color_grid = QHBoxLayout()
+        color_grid.setSpacing(4)
+        self._color_btns: list[QPushButton] = []
+        for hex_color, label in PRESET_COLORS:
+            btn = QPushButton()
+            btn.setFixedSize(24, 24)
+            btn.setToolTip(label)
+            btn.setStyleSheet(
+                f"background-color:{hex_color}; border:2px solid #888; border-radius:3px;"
+            )
+            btn.clicked.connect(lambda _, c=hex_color: self._on_preset_color_clicked(c))
+            color_grid.addWidget(btn)
+            self._color_btns.append(btn)
+        color_grid.addStretch()
+        char_props_layout.addLayout(color_grid)
+        # 色塊預覽
         self._lbl_char_color = QLabel()
-        self._lbl_char_color.setFixedSize(20, 20)
-        self._lbl_char_color.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._lbl_char_color.setToolTip("點擊以修改顏色")
-        self._lbl_char_color.mousePressEvent = self._on_color_label_clicked
-        self._btn_char_color = PushButton("選色")
-        self._btn_char_color.setFixedWidth(50)
-        color_row.addWidget(self._lbl_char_color)
-        color_row.addWidget(self._btn_char_color)
-        color_row.addStretch()
-        char_props_layout.addLayout(color_row)
-        # 位置（legacy：僅在未使用舞台槽位時生效）
-        pos_row = QHBoxLayout()
-        pos_label = QLabel("位置:")
-        pos_label.setToolTip(
-            "舊版欄位：僅對未設定「舞台槽位」的對話生效。\n"
-            "建議直接在對話列的「舞台」欄指定角色位置。"
-        )
-        pos_row.addWidget(pos_label)
-        self._combo_char_pos = ComboBox()
-        self._combo_char_pos.addItems(_POS_OPTIONS)
-        self._combo_char_pos.setToolTip(
-            "舊版欄位：僅對未設定「舞台槽位」的對話生效。\n"
-            "建議直接在對話列的「舞台」欄指定角色位置。"
-        )
-        pos_row.addWidget(self._combo_char_pos, 1)
-        char_props_layout.addLayout(pos_row)
+        self._lbl_char_color.setFixedSize(80, 18)
+        self._lbl_char_color.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        char_props_layout.addWidget(self._lbl_char_color)
         # 服裝列表
         char_props_layout.addWidget(QLabel("服裝:"))
         self._char_costume_list = QListWidget()
@@ -277,8 +276,6 @@ class LeftPanel(QWidget):
         self._inspector.addWidget(char_props)
         # 角色屬性連接
         self._edit_char_name.editingFinished.connect(self._on_char_name_changed)
-        self._btn_char_color.clicked.connect(self._on_char_color_btn)
-        self._combo_char_pos.currentIndexChanged.connect(self._on_char_position_changed)
 
         inspector_layout.addWidget(self._inspector)
         inspector_group.setLayout(inspector_layout)
@@ -606,16 +603,23 @@ class LeftPanel(QWidget):
             return
         self._updating = True
         self._edit_char_name.setText(char.name)
-        self._lbl_char_color.setStyleSheet(
-            f"background-color: {char.name_color}; border: 1px solid #888; border-radius: 3px;"
-        )
-        pos_label = _KEY_TO_POS.get(char.position, "中")
-        idx = _POS_OPTIONS.index(pos_label) if pos_label in _POS_OPTIONS else 1
-        self._combo_char_pos.setCurrentIndex(idx)
+        self._update_color_display(char.name_color)
         self._char_costume_list.clear()
         for cos in char.costumes:
             self._char_costume_list.addItem(cos.name)
         self._updating = False
+
+    def _update_color_display(self, hex_color: str) -> None:
+        """更新顏色預覽標籤，並標示目前選取的預設色。"""
+        self._lbl_char_color.setStyleSheet(
+            f"background-color:{hex_color}; border:1px solid #888; border-radius:3px;"
+        )
+        self._lbl_char_color.setText(hex_color)
+        for btn, (c, _) in zip(self._color_btns, PRESET_COLORS):
+            selected = c.upper() == hex_color.upper()
+            btn.setStyleSheet(
+                f"background-color:{c}; border:{('3px solid #fff' if selected else '2px solid #888')}; border-radius:3px;"
+            )
 
     def _get_current_char(self) -> Character | None:
         if (
@@ -644,49 +648,34 @@ class LeftPanel(QWidget):
                 widget.set_text(new_name)
         self.character_property_changed.emit()
 
-    def _on_char_color_btn(self) -> None:
+    def _on_preset_color_clicked(self, hex_color: str) -> None:
         char = self._get_current_char()
         if not char:
             return
-        initial = QColor(char.name_color)
-        color = QColorDialog.getColor(initial, self, "選擇名稱顏色")
-        if not color.isValid():
-            return
-        char.name_color = color.name()
-        self._lbl_char_color.setStyleSheet(
-            f"background-color: {char.name_color}; border: 1px solid #888; border-radius: 3px;"
-        )
-        # Update icon (color block) in character list
+        char.name_color = hex_color
+        self._update_color_display(hex_color)
         item = self.character_list.item(self._current_char_index)
         if item:
             widget = self.character_list.itemWidget(item)
             if widget:
                 pm = QPixmap(32, 32)
-                pm.fill(QColor(char.name_color))
+                pm.fill(QColor(hex_color))
                 widget.update_icon(pm)
-        self.character_property_changed.emit()
-
-    def _on_color_label_clicked(self, event) -> None:
-        """色塊點擊：與按鈕行為相同。"""
-        self._on_char_color_btn()
-
-    def _on_char_position_changed(self, _idx: int) -> None:
-        if self._updating:
-            return
-        char = self._get_current_char()
-        if not char:
-            return
-        pos_label = self._combo_char_pos.currentText()
-        char.position = _POS_TO_KEY.get(pos_label, "center")
         self.character_property_changed.emit()
 
     def refresh_costume_list(self) -> None:
         """外部呼叫：重新整理角色屬性面板的服裝列表（服裝編輯後）。"""
         self._refresh_char_props()
 
-    def refresh_characters(self) -> None:
-        """外部呼叫：重新整理角色列表。"""
+    def refresh_characters(self, keep_tab: bool = False) -> None:
+        """外部呼叫：重新整理角色列表。keep_tab=True 時保持在角色頁。"""
+        saved_index = self._current_char_index
         self._refresh_character_list()
+        if keep_tab and saved_index >= 0:
+            self._seg_widget.setCurrentItem("characters")
+            self._list_stack.setCurrentIndex(1)
+            self.character_list.setCurrentRow(saved_index)
+            self._inspector.setCurrentIndex(2)
 
     def refresh_scenes(self) -> None:
         """外部呼叫：重新整理場景列表。"""

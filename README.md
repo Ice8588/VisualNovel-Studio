@@ -1,4 +1,4 @@
-# VisualNovel Studio v1.0.0
+# VisualNovel Studio
 
 給台灣文字創作者的視覺小說製作工具。
 匯入文字和圖片，零學習門檻產出可分享的視覺小說。
@@ -7,10 +7,13 @@
 
 - **匯入文字** — 支援 `.txt` / `.docx`，自動辨識台詞（「」）與旁白
 - **素材管理** — 匯入背景圖、角色立繪（PNG/JPG）、背景音樂（MP3/WAV）
-- **場景編輯** — 拖拉排序場景、指定背景與 BGM、編輯對話內容與角色
-- **即時預覽** — 內嵌 WebView 即時呈現播放效果
+- **角色系統** — 多服裝、多表情差分，名牌顏色自訂
+- **舞台控制** — 每句台詞可獨立設定左/中/右三槽位立繪，說話者與畫面人物分離
+- **場景編輯** — 拖拉排序場景與對話、指定背景、BGM、視覺特效（雨/雪/CRT/像素）
+- **批次操作** — 多選對話列一次指定角色或設置舞台
+- **即時預覽** — 內嵌 WebView 16:9 即時呈現播放效果
 - **導出網頁 (ZIP)** — 打包為 HTML + JS，可上傳至 itch.io 或 Netlify
-- **導出影片 (MP4)** — 透過 ffmpeg 輸出影片，可上傳 YouTube 或巴哈姆特
+- **導出影片 (MP4)** — WYSIWYG 截幀導出，完整保留特效與樣式，透過 ffmpeg 編碼
 - **專案儲存** — JSON 格式 `.vnsproj`，隨時存取
 
 ## 安裝
@@ -55,44 +58,22 @@ dist/VisualNovel Studio/VisualNovel Studio.exe
 2. **匯入文字** → 檔案 > 匯入文字（選擇 .txt 或 .docx）
 3. **匯入素材** → 左側面板點「新增」匯入背景圖、立繪、音樂
 4. **編輯場景** → 中央面板選擇場景，設定背景和 BGM，編輯對話
-5. **預覽** → 右側面板即時預覽效果
-6. **導出** → 導出 > 導出網頁 (ZIP) 或 導出影片 (MP4)
-7. **儲存** → 檔案 > 儲存專案
+5. **設置舞台** → 預覽畫面點 `+` 槽位，為每句台詞指定左/中/右立繪
+6. **預覽** → 中央上方即時預覽效果
+7. **導出** → 導出 > 導出網頁 (ZIP) 或 導出影片 (MP4)
+8. **儲存** → 檔案 > 儲存專案
 
 ## 技術架構
 
 ```
-桌面應用：Python + PyQt6
-預覽引擎：QtWebEngine（內嵌 WebView）
-播放核心：HTML5 + Vanilla JS
-素材處理：Pillow（圖片）
-文件解析：python-docx（.docx 匯入）
-影片導出：Pillow（幀合成）+ ffmpeg（編碼）
-導出格式：ZIP（互動網頁）/ MP4（影片）
+桌面應用：Python + PyQt6 + PyQt6-Fluent-Widgets
+預覽引擎：QtWebEngine（內嵌 WebView，16:9 Letterbox）
+播放核心：HTML5 + Vanilla JS（無框架）
+素材處理：Pillow
+文件解析：python-docx
+影片導出：QtWebEngine WYSIWYG 截幀 + ffmpeg 編碼
+導出格式：ZIP（互動網頁）/ 單一 HTML（Base64）/ MP4
 專案格式：JSON（.vnsproj）
-```
-
-## 專案結構
-
-```
-src/
-├── core/           # 核心邏輯（模型、解析、導出）
-│   ├── models.py
-│   ├── text_parser.py
-│   ├── project_io.py
-│   ├── asset_manager.py
-│   ├── exporter.py
-│   └── exporter_video.py
-├── ui/             # PyQt6 介面
-│   ├── main_window.py
-│   ├── center_panel.py
-│   ├── left_panel.py
-│   ├── right_panel.py
-│   └── dialogs.py
-└── engine/         # HTML/JS 播放引擎
-    ├── index.html
-    ├── engine.js
-    └── style.css
 ```
 
 ## 授權
