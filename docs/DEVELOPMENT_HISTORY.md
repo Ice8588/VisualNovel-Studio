@@ -63,6 +63,35 @@
 
 ---
 
+## Phase C 紀錄（2026-04-18）
+
+### 成果
+- **C2 dropzone**：`CharacterEditorDialog` 整個對話框接受圖片拖曳（`dragEnterEvent`/`dropEvent`），PNG / JPG 自動 `import_asset` 成立繪並更新預覽縮圖。多檔拖入時只取第一張（這個對話框只管單一預設立繪，多差分改用 `CostumeEditorDialog`）。
+- **C3 雙擊重命名差分**：`CostumeEditorDialog._expr_list` 設 `DoubleClicked | EditKeyPressed` 觸發、`ItemIsEditable` flag，`_on_expr_label_changed` 把新 `label` 寫回 `SpriteVariant`；空字串還原避免誤改。
+- **C6 角色卡跨專案共享**：
+  - 新增 [`src/core/character_library.py`](../src/core/character_library.py)：
+    - `get_library_dir()` → `~/.vnstudio/character_cards/`（跨平台）。
+    - `save_card(character, assets_dir)` 打包為 `.vncard` zip（含 `character.json` + `assets/`），檔名衝突加數字後綴。
+    - `list_cards()`、`load_card(card, target_assets_dir)`（衝突檔名自動 rename，更新 SpriteVariant.filename）、`delete_card()`。
+  - `CharacterEditorDialog` 新增「儲存為角色卡…／從角色卡匯入…」按鈕；匯入後若卡內含多差分，`get_character()` 保留完整 costumes（`_loaded_from_card` flag）。
+  - 測試：[`tests/test_character_library.py`](../tests/test_character_library.py) 10 個案例涵蓋 save/list/load 迴圈、檔名衝突、不合法檔、unicode 與特殊字元角色名。
+
+### 驗證
+- `QT_QPA_PLATFORM=offscreen python -m pytest tests/` → 116 passed（新增 10 個）。
+- 手動煙測：在 A 專案儲卡 → 開 B 專案『從角色卡匯入』→ 檢查立繪複製至 B 的 `assets/`。
+
+### 已完成（計畫書以為要做但實際已在的項目）
+- C1 新增角色只加一張預設立繪：`CharacterEditorDialog` 本來就設計為單張。
+- C4 屬性面板不回跳場景：`left_panel.refresh_characters(keep_tab=True)` 已在 `main_window._on_edit_character` 與 `_on_character_property_changed` 呼叫。
+- C5 預設色盤：`_PRESET_COLORS` 8 色已實作。
+
+### 給 CODEX 的備忘
+- 角色卡儲存路徑固定於 `~/.vnstudio/character_cards/`（開放問題 #1 預設決策）。
+- 匯入角色卡時立繪檔名衝突會自動 rename 為 `{name}_1.{ext}`，SpriteVariant.filename 同步更新；既有檔案不被覆寫（安全優先）。
+- `.vncard` 格式：zip + `character.json` + `assets/*`，對應於 CLAUDE.md 的「專案檔案格式」章節（如果文件需要同步，請於 Phase D/E 結束後補）。
+
+---
+
 ## Phase B 紀錄（2026-04-18）
 
 ### 成果（B4/B5/B6/B7；B1/B2/B3 先前已完成）
