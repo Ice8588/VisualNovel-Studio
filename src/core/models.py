@@ -8,9 +8,9 @@ from pathlib import Path
 
 @dataclass
 class SpriteVariant:
-    """一個角色的表情差分（如微笑、生氣等）。"""
+    """一個角色的立繪差分（如微笑、生氣等）。"""
 
-    label: str      # 表情名稱，如 "微笑"
+    label: str      # 差分名稱，如 "微笑"
     filename: str   # 素材檔名，如 "char_xm_smile.png"
 
     def to_dict(self) -> dict:
@@ -23,7 +23,7 @@ class SpriteVariant:
 
 @dataclass
 class Costume:
-    """一套服裝，包含多個表情差分。"""
+    """一套服裝，包含多個立繪差分。"""
 
     name: str
     expressions: list[SpriteVariant] = field(default_factory=list)
@@ -44,23 +44,27 @@ class Costume:
 
 @dataclass
 class Character:
-    """角色資料：名稱、名牌顏色、螢幕位置、服裝列表（每套服裝含多個表情）。"""
+    """角色資料：名稱、名牌顏色、服裝列表（每套服裝含多個差分）。
+
+    `position` 為 legacy 欄位：新專案已不使用，由 Dialogue.stage 取代，
+    但 from_dict 仍接受以相容舊檔；to_dict 不再寫出 position。
+    """
 
     name: str
     name_color: str = "#4682B4"
-    position: str = "center"  # "left" / "center" / "right"
+    position: str = "center"  # legacy：新檔不寫出（stage 取代）
     costumes: list[Costume] = field(default_factory=list)
 
     @property
     def sprites(self) -> list[SpriteVariant]:
-        """向下相容：回傳所有服裝的表情展平列表。"""
+        """向下相容：回傳所有服裝的差分展平列表。"""
         return [e for c in self.costumes for e in c.expressions]
 
     def to_dict(self) -> dict:
+        # position 為 legacy 欄位，不再寫入新專案檔；舊檔透過 from_dict 相容
         return {
             "name": self.name,
             "name_color": self.name_color,
-            "position": self.position,
             "costumes": [c.to_dict() for c in self.costumes],
         }
 
@@ -87,7 +91,7 @@ class Dialogue:
     type: str  # "dialogue" 或 "narration"
     text: str
     character: str | None = None
-    sprite: str | None = None    # 表情標籤（對應 SpriteVariant.label）
+    sprite: str | None = None    # 差分標籤（對應 SpriteVariant.label）
     costume: str | None = None   # 服裝名稱（對應 Costume.name）
     effects: list[str] = field(default_factory=list)  # 文字效果，如 ["bold", "italic"]
     stage: dict[str, dict | None] = field(
