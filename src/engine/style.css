@@ -171,25 +171,21 @@ body.capture-mode #stage-overlay { display: none !important; }
 
 /* ── 對話框 ── */
 
-/* 字框寬度由 engine.js::sizeDialogueBox() 顯式量測並設置
-   （fit-content / max-content 在 QtWebEngine typewriter innerHTML 更新下
-   reflow 不穩，改由 JS 量測保證每次打字都重算）。
-   CSS 只提供 max-width 作為上限、padding 與視覺樣式。 */
+/* 視覺小說標準字框：固定位置與大小、底部橫跨全寬、文字靠左對齊
+   box 尺寸與位置不會隨文字變動（打字過程只有文字本身顯現）。
+   Quick Menu 高 32px 貼底，因此 dialogue-box bottom: 32px。 */
 #dialogue-box {
   position: absolute;
   bottom: 32px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 0;
+  right: 0;
   z-index: 10;
   background: rgba(20, 20, 40, 0.85);
   border-top: 2px solid rgba(70, 130, 180, 0.4);
-  padding: 14px 22px;
-  max-width: calc(100% - 48px);
+  padding: 18px 32px;
+  min-height: 150px;
   box-sizing: border-box;
-  border-radius: 4px;
-  /* width 由 JS 動態設置，這裡留 auto 避免初始 flash */
-  width: auto;
-  transition: width 0.08s ease-out;
+  text-align: left;
 }
 
 /* B7：名牌長度貼合文字，背景由 engine.js 動態塞入半透明 name_color
@@ -209,12 +205,13 @@ body.capture-mode #stage-overlay { display: none !important; }
   white-space: nowrap;
 }
 
-/* #dialogue-text 高度由內容決定；min-height 留一行避免空字串時塌陷 */
+/* 文字靠左對齊、自動換行 */
 #dialogue-text {
   color: #eee;
   font-size: 18px;
   line-height: 1.6;
-  min-height: 1.6em;
+  min-height: 3.2em;
+  text-align: left;
   word-break: break-word;
   overflow-wrap: break-word;
   white-space: normal;

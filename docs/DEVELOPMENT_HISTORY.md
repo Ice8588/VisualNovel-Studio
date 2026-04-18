@@ -63,6 +63,22 @@
 
 ---
 
+## Hotfix 紀錄（2026-04-19 c）
+
+### 字框規格反轉：改回視覺小說標準（固定全寬、文字靠左）
+- **背景**：使用者更正需求——**希望**字框「每次大小和位置都長一樣，不隨文字變動，文字靠左對齊，像視覺小說那樣」。先前 Phase E 做的 auto-width 是誤解；這是回退變更。
+- **修正**：
+  - `style.css` `#dialogue-box`：改回 `left: 0; right: 0`（全寬橫條）、`padding: 18px 32px`、`min-height: 150px`（3 行以上空間）、移除所有 `width / max-width / transform` 動態屬性。
+  - `#dialogue-text`：`text-align: left`、`min-height: 3.2em`（兩行預留）。
+  - `engine.js` 移除 `sizeDialogueBox()` 函式、量測 span、所有呼叫點（typeText/skipTypewriter/showDialogue/applyGameSettings/resize listener）。
+- **驗證**：`pytest tests/` → 120 passed。目視煙測：短台詞、長台詞、typewriter 過程中字框尺寸與位置完全不變，文字從左側逐字顯現。
+- **給 CODEX 的備忘**：
+  - 此回退涵蓋 Phase E 的 E1（auto-width）、以及三次 Hotfix（`fix/dialogue-box-grow` / JS 量測 / CSS fit-content 嘗試）。
+  - MP4 匯出（CAPTURE_MODE）亦同樣使用固定字框（CSS 一致），與 Preview 一致。
+  - `#name-plate` 仍維持 `inline-block + 半透明 name_color` 設計（B7）。
+
+---
+
 ## Hotfix 紀錄（2026-04-19 b）
 
 ### 匯入按鈕裁切 + 字框仍不動態
