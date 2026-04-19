@@ -98,6 +98,24 @@ class Dialogue:
         default_factory=lambda: {"left": None, "center": None, "right": None}
     )  # 舞台槽位：{"left": {"character": str, "sprite": str|None, "costume": str|None} | None, ...}
 
+    def set_stage_slot(self, position: str, value: dict | None) -> None:
+        """設定 stage 槽位；若 value 的角色已在此 Dialogue 其他槽，自動把舊槽清空。
+
+        去重範圍僅限此 Dialogue 內三槽（同一對話列）；跨 Dialogue 不干涉。
+        ``value`` 為 None（clear）時不觸發去重。
+        """
+        if position not in ("left", "center", "right"):
+            raise ValueError(f"invalid stage position: {position}")
+        if value and value.get("character"):
+            new_char = value["character"]
+            for other in ("left", "center", "right"):
+                if other == position:
+                    continue
+                slot = self.stage.get(other)
+                if slot and slot.get("character") == new_char:
+                    self.stage[other] = None
+        self.stage[position] = value
+
     def to_dict(self) -> dict:
         d: dict = {
             "type": self.type,

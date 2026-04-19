@@ -1092,14 +1092,14 @@ class CenterPanel(QWidget):
             return
         d = scene.dialogues[dlg_idx]
         if action == "clear":
-            d.stage[position] = None
+            d.set_stage_slot(position, None)
         else:  # "add" or "swap"
             from src.ui.dialogs import StageSlotPickerDialog
             characters = self._project.characters if self._project else []
             picker = StageSlotPickerDialog(characters, current=d.stage.get(position), parent=self)
             if picker.exec() != picker.DialogCode.Accepted:
                 return
-            d.stage[position] = picker.get_value()
+            d.set_stage_slot(position, picker.get_value())
         # 局部刷新 preview（不退回第一幕）
         js = (
             f"if(window.VNPreviewAPI){{"
@@ -1171,9 +1171,9 @@ class CenterPanel(QWidget):
                 if v is None:
                     continue
                 elif v == "clear":
-                    d.stage[pos] = None
+                    d.set_stage_slot(pos, None)
                 else:
-                    d.stage[pos] = v
+                    d.set_stage_slot(pos, v)
         self._refresh_dialogue_table()
         self.preview.reload_preview()
         self.project_changed.emit()
