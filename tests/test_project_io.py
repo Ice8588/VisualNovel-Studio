@@ -1,6 +1,7 @@
 """測試 project_io.py：存讀往返與錯誤處理。"""
 
 import json
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -90,3 +91,61 @@ class TestSaveAndLoad:
 
         raw = filepath.read_text(encoding="utf-8")
         assert "繁體中文標題" in raw  # 不應是 \u escape
+
+
+class TestSaveMigratesAssets:
+    """Bug 1：save_project 必須把 assets/ 從來源搬到目標。"""
+
+    def test_save_migrates_assets_from_temp(self, tmp_path, monkeypatch):
+        """首次另存（project_path=None）→ 從 %TEMP%/vnstudio_unsaved/assets 搬到目標。"""
+        fake_tmp = tmp_path / "tmpdir"
+        fake_tmp.mkdir()
+        monkeypatch.setattr(tempfile, "gettempdir", lambda: str(fake_tmp))
+
+        unsaved = fake_tmp / "vnstudio_unsaved" / "assets"
+        unsaved.mkdir(parents=True)
+        (unsaved / "bg.png").write_bytes(b"fake-bg")
+
+        target_dir = tmp_path / "project"
+        target_dir.mkdir()
+        target = target_dir / "proj.vnsproj"
+
+        project = Project(title="t")
+        save_project(project, target)
+
+        assert (target_dir / "assets" / "bg.png").exists()
+        assert (target_dir / "assets" / "bg.png").read_bytes() == b"fake-bg"
+
+    def test_save_as_copies_across_dirs(self, tmp_path):
+        """既存專案另存到別處 → 從 dir1/assets 複製到 dir2/assets，dir1 仍保留。"""
+        dir1 = tmp_path / "p1"
+        dir1.mkdir()
+        (dir1 / "assets").mkdir()
+        (dir1 / "assets" / "bg.png").write_bytes(b"abc")
+        proj1_path = dir1 / "p1.vnsproj"
+        project = Project(title="t", project_path=proj1_path)
+
+        dir2 = tmp_path / "p2"
+        dir2.mkdir()
+        proj2_path = dir2 / "p2.vnsproj"
+
+        save_project(project, proj2_path)
+
+        assert (dir2 / "assets" / "bg.png").exists()
+        assert (dir2 / "assets" / "bg.png").read_bytes() == b"abc"
+        assert (dir1 / "assets" / "bg.png").exists()  # 來源不該被 move
+
+    def test_save_in_place_idempotent(self, tmp_path):
+        """同位置重複 save 不應崩潰（src.resolve() == dst.resolve() → 跳過 copytree）。"""
+        d = tmp_path / "p"
+        d.mkdir()
+        (d / "assets").mkdir()
+        (d / "assets" / "bg.png").write_bytes(b"x")
+        path = d / "p.vnsproj"
+        project = Project(title="t", project_path=path)
+
+        save_project(project, path)
+        save_project(project, path)  # 第二次：source == target
+
+        assert (d / "assets" / "bg.png").exists()
+        assert (d / "assets" / "bg.png").read_bytes() == b"x"
