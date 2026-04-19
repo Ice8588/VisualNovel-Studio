@@ -1,14 +1,9 @@
 """theme 模組測試。"""
 
-import pytest
-from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QFont
 
 
-@pytest.fixture(scope="module")
-def qapp():
-    app = QApplication.instance() or QApplication([])
-    yield app
+# qapp fixture 來自 tests/conftest.py（session scope）
 
 
 def test_apply_theme_uses_font_families_fallback(qapp):

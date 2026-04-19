@@ -1,351 +1,66 @@
-"""中央-右側面板：預覽（上）+ 對話表格（下）。"""
+"""Phase 2：中央面板重構。
+
+結構（垂直 QSplitter）：
+  ├─ PreviewWidget（上，既有元件）
+  └─ Bottom（垂直 QSplitter）
+      ├─ Workspace（水平 QSplitter 包在 QScrollArea）
+      │    ├─ DialogueColumn   左，拉伸
+      │    ├─ StagePanel       中，固定 3*LANE_WIDTH
+      │    └─ EffectTimelineWidget 右，固定 N*LANE_WIDTH
+      └─ SegmentEditor（底，固定 ~160px）
+
+MainWindow 依賴的公開介面（保持不變）：
+- 屬性 preview / spin_dlg_font / spin_name_font / spin_opacity / btn_refresh_preview
+- signal project_changed / empty_state_import_text / empty_state_add_scene
+- method set_project / set_current_scene / add_dialogues_to_current_scene /
+  reload_preview / get_selected_dialogue_index / cleanup / refresh
+"""
 
 from __future__ import annotations
 
-from PyQt6.QtCore import QEvent, QObject, QRect, Qt, pyqtSignal
-from PyQt6.QtGui import QAction, QBrush, QColor, QIcon, QKeySequence, QPixmap
+from typing import TYPE_CHECKING
+
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
-    QAbstractItemView,
-    QComboBox,
     QDoubleSpinBox,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
-    QMenu,
-    QPlainTextEdit,
+    QScrollArea,
     QSpinBox,
     QSplitter,
-    QStyledItemDelegate,
-    QStyle,
-    QTableWidget,
-    QTableWidgetItem,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
-from qfluentwidgets import LineEdit, PushButton
+from qfluentwidgets import PushButton
 
-from src.core.effects import TEXT_EFFECTS
-from src.core.models import Character, Dialogue, Project, Scene
-from src.ui.preview_widget import PreviewWidget
+from src.core.models import Dialogue, Project, Scene
+from src.ui import _timeline_shared as shared
+from src.ui.dialogue_list import DialogueColumn
+from src.ui.effect_timeline import EffectTimelineHeader, EffectTimelineWidget
 from src.ui.empty_state import EmptyStateWidget
+from src.ui.preview_widget import PreviewWidget
+from src.ui.segment_editor import SegmentEditor
+from src.ui.stage_panel import StageHeader, StagePanel
 
-NONE_LABEL = "(無)"
-NARRATION_LABEL = "(旁白)"
-UNASSIGNED_LABEL = "(未選取)"
-
-# 單一來源：src/core/effects.py；engine.js 端常量由 tests/test_effects_sync.py 守護
-EFFECT_KEY_ORDER: list[str] = [k for k, _ in TEXT_EFFECTS]
-EFFECT_DISPLAY: dict[str, str] = dict(TEXT_EFFECTS)
+if TYPE_CHECKING:
+    pass
 
 
-class _MultilineDelegate(QStyledItemDelegate):
-    """文字欄 delegate：用 QPlainTextEdit 允許 Enter 換行。"""
+class _Column(QWidget):
+    """header + content 縱向組合，用於三域的每一欄。header 隨欄寬移動。"""
 
-    def createEditor(self, parent, option, index):
-        editor = QPlainTextEdit(parent)
-        return editor
-
-    def setEditorData(self, editor: QPlainTextEdit, index) -> None:
-        editor.setPlainText(index.data(Qt.ItemDataRole.EditRole) or "")
-
-    def setModelData(self, editor: QPlainTextEdit, model, index) -> None:
-        model.setData(index, editor.toPlainText(), Qt.ItemDataRole.EditRole)
-
-    def updateEditorGeometry(self, editor, option, index) -> None:
-        rect = option.rect
-        if rect.height() < 72:
-            rect.setHeight(72)
-        editor.setGeometry(rect)
-
-
-class _IndexDelegate(QStyledItemDelegate):
-    """索引欄 delegate：hover 行顯示 ▶ 提示可跳轉預覽。"""
-
-    def __init__(self, parent=None):
+    def __init__(self, header: QWidget, content: QWidget, parent=None):
         super().__init__(parent)
-        self._hovered_row: int = -1
-
-    def paint(self, painter, option, index) -> None:
-        if index.row() == self._hovered_row:
-            painter.save()
-            selected = bool(option.state & QStyle.StateFlag.State_Selected)
-            if selected:
-                painter.fillRect(option.rect, option.palette.highlight())
-                painter.setPen(option.palette.highlightedText().color())
-            else:
-                painter.fillRect(option.rect, option.palette.base())
-                painter.setPen(option.palette.text().color())
-            painter.drawText(option.rect, Qt.AlignmentFlag.AlignCenter, "▶")
-            painter.restore()
-        else:
-            super().paint(painter, option, index)
-
-
-class _HoverFilter(QObject):
-    """Viewport event filter：追蹤滑鼠 hover 行，通知 IndexDelegate 重繪。"""
-
-    def __init__(self, table: QTableWidget, delegate: _IndexDelegate):
-        super().__init__(table)
-        self._table = table
-        self._delegate = delegate
-        table.viewport().installEventFilter(self)
-
-    def eventFilter(self, obj, event) -> bool:
-        try:
-            vp = self._table.viewport()
-        except RuntimeError:
-            return False
-        if obj is vp:
-            if event.type() == QEvent.Type.MouseMove:
-                row = self._table.rowAt(event.position().toPoint().y())
-                if row != self._delegate._hovered_row:
-                    self._delegate._hovered_row = row
-                    vp.update()
-            elif event.type() == QEvent.Type.Leave:
-                if self._delegate._hovered_row != -1:
-                    self._delegate._hovered_row = -1
-                    vp.update()
-        return False
-
-
-def _hex_to_qcolor(hex_color: str, alpha: int = 64) -> QColor:
-    """把 #RRGGBB 轉 QColor 並附 alpha（0-255）；非法 hex 回傳預設藍。"""
-    try:
-        c = QColor(hex_color)
-        if not c.isValid():
-            c = QColor("#4682B4")
-    except Exception:
-        c = QColor("#4682B4")
-    c.setAlpha(alpha)
-    return c
-
-
-def _contrast_text_qcolor(bg_hex: str) -> QColor:
-    """依 YIQ 公式選擇深 / 淺字色，確保在該背景下可讀。"""
-    try:
-        c = QColor(bg_hex)
-        if not c.isValid():
-            c = QColor("#4682B4")
-    except Exception:
-        c = QColor("#4682B4")
-    r, g, b = c.red(), c.green(), c.blue()
-    yiq = (r * 299 + g * 587 + b * 114) / 1000
-    return QColor(0, 0, 0) if yiq >= 128 else QColor(255, 255, 255)
-
-
-class _StageCellWidget(QWidget):
-    """D3：舞台欄三槽（L/C/R）子元件；每槽為按鈕，顯示角色名或「+」，點擊開 picker。"""
-
-    slot_clicked = pyqtSignal(str)  # position: "left" / "center" / "right"
-
-    def __init__(self, parent: QWidget | None = None):
-        super().__init__(parent)
-        layout = QHBoxLayout()
-        layout.setContentsMargins(2, 2, 2, 2)
-        layout.setSpacing(2)
-        self._buttons: dict[str, PushButton] = {}
-        for pos in ("left", "center", "right"):
-            btn = PushButton("+")
-            btn.setObjectName("tableCombo")
-            btn.setMinimumWidth(40)
-            btn.setToolTip({"left": "左槽", "center": "中槽", "right": "右槽"}[pos])
-            btn.clicked.connect(lambda _checked=False, p=pos: self.slot_clicked.emit(p))
-            layout.addWidget(btn)
-            self._buttons[pos] = btn
-        self.setLayout(layout)
-
-    def set_stage(self, stage: dict) -> None:
-        for pos, btn in self._buttons.items():
-            slot = (stage or {}).get(pos)
-            if slot and slot.get("character"):
-                # 縮短角色名避免擠出
-                name = slot["character"]
-                if len(name) > 3:
-                    name = name[:2] + "…"
-                btn.setText(name)
-                btn.setToolTip(
-                    f"{ {'left':'左槽','center':'中槽','right':'右槽'}[pos] }：{slot['character']}"
-                    + (f"｜{slot.get('costume')}" if slot.get("costume") else "")
-                    + (f"｜{slot.get('sprite')}" if slot.get("sprite") else "")
-                )
-            else:
-                btn.setText("+")
-                btn.setToolTip({"left": "左槽（空）", "center": "中槽（空）", "right": "右槽（空）"}[pos])
-
-
-class _EffectsMenuButton(PushButton):
-    """D1：多選文字效果按鈕；點擊展開可勾選選單，按鈕文字顯示目前效果數量。"""
-
-    effects_changed = pyqtSignal(list)  # list[str] of effect keys
-
-    def __init__(self, parent: QWidget | None = None):
-        super().__init__(parent)
-        self._selected: list[str] = []
-        self.setObjectName("tableCombo")
-        self._menu = QMenu(self)
-        self._actions: dict[str, QAction] = {}
-        for key in EFFECT_KEY_ORDER:
-            act = QAction(EFFECT_DISPLAY.get(key, key), self._menu)
-            act.setCheckable(True)
-            act.toggled.connect(lambda _checked, k=key: self._on_toggled(k))
-            self._menu.addAction(act)
-            self._actions[key] = act
-        self.clicked.connect(self._show_menu)
-        self._refresh_label()
-
-    def _show_menu(self) -> None:
-        pos = self.mapToGlobal(self.rect().bottomLeft())
-        self._menu.exec(pos)
-
-    def _on_toggled(self, key: str) -> None:
-        # 取所有勾選 action 的 key（維持 EFFECT_KEY_ORDER 排序）
-        new_selected = [k for k in EFFECT_KEY_ORDER if self._actions[k].isChecked()]
-        if new_selected == self._selected:
-            return
-        self._selected = new_selected
-        self._refresh_label()
-        self.effects_changed.emit(list(self._selected))
-
-    def set_effects(self, effects: list[str]) -> None:
-        self._selected = [k for k in EFFECT_KEY_ORDER if k in effects]
-        for key, act in self._actions.items():
-            act.blockSignals(True)
-            act.setChecked(key in self._selected)
-            act.blockSignals(False)
-        self._refresh_label()
-
-    def get_effects(self) -> list[str]:
-        return list(self._selected)
-
-    def _refresh_label(self) -> None:
-        if not self._selected:
-            self.setText(NONE_LABEL)
-        elif len(self._selected) == 1:
-            self.setText(EFFECT_DISPLAY.get(self._selected[0], self._selected[0]))
-        else:
-            self.setText(f"{EFFECT_DISPLAY.get(self._selected[0], self._selected[0])} +{len(self._selected) - 1}")
-
-
-class _BatchToolbar(QWidget):
-    """多選 ≥2 行時浮現的批次操作列。"""
-
-    batch_assign = pyqtSignal()
-    batch_stage = pyqtSignal()
-    batch_delete = pyqtSignal()
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        layout = QHBoxLayout()
-        layout.setContentsMargins(6, 2, 6, 2)
-        self._lbl = QLabel("已選取 0 行")
-        layout.addWidget(self._lbl)
-        layout.addStretch()
-        btn_assign = PushButton("批次指定角色")
-        btn_assign.clicked.connect(self.batch_assign)
-        layout.addWidget(btn_assign)
-        btn_stage = PushButton("批次設置舞台")
-        btn_stage.clicked.connect(self.batch_stage)
-        layout.addWidget(btn_stage)
-        btn_del = PushButton("刪除選取")
-        btn_del.clicked.connect(self.batch_delete)
-        layout.addWidget(btn_del)
-        self.setLayout(layout)
-        self.hide()
-
-    def update_count(self, n: int) -> None:
-        self._lbl.setText(f"已選取 {n} 行")
-        self.setVisible(n >= 2)
-
-
-class _DraggableTable(QTableWidget):
-    """自訂拖曳排序的 QTableWidget，不依賴 Qt InternalMove 的 visual/logical 映射。
-
-    D5：在拖曳過程中以粗線繪出插入位置（Qt 預設指標太細、易看不見）。
-    """
-
-    row_moved = pyqtSignal(int, int)  # (from_row, to_row)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop)
-        self.setDefaultDropAction(Qt.DropAction.MoveAction)
-        self.setDragEnabled(True)
-        self.setAcceptDrops(True)
-        self.viewport().setAcceptDrops(True)
-        self.setDragDropOverwriteMode(False)
-        self.setDropIndicatorShown(False)  # 用自訂線蓋過預設指標
-        self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self._drop_line_y: int = -1  # 自訂插入線的 y 座標（viewport 內）；-1 = 不畫
-
-    def startDrag(self, supportedActions):
-        row = self.currentRow()
-        if row >= 0:
-            self.selectRow(row)
-        super().startDrag(supportedActions)
-
-    def dragMoveEvent(self, event) -> None:
-        # 更新插入線位置
-        pos = event.position().toPoint()
-        to_index = self.indexAt(pos)
-        if to_index.isValid():
-            rect = self.visualRect(to_index)
-            if pos.y() > rect.center().y():
-                y = rect.bottom()
-            else:
-                y = rect.top()
-        else:
-            # 未指向有效 row → 放在最後
-            y = self.viewport().height() - 1
-        if y != self._drop_line_y:
-            self._drop_line_y = y
-            self.viewport().update()
-        event.accept()
-
-    def dragLeaveEvent(self, event) -> None:
-        self._drop_line_y = -1
-        self.viewport().update()
-        super().dragLeaveEvent(event)
-
-    def paintEvent(self, event) -> None:
-        super().paintEvent(event)
-        if self._drop_line_y < 0:
-            return
-        from PyQt6.QtGui import QPainter, QPen
-        painter = QPainter(self.viewport())
-        pen = QPen(QColor(70, 180, 220))
-        pen.setWidth(3)
-        painter.setPen(pen)
-        painter.drawLine(0, self._drop_line_y, self.viewport().width(), self._drop_line_y)
-        painter.end()
-
-    def dropEvent(self, event) -> None:
-        self._drop_line_y = -1
-        self.viewport().update()
-        from_row = self.currentRow()
-        to_index = self.indexAt(event.position().toPoint())
-        if to_index.isValid():
-            to_row = to_index.row()
-            rect = self.visualRect(to_index)
-            if event.position().toPoint().y() > rect.center().y():
-                to_row = min(to_row + 1, self.rowCount() - 1)
-        else:
-            to_row = self.rowCount() - 1
-
-        if from_row >= 0 and to_row != from_row:
-            self.row_moved.emit(from_row, to_row)
-        event.accept()
-
-    def mousePressEvent(self, event):
-        index = self.indexAt(event.pos())
-        if not index.isValid():
-            self.clearSelection()
-            self.setCurrentItem(None)
-        super().mousePressEvent(event)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(header)
+        layout.addWidget(content, 1)
 
 
 class CenterPanel(QWidget):
-    """預覽 + 對話表格，支援行內編輯、搜尋、批次操作。"""
+    """三域分離的中央面板。"""
 
     project_changed = pyqtSignal()
     empty_state_import_text = pyqtSignal()
@@ -355,974 +70,371 @@ class CenterPanel(QWidget):
         super().__init__(parent)
         self._project: Project | None = None
         self._current_scene_index: int = -1
-        self._updating = False
-        self._search_results: list[tuple[int, int]] = []
-        self._search_current: int = -1
-        self._clipboard_dialogues: list[Dialogue] = []
+        self._building: bool = False
         self._setup_ui()
 
+    # ── UI 組裝 ─────────────────────────────────────────────
+
     def _setup_ui(self) -> None:
-        layout = QVBoxLayout()
-        layout.setContentsMargins(4, 4, 4, 4)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(4, 4, 4, 4)
 
-        splitter = QSplitter(Qt.Orientation.Vertical)
-        splitter.setHandleWidth(6)
+        self._main_splitter = QSplitter(Qt.Orientation.Vertical)
+        self._main_splitter.setHandleWidth(6)
 
-        # ── 上半：預覽 ──
-        self.preview = PreviewWidget()
+        # 上：PreviewWidget + toolbar
+        self._main_splitter.addWidget(self._build_preview_container())
 
-        # ── 下半：對話表格 ──
-        dialogue_widget = QWidget()
-        dialogue_layout = QVBoxLayout()
-        dialogue_layout.setContentsMargins(0, 0, 0, 0)
+        # 下：Workspace（三域）+ SegmentEditor
+        self._main_splitter.addWidget(self._build_editing_container())
 
-        # 按鈕列
-        dlg_header = QHBoxLayout()
-        dlg_header.addWidget(QLabel("文字列表"))
-        dlg_header.addStretch()
-        self.btn_add_dialogue = PushButton("新增")
-        self.btn_remove_dialogue = PushButton("移除")
-        self.btn_move_up = PushButton("上移")
-        self.btn_move_down = PushButton("下移")
-        self.btn_remove_dialogue.setEnabled(False)
-        self.btn_move_up.setEnabled(False)
-        self.btn_move_down.setEnabled(False)
-        dlg_header.addWidget(self.btn_add_dialogue)
-        dlg_header.addWidget(self.btn_remove_dialogue)
-        dlg_header.addWidget(self.btn_move_up)
-        dlg_header.addWidget(self.btn_move_down)
-        dialogue_layout.addLayout(dlg_header)
+        self._main_splitter.setStretchFactor(0, 1)
+        self._main_splitter.setStretchFactor(1, 1)
+        self._main_splitter.setSizes([400, 400])
 
-        # 搜尋列
-        search_layout = QHBoxLayout()
-        search_layout.addWidget(QLabel("搜尋:"))
-        self.search_input = LineEdit()
-        self.search_input.setPlaceholderText("輸入關鍵字搜尋對話…")
-        self.btn_search_prev = PushButton("<")
-        self.btn_search_next = PushButton(">")
-        # 搜尋箭頭按鈕：minimumWidth 讓字體放大時不裁切
-        self.btn_search_prev.setMinimumWidth(40)
-        self.btn_search_next.setMinimumWidth(40)
-        self.lbl_search_count = QLabel("")
-        self.btn_search_prev.setEnabled(False)
-        self.btn_search_next.setEnabled(False)
-        search_layout.addWidget(self.search_input, 1)
-        search_layout.addWidget(self.btn_search_prev)
-        search_layout.addWidget(self.btn_search_next)
-        search_layout.addWidget(self.lbl_search_count)
-        dialogue_layout.addLayout(search_layout)
+        root.addWidget(self._main_splitter)
 
-        # 批次操作列（多選 ≥2 顯示）
-        self._batch_toolbar = _BatchToolbar()
-        self._batch_toolbar.batch_assign.connect(self._on_batch_assign)
-        self._batch_toolbar.batch_stage.connect(self._on_batch_stage)
-        self._batch_toolbar.batch_delete.connect(self._on_batch_delete_selected)
-        dialogue_layout.addWidget(self._batch_toolbar)
+        # preview bridge：dialogue_advanced 同步游標
+        self.preview.bridge.dialogue_advanced.connect(self._on_preview_dialogue_advanced)
 
-        # 對話表格：7 欄（#、文字、角色、服裝、差分、效果、舞台）
-        self.dialogue_table = _DraggableTable()
-        self.dialogue_table.setColumnCount(7)
-        self.dialogue_table.setHorizontalHeaderLabels(
-            ["#", "文字", "角色", "服裝", "差分", "效果", "舞台"]
-        )
-        # D2：UI 文案明示「角色」= 說話角色（決定名牌）、「舞台」= 畫面角色（三槽）
-        _header_tooltips = {
-            2: "說話角色：決定此句名牌的顯示名稱與顏色。",
-            3: "說話角色的服裝（對應 Costume）。",
-            4: "說話角色此服裝下的立繪差分。",
-            5: "文字效果（可多選）：粗體 / 斜體 / 底線 / 刪除線 / 顫抖 / 閃爍。",
-            6: "舞台（畫面角色）：左 / 中 / 右三槽獨立指定。說話者不等於畫面出場者。",
-        }
-        for col, tip in _header_tooltips.items():
-            hdr_item = self.dialogue_table.horizontalHeaderItem(col)
-            if hdr_item is not None:
-                hdr_item.setToolTip(tip)
-        header = self.dialogue_table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Interactive)
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Interactive)
-        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)
-        self.dialogue_table.setColumnWidth(0, 40)
-        self.dialogue_table.setColumnWidth(2, 100)
-        self.dialogue_table.setColumnWidth(3, 90)
-        self.dialogue_table.setColumnWidth(4, 90)
-        self.dialogue_table.setColumnWidth(5, 100)
-        self.dialogue_table.setColumnWidth(6, 170)
-        # 對話表格列高：保留足夠空間給內嵌 ComboBox / SpinBox（padding 放大後）
-        self.dialogue_table.verticalHeader().setDefaultSectionSize(56)
-        self.dialogue_table.verticalHeader().setVisible(False)
-        self.dialogue_table.setSelectionMode(
-            QAbstractItemView.SelectionMode.ExtendedSelection
-        )
+    def _build_preview_container(self) -> QWidget:
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(2)
 
-        # 索引欄 delegate + hover filter
-        self._index_delegate = _IndexDelegate()
-        self.dialogue_table.setItemDelegateForColumn(0, self._index_delegate)
-        self._hover_filter = _HoverFilter(self.dialogue_table, self._index_delegate)
-
-        # 文字欄 multiline delegate
-        self._multiline_delegate = _MultilineDelegate()
-        self.dialogue_table.setItemDelegateForColumn(1, self._multiline_delegate)
-
-        # 右鍵選單
-        self.dialogue_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.dialogue_table.customContextMenuRequested.connect(self._on_context_menu)
-
-        # 鍵盤快捷鍵
-        act_del = QAction(self.dialogue_table)
-        act_del.setShortcut(QKeySequence(Qt.Key.Key_Delete))
-        act_del.triggered.connect(self._on_remove_dialogue)
-        self.dialogue_table.addAction(act_del)
-        act_copy = QAction(self.dialogue_table)
-        act_copy.setShortcut(QKeySequence("Ctrl+C"))
-        act_copy.triggered.connect(self._on_copy_dialogues)
-        self.dialogue_table.addAction(act_copy)
-        act_paste = QAction(self.dialogue_table)
-        act_paste.setShortcut(QKeySequence("Ctrl+V"))
-        act_paste.triggered.connect(self._on_paste_dialogues)
-        self.dialogue_table.addAction(act_paste)
-        act_paste_text = QAction(self.dialogue_table)
-        act_paste_text.setShortcut(QKeySequence("Ctrl+Shift+V"))
-        act_paste_text.triggered.connect(self._on_paste_text_to_scene)
-        self.dialogue_table.addAction(act_paste_text)
-
-        dialogue_layout.addWidget(self.dialogue_table)
-        dialogue_widget.setLayout(dialogue_layout)
-
-        # 預覽容器：工具列 + Stacked（EmptyState / 預覽）
-        preview_container = QWidget()
-        preview_layout = QVBoxLayout()
-        preview_layout.setContentsMargins(0, 0, 0, 0)
-        preview_layout.setSpacing(2)
-
-        # 預覽工具列：所有控件改用 minimum* 並以 QFontMetrics 計算寬度，
-        # 保證 UI 字體 14-28px 範圍內都不會裁切；spacing 留 10px 讓 label/value 有呼吸感。
-        preview_toolbar = QHBoxLayout()
-        preview_toolbar.setContentsMargins(2, 2, 2, 2)
-        preview_toolbar.setSpacing(10)
+        toolbar = QHBoxLayout()
+        toolbar.setContentsMargins(2, 2, 2, 2)
+        toolbar.setSpacing(10)
         self.btn_refresh_preview = PushButton("重新整理")
-        preview_toolbar.addWidget(self.btn_refresh_preview)
-        preview_toolbar.addSpacing(14)
-        preview_toolbar.addWidget(QLabel("對話字體:"))
+        toolbar.addWidget(self.btn_refresh_preview)
+        toolbar.addSpacing(14)
+        toolbar.addWidget(QLabel("對話字體:"))
         self.spin_dlg_font = QSpinBox()
         self.spin_dlg_font.setRange(14, 28)
         self.spin_dlg_font.setValue(18)
         self.spin_dlg_font.setSuffix(" px")
-        # 預留 "28 px" + 上下箭頭 + padding，28px 字體下也不裁切
         self.spin_dlg_font.setMinimumWidth(110)
-        preview_toolbar.addWidget(self.spin_dlg_font)
-        preview_toolbar.addSpacing(10)
-        preview_toolbar.addWidget(QLabel("名稱字體:"))
+        toolbar.addWidget(self.spin_dlg_font)
+        toolbar.addSpacing(10)
+        toolbar.addWidget(QLabel("名稱字體:"))
         self.spin_name_font = QSpinBox()
         self.spin_name_font.setRange(14, 28)
         self.spin_name_font.setValue(16)
         self.spin_name_font.setSuffix(" px")
         self.spin_name_font.setMinimumWidth(110)
-        preview_toolbar.addWidget(self.spin_name_font)
-        preview_toolbar.addSpacing(10)
-        preview_toolbar.addWidget(QLabel("透明度:"))
+        toolbar.addWidget(self.spin_name_font)
+        toolbar.addSpacing(10)
+        toolbar.addWidget(QLabel("透明度:"))
         self.spin_opacity = QDoubleSpinBox()
         self.spin_opacity.setRange(0.5, 1.0)
         self.spin_opacity.setSingleStep(0.05)
         self.spin_opacity.setDecimals(2)
         self.spin_opacity.setValue(0.85)
         self.spin_opacity.setMinimumWidth(100)
-        preview_toolbar.addWidget(self.spin_opacity)
-        preview_toolbar.addStretch()
-        preview_layout.addLayout(preview_toolbar)
+        toolbar.addWidget(self.spin_opacity)
+        toolbar.addStretch()
+        layout.addLayout(toolbar)
 
+        # EmptyState / Preview stacked
         self._preview_stack = QStackedWidget()
         self._empty_state = EmptyStateWidget()
         self._empty_state.import_text_clicked.connect(self.empty_state_import_text)
         self._empty_state.add_scene_clicked.connect(self.empty_state_add_scene)
-        self._preview_stack.addWidget(self._empty_state)   # index 0
-        self._preview_stack.addWidget(self.preview)         # index 1
-        preview_layout.addWidget(self._preview_stack)
-        preview_container.setLayout(preview_layout)
 
-        splitter.addWidget(preview_container)
-        splitter.addWidget(dialogue_widget)
-        # B5：預覽與文字列表初始 50/50（SizeHint 產生前 setStretchFactor 已生效）
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 1)
-        splitter.setSizes([400, 400])
+        self.preview = PreviewWidget()
 
-        layout.addWidget(splitter)
-        self.setLayout(layout)
+        self._preview_stack.addWidget(self._empty_state)  # index 0
+        self._preview_stack.addWidget(self.preview)        # index 1
+        layout.addWidget(self._preview_stack, 1)
+        return container
 
-        # Preview bridge：自動播放同步表格高亮
-        self.preview.bridge.dialogue_advanced.connect(self._on_preview_dialogue_advanced)
-        # Preview bridge：舞台槽位點擊
-        self.preview.bridge.stage_slot_clicked.connect(self._on_stage_slot_clicked)
+    def _build_editing_container(self) -> QWidget:
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
 
-        # 信號連接
-        self.dialogue_table.cellChanged.connect(self._on_dialogue_edited)
-        self.dialogue_table.row_moved.connect(self._on_row_moved)
-        self.btn_add_dialogue.clicked.connect(self._on_add_dialogue)
-        self.btn_remove_dialogue.clicked.connect(self._on_remove_dialogue)
-        self.btn_move_up.clicked.connect(self._on_move_dialogue_up)
-        self.btn_move_down.clicked.connect(self._on_move_dialogue_down)
-        self.dialogue_table.currentCellChanged.connect(self._on_dialogue_selection_changed)
-        self.dialogue_table.selectionModel().selectionChanged.connect(
-            self._on_selection_changed
-        )
-        self.search_input.textChanged.connect(self._on_search_text_changed)
-        self.btn_search_prev.clicked.connect(self._on_search_prev)
-        self.btn_search_next.clicked.connect(self._on_search_next)
+        self._bottom_splitter = QSplitter(Qt.Orientation.Vertical)
+        self._bottom_splitter.setHandleWidth(5)
 
-    # ── 公開方法 ──
+        # 先放占位的工作區；真正內容於 set_current_scene 重建
+        self._workspace_scroll = QScrollArea()
+        self._workspace_scroll.setWidgetResizable(True)
+        self._workspace_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self._workspace_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self._workspace_placeholder_html = QLabel("載入中…")
+        self._workspace_placeholder_html.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._workspace_scroll.setWidget(self._workspace_placeholder_html)
+        self._bottom_splitter.addWidget(self._workspace_scroll)
+
+        # SegmentEditor
+        self.segment_editor = SegmentEditor()
+        self.segment_editor.setMinimumHeight(140)
+        self.segment_editor.segment_changed.connect(self._on_segment_edited)
+        self._bottom_splitter.addWidget(self.segment_editor)
+        self._bottom_splitter.setStretchFactor(0, 1)
+        self._bottom_splitter.setStretchFactor(1, 0)
+        self._bottom_splitter.setSizes([420, 160])
+
+        layout.addWidget(self._bottom_splitter)
+
+        # 三域 widget 屬性：用 empty scene 預先建立，set_project 再綁真資料
+        self._empty_scene = Scene(id="__empty__", dialogues=[])
+        self.dialogue_list = DialogueColumn(self._empty_scene)
+        self.stage_panel = StagePanel(self._empty_scene)
+        self.effect_timeline = EffectTimelineWidget(self._empty_scene)
+
+        self._rebuild_workspace()
+        return container
+
+    def _rebuild_workspace(self) -> None:
+        """(重新)建立工作區三域 widget layout。Scene 切換時呼叫。"""
+        self._building = True
+        try:
+            scene = self._get_current_scene() or self._empty_scene
+
+            # 重建三域 widget（新 Scene 綁定）
+            # 斷開舊 signal 以防 duplicate
+            self._disconnect_workspace_signals()
+
+            self.dialogue_list = DialogueColumn(scene)
+            self.stage_panel = StagePanel(scene)
+            self.effect_timeline = EffectTimelineWidget(scene)
+
+            # 套用角色顏色
+            color_map = self._character_color_map()
+            self.dialogue_list.set_character_colors(color_map)
+            self.stage_panel.set_character_colors(color_map)
+
+            # header 們
+            dialogue_header = QLabel("對話")
+            dialogue_header.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            dialogue_header.setStyleSheet(
+                "color:#E8E8E8; background:#252526; padding:6px 0; font-weight:bold;"
+            )
+            stage_header = StageHeader()
+            effect_header = EffectTimelineHeader(scene, on_add_track=self._on_add_effect_track)
+            self._effect_header = effect_header
+
+            col_dialogue = _Column(dialogue_header, self.dialogue_list)
+            col_stage = _Column(stage_header, self.stage_panel)
+            col_effect = _Column(effect_header, self.effect_timeline)
+
+            col_stage.setFixedWidth(shared.LANE_WIDTH * 3 + 6)
+            effect_lanes = max(1, len(scene.effect_tracks))
+            col_effect.setMinimumWidth(shared.LANE_WIDTH * effect_lanes + 48)
+
+            workspace = QWidget()
+            workspace_layout = QHBoxLayout(workspace)
+            workspace_layout.setContentsMargins(0, 0, 0, 0)
+            workspace_layout.setSpacing(2)
+            workspace_layout.addWidget(col_dialogue, 1)
+            workspace_layout.addWidget(col_stage, 0)
+            workspace_layout.addWidget(col_effect, 0)
+
+            self._workspace_scroll.setWidget(workspace)
+            self._workspace_root = workspace
+
+            self._connect_workspace_signals()
+
+            # 如果 segment editor 有帶 project，更新它的候選清單
+            if self._project:
+                self.segment_editor.set_project(self._project)
+            # 切 scene 清掉 editor
+            self.segment_editor.set_segment(None)
+        finally:
+            self._building = False
+
+    def _connect_workspace_signals(self) -> None:
+        self.dialogue_list.dialogue_moved.connect(self._on_dialogue_moved)
+        self.dialogue_list.cursor_changed.connect(self._on_cursor_from_widget)
+        self.dialogue_list.selection_changed.connect(self._on_cursor_from_widget)
+
+        # 拖端點 mouseMove 期間 segment_changed 連續觸發；不在此重載預覽，
+        # 等到 segment_committed (mouseRelease / Delete / 雙擊新增) 才 reload。
+        self.stage_panel.cursor_changed.connect(self._on_cursor_from_widget)
+        self.stage_panel.segment_committed.connect(self._on_segment_committed)
+        self.stage_panel.segment_selected.connect(self._on_stage_segment_selected)
+
+        self.effect_timeline.cursor_changed.connect(self._on_cursor_from_widget)
+        self.effect_timeline.segment_committed.connect(self._on_segment_committed)
+        self.effect_timeline.segment_selected.connect(self._on_effect_segment_selected)
+        self._signals_connected = True
+
+    def _disconnect_workspace_signals(self) -> None:
+        if not getattr(self, "_signals_connected", False):
+            return
+        for obj in (getattr(self, "dialogue_list", None),
+                    getattr(self, "stage_panel", None),
+                    getattr(self, "effect_timeline", None)):
+            if obj is None:
+                continue
+            try:
+                obj.disconnect()
+            except (TypeError, RuntimeError):
+                pass
+        self._signals_connected = False
+
+    # ── Project / Scene 綁定 ───────────────────────────────
+
+    def _get_current_scene(self) -> Scene | None:
+        if not self._project or not self._project.scenes:
+            return None
+        if not (0 <= self._current_scene_index < len(self._project.scenes)):
+            return None
+        return self._project.scenes[self._current_scene_index]
+
+    def _character_color_map(self) -> dict[str, str]:
+        if not self._project:
+            return {}
+        return {c.name: c.name_color for c in self._project.characters}
 
     def _update_empty_state(self) -> None:
-        """根據 project 是否有場景，切換 EmptyState / 預覽。"""
         has_scenes = bool(self._project and self._project.scenes)
         self._preview_stack.setCurrentIndex(1 if has_scenes else 0)
 
     def set_project(self, project: Project) -> None:
-        """綁定 Project。"""
         self._project = project
         self._current_scene_index = 0 if project.scenes else -1
-        self._refresh_dialogue_table()
+        self.segment_editor.set_project(project)
+        self._rebuild_workspace()
         self._update_empty_state()
 
     def set_current_scene(self, index: int) -> None:
-        """外部切換場景時呼叫。"""
         self._current_scene_index = index
-        self._refresh_dialogue_table()
+        self._rebuild_workspace()
         self._update_empty_state()
 
     def reload_preview(self, project: Project) -> None:
-        """重新載入預覽。"""
         self.preview.reload_preview(project)
 
     def cleanup(self) -> None:
-        """清理預覽暫存資源。"""
         self.preview.cleanup()
 
     def add_dialogues_to_current_scene(
         self, dialogues: list[Dialogue], insert_after: int | None = None
     ) -> None:
-        """將解析後的對話加入當前場景。"""
-        if not self._project:
-            return
-        if not self._project.scenes:
-            return
-        scene = self._get_current_scene()
-        if scene:
-            if insert_after is not None and 0 <= insert_after < len(scene.dialogues):
-                for i, d in enumerate(dialogues):
-                    scene.dialogues.insert(insert_after + 1 + i, d)
-            else:
-                scene.dialogues.extend(dialogues)
-            self._refresh_dialogue_table()
-            self._update_empty_state()
-            self.project_changed.emit()
-
-    def get_selected_dialogue_index(self) -> int | None:
-        """回傳目前選取的對話索引。"""
-        row = self.dialogue_table.currentRow()
-        return row if row >= 0 else None
-
-    # ── 對話表格 ──
-
-    def _refresh_dialogue_table(self) -> None:
-        """重建對話表格。7 欄：#、文字、角色、服裝、差分、效果、舞台。"""
-        self._updating = True
-        self.dialogue_table.clearSpans()
-        self.dialogue_table.setRowCount(0)
-
-        scene = self._get_current_scene()
-        if not scene:
-            self._updating = False
-            return
-
-        self.dialogue_table.setRowCount(len(scene.dialogues))
-        for row, dlg in enumerate(scene.dialogues):
-            # 欄 0：索引（唯讀）
-            idx_item = QTableWidgetItem(str(row + 1))
-            idx_item.setFlags(idx_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            idx_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.dialogue_table.setItem(row, 0, idx_item)
-
-            # 欄 1：文字（可編輯，multiline delegate）
-            text_item = QTableWidgetItem(dlg.text)
-            # D4：以說話角色的 name_color 上色（半透明），旁白/未選取維持預設
-            char_obj_for_color = self._find_character(dlg.character) if dlg.character else None
-            if char_obj_for_color is not None:
-                bg = _hex_to_qcolor(char_obj_for_color.name_color, alpha=56)
-                text_item.setBackground(QBrush(bg))
-                # 文字色用 YIQ 對比（基底為角色色 + 表格背景疊合，這裡直接用角色色估算）
-                text_item.setForeground(QBrush(_contrast_text_qcolor(char_obj_for_color.name_color)))
-                # 同步對 # 索引欄也上色，形成行色帶
-                idx_item.setBackground(QBrush(bg))
-            self.dialogue_table.setItem(row, 1, text_item)
-
-            # 欄 2：角色 ComboBox（所有行都有）
-            char_combo = QComboBox()
-            char_combo.setObjectName("tableCombo")
-            char_combo.addItem(NARRATION_LABEL, "narration")
-            char_combo.addItem(UNASSIGNED_LABEL, "unassigned")
-            if self._project:
-                for c in self._project.characters:
-                    char_combo.addItem(c.name, c.name)
-            if dlg.type == "narration" or (dlg.character is None and dlg.type != "dialogue"):
-                char_combo.setCurrentIndex(0)
-            elif dlg.character is None:
-                char_combo.setCurrentIndex(1)
-            else:
-                idx = char_combo.findData(dlg.character)
-                char_combo.setCurrentIndex(max(1, idx))
-            char_combo.currentIndexChanged.connect(
-                lambda _, r=row: self._on_char_combo_changed(r)
-            )
-            self.dialogue_table.setCellWidget(row, 2, char_combo)
-
-            if dlg.character:
-                # 對話行（有角色）：服裝 + 差分 ComboBox
-                char_obj = self._find_character(dlg.character)
-
-                costume_combo = QComboBox()
-                costume_combo.setObjectName("tableCombo")
-                costume_combo.addItem(NONE_LABEL, None)
-                if char_obj:
-                    for cos in char_obj.costumes:
-                        costume_combo.addItem(cos.name, cos.name)
-                    # 預設選第一個服裝
-                    if not dlg.costume and char_obj.costumes:
-                        costume_combo.setCurrentIndex(1)
-                    else:
-                        idx = costume_combo.findData(dlg.costume)
-                        costume_combo.setCurrentIndex(max(0, idx))
-                costume_combo.currentIndexChanged.connect(
-                    lambda _, r=row: self._on_costume_combo_changed(r)
-                )
-                self.dialogue_table.setCellWidget(row, 3, costume_combo)
-
-                sprite_combo = QComboBox()
-                sprite_combo.setObjectName("tableCombo")
-                sprite_combo.addItem(NONE_LABEL, None)
-                if char_obj:
-                    selected_cos = self._find_costume(char_obj, dlg.costume)
-                    if selected_cos:
-                        for sv in selected_cos.expressions:
-                            sprite_combo.addItem(sv.label, sv.label)
-                        # 預設選第一個差分
-                        if not dlg.sprite and selected_cos.expressions:
-                            sprite_combo.setCurrentIndex(1)
-                        else:
-                            idx = sprite_combo.findData(dlg.sprite)
-                            sprite_combo.setCurrentIndex(max(0, idx))
-                sprite_combo.currentIndexChanged.connect(
-                    lambda _, r=row: self._on_sprite_combo_changed(r)
-                )
-                self.dialogue_table.setCellWidget(row, 4, sprite_combo)
-            else:
-                # 旁白/未選取行：欄 3-4 合併顯示 "—"
-                narr_item = QTableWidgetItem("—")
-                narr_item.setFlags(narr_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                narr_item.setForeground(QColor("#555"))
-                narr_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                self.dialogue_table.setItem(row, 3, narr_item)
-                self.dialogue_table.setSpan(row, 3, 1, 2)
-
-            # 欄 5：文字效果（D1 多選按鈕）
-            effect_btn = _EffectsMenuButton()
-            effect_btn.set_effects(dlg.effects or [])
-            effect_btn.effects_changed.connect(
-                lambda effects, r=row: self._on_effects_changed(r, effects)
-            )
-            self.dialogue_table.setCellWidget(row, 5, effect_btn)
-
-            # 欄 6：舞台三槽（D3）— 每槽 button，點擊開 picker
-            stage_widget = _StageCellWidget()
-            stage_widget.set_stage(dlg.stage)
-            stage_widget.slot_clicked.connect(
-                lambda pos, r=row: self._open_stage_picker(r, pos)
-            )
-            self.dialogue_table.setCellWidget(row, 6, stage_widget)
-
-        self._updating = False
-
-    def _on_dialogue_edited(self, row: int, column: int) -> None:
-        if self._updating:
-            return
-        scene = self._get_current_scene()
-        if not scene or row >= len(scene.dialogues):
-            return
-
-        dlg = scene.dialogues[row]
-        item = self.dialogue_table.item(row, column)
-        value = item.text() if item else ""
-
-        if column == 1:  # 文字欄
-            dlg.text = value
-            self.project_changed.emit()
-
-    def _on_effects_changed(self, row: int, effects: list[str]) -> None:
-        if self._updating:
-            return
-        scene = self._get_current_scene()
-        if not scene or row >= len(scene.dialogues):
-            return
-        scene.dialogues[row].effects = list(effects)
-        self.project_changed.emit()
-
-    def _on_char_combo_changed(self, row: int) -> None:
-        if self._updating:
-            return
-        scene = self._get_current_scene()
-        if not scene or row >= len(scene.dialogues):
-            return
-        combo = self.dialogue_table.cellWidget(row, 2)
-        if not combo:
-            return
-        data = combo.currentData()
-        dlg = scene.dialogues[row]
-        was_dialogue = bool(dlg.character)
-        if data == "narration":
-            dlg.character = None
-            dlg.type = "narration"
-        elif data == "unassigned":
-            dlg.character = None
-            dlg.type = "dialogue"
-        else:
-            dlg.character = data
-            dlg.type = "dialogue"
-        dlg.sprite = None
-        dlg.costume = None
-        char_name = dlg.character
-        is_dialogue = bool(char_name)
-
-        if was_dialogue != is_dialogue:
-            # 類型改變：需要全部重建（span / cellWidget 增刪）
-            self._refresh_dialogue_table()
-            self.project_changed.emit()
-            return
-
-        if is_dialogue:
-            # 對話→對話（角色切換）：更新服裝和差分 combo，預選第一項
-            self._updating = True
-            char_obj = self._find_character(char_name)
-            costume_combo = self.dialogue_table.cellWidget(row, 3)
-            if costume_combo:
-                costume_combo.blockSignals(True)
-                costume_combo.clear()
-                costume_combo.addItem(NONE_LABEL, None)
-                if char_obj:
-                    for cos in char_obj.costumes:
-                        costume_combo.addItem(cos.name, cos.name)
-                    if char_obj.costumes:
-                        costume_combo.setCurrentIndex(1)
-                        dlg.costume = char_obj.costumes[0].name
-                costume_combo.blockSignals(False)
-            sprite_combo = self.dialogue_table.cellWidget(row, 4)
-            if sprite_combo:
-                sprite_combo.blockSignals(True)
-                sprite_combo.clear()
-                sprite_combo.addItem(NONE_LABEL, None)
-                if char_obj and char_obj.costumes:
-                    first_cos = char_obj.costumes[0]
-                    for sv in first_cos.expressions:
-                        sprite_combo.addItem(sv.label, sv.label)
-                    if first_cos.expressions:
-                        sprite_combo.setCurrentIndex(1)
-                        dlg.sprite = first_cos.expressions[0].label
-                sprite_combo.blockSignals(False)
-            self._updating = False
-
-        self.project_changed.emit()
-
-    def _on_costume_combo_changed(self, row: int) -> None:
-        if self._updating:
-            return
-        scene = self._get_current_scene()
-        if not scene or row >= len(scene.dialogues):
-            return
-        combo = self.dialogue_table.cellWidget(row, 3)
-        if not combo:
-            return
-        costume_name = combo.currentData()
-        dlg = scene.dialogues[row]
-        dlg.costume = costume_name
-        dlg.sprite = None
-
-        self._updating = True
-        sprite_combo = self.dialogue_table.cellWidget(row, 4)
-        if sprite_combo:
-            sprite_combo.blockSignals(True)
-            sprite_combo.clear()
-            sprite_combo.addItem(NONE_LABEL, None)
-            if costume_name and dlg.character:
-                char_obj = self._find_character(dlg.character)
-                if char_obj:
-                    cos = self._find_costume(char_obj, costume_name)
-                    if cos:
-                        for sv in cos.expressions:
-                            sprite_combo.addItem(sv.label, sv.label)
-            sprite_combo.blockSignals(False)
-        self._updating = False
-
-        self.project_changed.emit()
-
-    def _on_sprite_combo_changed(self, row: int) -> None:
-        if self._updating:
-            return
-        scene = self._get_current_scene()
-        if not scene or row >= len(scene.dialogues):
-            return
-        combo = self.dialogue_table.cellWidget(row, 4)
-        if not combo:
-            return
-        scene.dialogues[row].sprite = combo.currentData()
-        self.project_changed.emit()
-
-    def _get_char_thumbnail(self, char: Character) -> QPixmap | None:
-        """取得角色 32x32 縮圖。"""
-        if not self._project or not self._project.project_path:
-            return None
-        assets_dir = self._project.project_path.parent / "assets"
-        if char.sprites:
-            path = assets_dir / char.sprites[0].filename
-            if path.exists():
-                pm = QPixmap(str(path))
-                if not pm.isNull():
-                    return pm.scaled(32, 32, Qt.AspectRatioMode.KeepAspectRatio,
-                                     Qt.TransformationMode.SmoothTransformation)
-        pm = QPixmap(32, 32)
-        pm.fill(QColor(char.name_color))
-        return pm
-
-    # ── 對話操作 ──
-
-    def _on_dialogue_selection_changed(
-        self, row: int, _col: int, _prev_row: int, _prev_col: int
-    ) -> None:
-        scene = self._get_current_scene()
-        has_scene = scene is not None
-        has_selection = row >= 0 and has_scene and row < len(scene.dialogues)
-        self.btn_remove_dialogue.setEnabled(has_selection)
-        self.btn_move_up.setEnabled(has_selection and row > 0)
-        self.btn_move_down.setEnabled(
-            has_selection and row < len(scene.dialogues) - 1
-        )
-        if has_selection:
-            self.preview.jump_to_dialogue(self._current_scene_index, row)
-
-    def _on_selection_changed(self) -> None:
-        """選取行數變化：更新批次工具列。"""
-        n = len(self.dialogue_table.selectionModel().selectedRows())
-        self._batch_toolbar.update_count(n)
-
-    def _on_add_dialogue(self) -> None:
         if not self._project or not self._project.scenes:
             return
         scene = self._get_current_scene()
-        if not scene:
+        if scene is None:
             return
-        scene.dialogues.append(Dialogue(type="narration", text=""))
-        self._refresh_dialogue_table()
-        last_row = len(scene.dialogues) - 1
-        self.dialogue_table.setCurrentCell(last_row, 1)
-        self.dialogue_table.editItem(self.dialogue_table.item(last_row, 1))
-        self.project_changed.emit()
-
-    def _on_remove_dialogue(self) -> None:
-        scene = self._get_current_scene()
-        row = self.dialogue_table.currentRow()
-        if not scene or row < 0 or row >= len(scene.dialogues):
-            return
-        scene.dialogues.pop(row)
-        self._refresh_dialogue_table()
-        self.project_changed.emit()
-
-    def _on_move_dialogue_up(self) -> None:
-        scene = self._get_current_scene()
-        row = self.dialogue_table.currentRow()
-        if not scene or row <= 0:
-            return
-        scene.dialogues[row - 1], scene.dialogues[row] = (
-            scene.dialogues[row],
-            scene.dialogues[row - 1],
-        )
-        self._refresh_dialogue_table()
-        self.dialogue_table.setCurrentCell(row - 1, 0)
-        self.project_changed.emit()
-
-    def _on_move_dialogue_down(self) -> None:
-        scene = self._get_current_scene()
-        row = self.dialogue_table.currentRow()
-        if not scene or row < 0 or row >= len(scene.dialogues) - 1:
-            return
-        scene.dialogues[row], scene.dialogues[row + 1] = (
-            scene.dialogues[row + 1],
-            scene.dialogues[row],
-        )
-        self._refresh_dialogue_table()
-        self.dialogue_table.setCurrentCell(row + 1, 0)
-        self.project_changed.emit()
-
-    # ── 拖曳排序 ──
-
-    def _on_row_moved(self, from_row: int, to_row: int) -> None:
-        scene = self._get_current_scene()
-        if not scene or self._updating:
-            return
-        if from_row < 0 or from_row >= len(scene.dialogues):
-            return
-        to_row = max(0, min(to_row, len(scene.dialogues) - 1))
-        dlg = scene.dialogues.pop(from_row)
-        scene.dialogues.insert(to_row, dlg)
-        self._refresh_dialogue_table()
-        self.dialogue_table.setCurrentCell(to_row, 0)
-        self.project_changed.emit()
-
-    # ── 右鍵選單 ──
-
-    def _on_context_menu(self, pos) -> None:
-        scene = self._get_current_scene()
-        if not scene or not self._project:
-            return
-        row = self.dialogue_table.rowAt(pos.y())
-        has_row = 0 <= row < len(scene.dialogues)
-
-        menu = QMenu(self)
-
-        act_del = menu.addAction("刪除", self._on_remove_dialogue)
-        act_del.setEnabled(has_row)
-        menu.addSeparator()
-        act_copy = menu.addAction("複製", self._on_copy_dialogues)
-        act_copy.setEnabled(has_row)
-        act_paste = menu.addAction("貼上", self._on_paste_dialogues)
-        act_paste.setEnabled(bool(self._clipboard_dialogues))
-        menu.addAction("貼上文字", self._on_paste_text_to_scene)
-        menu.addSeparator()
-        act_up = menu.addAction("上移", self._on_move_dialogue_up)
-        act_up.setEnabled(has_row and row > 0)
-        act_down = menu.addAction("下移", self._on_move_dialogue_down)
-        act_down.setEnabled(has_row and row < len(scene.dialogues) - 1)
-        menu.addSeparator()
-        menu.addAction("指定角色", self._on_batch_assign)
-        if has_row and len(self._project.scenes) > 1:
-            menu.addSeparator()
-            move_menu = menu.addMenu("移動到場景…")
-            for i, target_scene in enumerate(self._project.scenes):
-                if i == self._current_scene_index:
-                    continue
-                action = move_menu.addAction(target_scene.id)
-                action.setData(i)
-                action.triggered.connect(
-                    lambda checked, target_idx=i, src_row=row: self._move_dialogue_to_scene(
-                        src_row, target_idx
-                    )
-                )
-
-        menu.exec(self.dialogue_table.viewport().mapToGlobal(pos))
-
-    def _move_dialogue_to_scene(self, row: int, target_scene_index: int) -> None:
-        scene = self._get_current_scene()
-        if not scene or not self._project:
-            return
-        if row < 0 or row >= len(scene.dialogues):
-            return
-        if target_scene_index < 0 or target_scene_index >= len(self._project.scenes):
-            return
-
-        dialogue = scene.dialogues.pop(row)
-        self._project.scenes[target_scene_index].dialogues.append(dialogue)
-        self._refresh_dialogue_table()
-        self.project_changed.emit()
-
-    # ── 複製 / 貼上 ──
-
-    def _on_copy_dialogues(self) -> None:
-        import copy
-        scene = self._get_current_scene()
-        if not scene:
-            return
-        selected_rows = sorted(
-            {idx.row() for idx in self.dialogue_table.selectionModel().selectedRows()}
-        )
-        self._clipboard_dialogues = [
-            copy.deepcopy(scene.dialogues[r])
-            for r in selected_rows
-            if r < len(scene.dialogues)
-        ]
-
-    def _on_paste_dialogues(self) -> None:
-        import copy
-        scene = self._get_current_scene()
-        if not scene or not self._clipboard_dialogues:
-            return
-        insert_after = self.dialogue_table.currentRow()
-        if insert_after < 0:
-            insert_after = len(scene.dialogues) - 1
-        for i, dlg in enumerate(self._clipboard_dialogues):
-            scene.dialogues.insert(insert_after + 1 + i, copy.deepcopy(dlg))
-        self._refresh_dialogue_table()
-        self.dialogue_table.setCurrentCell(insert_after + len(self._clipboard_dialogues), 1)
-        self.project_changed.emit()
-
-    def _on_paste_text_to_scene(self) -> None:
-        from src.ui.dialogs import PasteTextDialog
-        from src.core.text_parser import _classify_lines
-
-        dlg = PasteTextDialog(self)
-        if dlg.exec() != dlg.DialogCode.Accepted:
-            return
-        text = dlg.get_text()
-        lines = text.splitlines()
-        new_dialogues = _classify_lines(lines)
-        if not new_dialogues:
-            return
-        insert_after = self.dialogue_table.currentRow() if dlg.is_insert_mode() else None
-        self.add_dialogues_to_current_scene(new_dialogues, insert_after=insert_after)
-
-    # ── 舞台槽位 ──
-
-    def _open_stage_picker(self, row: int, position: str) -> None:
-        """D3：從表格舞台欄按鈕開啟 picker（等同 preview overlay 的 add/swap 行為）。"""
-        scene_idx = self._current_scene_index
-        self._on_stage_slot_clicked(scene_idx, row, position, "add")
-
-    def _on_stage_slot_clicked(self, scene_idx: int, dlg_idx: int, position: str, action: str) -> None:
-        scene = self._get_current_scene()
-        if not scene or dlg_idx < 0 or dlg_idx >= len(scene.dialogues):
-            return
-        d = scene.dialogues[dlg_idx]
-        if action == "clear":
-            d.set_stage_slot(position, None)
-        else:  # "add" or "swap"
-            from src.ui.dialogs import StageSlotPickerDialog
-            characters = self._project.characters if self._project else []
-            picker = StageSlotPickerDialog(characters, current=d.stage.get(position), parent=self)
-            if picker.exec() != picker.DialogCode.Accepted:
-                return
-            d.set_stage_slot(position, picker.get_value())
-        # 局部刷新 preview（不退回第一幕）
-        js = (
-            f"if(window.VNPreviewAPI){{"
-            f"VNPreviewAPI.goToScene({scene_idx});"
-            f"VNPreviewAPI.goToDialogue({dlg_idx});"
-            f"}}"
-        )
-        self.preview.web_view.page().runJavaScript(js)
-        self._refresh_dialogue_table()
-        self.project_changed.emit()
-
-    # ── 批次操作 ──
-
-    def _on_batch_assign(self) -> None:
-        scene = self._get_current_scene()
-        if not scene:
-            return
-        selected_rows = sorted(
-            {idx.row() for idx in self.dialogue_table.selectionModel().selectedRows()}
-        )
-        if not selected_rows:
-            row = self.dialogue_table.currentRow()
-            if row >= 0:
-                selected_rows = [row]
-        if not selected_rows:
-            return
-
-        from src.ui.dialogs import BatchAssignDialog
-
-        sprites = self._project.assets.get("sprites", []) if self._project else []
-        dlg = BatchAssignDialog(sprites, self)
-        if dlg.exec() != dlg.DialogCode.Accepted:
-            return
-
-        character, sprite = dlg.get_values()
-        for row in selected_rows:
-            if row < len(scene.dialogues):
-                d = scene.dialogues[row]
-                if character is not None:
-                    d.character = character or None
-                    d.type = "dialogue" if character else "narration"
-                if sprite is not None:
-                    d.sprite = sprite or None
-
-        self._refresh_dialogue_table()
-        self.project_changed.emit()
-
-    def _on_batch_stage(self) -> None:
-        """批次設置選取行的舞台槽位。"""
-        scene = self._get_current_scene()
-        if not scene or not self._project:
-            return
-        selected_rows = sorted(
-            {idx.row() for idx in self.dialogue_table.selectionModel().selectedRows()}
-        )
-        if len(selected_rows) < 2:
-            return
-        from src.ui.dialogs import StageBatchDialog
-        dlg = StageBatchDialog(self._project.characters, self)
-        if dlg.exec() != dlg.DialogCode.Accepted:
-            return
-        values = dlg.get_values()
-        for row in selected_rows:
-            if row >= len(scene.dialogues):
-                continue
-            d = scene.dialogues[row]
-            for pos in ("left", "center", "right"):
-                v = values[pos]
-                if v is None:
-                    continue
-                elif v == "clear":
-                    d.set_stage_slot(pos, None)
-                else:
-                    d.set_stage_slot(pos, v)
-        self._refresh_dialogue_table()
-        self.preview.reload_preview()
-        self.project_changed.emit()
-
-    def _on_batch_delete_selected(self) -> None:
-        """批次刪除選取行。"""
-        scene = self._get_current_scene()
-        if not scene:
-            return
-        selected_rows = sorted(
-            {idx.row() for idx in self.dialogue_table.selectionModel().selectedRows()},
-            reverse=True,
-        )
-        for row in selected_rows:
-            if 0 <= row < len(scene.dialogues):
-                scene.dialogues.pop(row)
-        self._refresh_dialogue_table()
-        self.project_changed.emit()
-
-    # ── 搜尋 ──
-
-    def _on_search_text_changed(self, text: str) -> None:
-        self._search_results = []
-        self._search_current = -1
-
-        if not text or not self._project:
-            self._clear_search_highlight()
-            self.lbl_search_count.setText("")
-            self.btn_search_prev.setEnabled(False)
-            self.btn_search_next.setEnabled(False)
-            return
-
-        keyword = text.lower()
-        for si, scene in enumerate(self._project.scenes):
-            for di, dlg in enumerate(scene.dialogues):
-                if keyword in dlg.text.lower() or (
-                    dlg.character and keyword in dlg.character.lower()
-                ):
-                    self._search_results.append((si, di))
-
-        count = len(self._search_results)
-        if count > 0:
-            self._search_current = 0
-            self._goto_search_result()
-            self.lbl_search_count.setText(f"1 / {count}")
+        if insert_after is None or not (0 <= insert_after < len(scene.dialogues)):
+            # append
+            for d in dialogues:
+                scene.insert_dialogue(len(scene.dialogues), d)
         else:
-            self.lbl_search_count.setText("無結果")
-            self._clear_search_highlight()
+            for i, d in enumerate(dialogues):
+                scene.insert_dialogue(insert_after + 1 + i, d)
+        self.refresh()
+        self._update_empty_state()
+        self.project_changed.emit()
 
-        self.btn_search_prev.setEnabled(count > 1)
-        self.btn_search_next.setEnabled(count > 1)
-
-    def _on_search_next(self) -> None:
-        if not self._search_results:
-            return
-        self._search_current = (self._search_current + 1) % len(self._search_results)
-        self._goto_search_result()
-
-    def _on_search_prev(self) -> None:
-        if not self._search_results:
-            return
-        self._search_current = (self._search_current - 1) % len(self._search_results)
-        self._goto_search_result()
-
-    def _goto_search_result(self) -> None:
-        si, di = self._search_results[self._search_current]
-        total = len(self._search_results)
-        self.lbl_search_count.setText(f"{self._search_current + 1} / {total}")
-
-        if si != self._current_scene_index:
-            self._current_scene_index = si
-            self._refresh_dialogue_table()
-
-        self.dialogue_table.setCurrentCell(di, 1)
-        self._highlight_search_matches()
-
-    def _highlight_search_matches(self) -> None:
-        self._clear_search_highlight()
-        keyword = self.search_input.text().lower()
-        if not keyword:
-            return
-
-        highlight_color = QColor(255, 255, 100, 80)
-        current_color = QColor(255, 200, 50, 150)
-
-        for si, di in self._search_results:
-            if si != self._current_scene_index:
-                continue
-            is_current = (si, di) == self._search_results[self._search_current]
-            color = current_color if is_current else highlight_color
-            for col in range(self.dialogue_table.columnCount()):
-                item = self.dialogue_table.item(di, col)
-                if item:
-                    item.setBackground(color)
-
-    def _clear_search_highlight(self) -> None:
-        for row in range(self.dialogue_table.rowCount()):
-            for col in range(self.dialogue_table.columnCount()):
-                item = self.dialogue_table.item(row, col)
-                if item:
-                    item.setBackground(QColor(0, 0, 0, 0))
-
-    # ── Preview 雙向同步 ──
-
-    def _on_preview_dialogue_advanced(self, scene_idx: int, dlg_idx: int) -> None:
-        if self._updating:
-            return
-        if self.dialogue_table.state() == QAbstractItemView.State.EditingState:
-            return
-        if scene_idx != self._current_scene_index:
-            return
-        scene = self._get_current_scene()
-        if not scene or dlg_idx < 0 or dlg_idx >= len(scene.dialogues):
-            return
-        self._updating = True
-        self.dialogue_table.setCurrentCell(dlg_idx, 0)
-        item = self.dialogue_table.item(dlg_idx, 0)
-        if item:
-            self.dialogue_table.scrollToItem(
-                item, QAbstractItemView.ScrollHint.EnsureVisible
-            )
-        self._updating = False
-
-    # ── 工具方法 ──
-
-    def _get_current_scene(self) -> Scene | None:
-        if (
-            not self._project
-            or self._current_scene_index < 0
-            or self._current_scene_index >= len(self._project.scenes)
-        ):
-            return None
-        return self._project.scenes[self._current_scene_index]
-
-    def _find_character(self, name: str) -> Character | None:
-        if not self._project:
-            return None
-        for c in self._project.characters:
-            if c.name == name:
-                return c
+    def get_selected_dialogue_index(self) -> int | None:
+        # 對話卡片列目前無「選取」概念 → 回傳 None。
+        # Phase 3/5 加 inline 編輯時再把 _selected_idx 暴露出來。
         return None
 
-    @staticmethod
-    def _find_costume(char: Character, costume_name: str | None):
-        """找到角色指定服裝，若無則回傳第一個，仍無則 None。"""
-        if not char.costumes:
-            return None
-        if costume_name:
-            for cos in char.costumes:
-                if cos.name == costume_name:
-                    return cos
-        return char.costumes[0]
+    def refresh(self) -> None:
+        """外部觸發重新繪製三域 widget（資料未變結構、只需重繪）。"""
+        # 更新角色顏色映射（角色可能被重命名 / 重新著色）
+        color_map = self._character_color_map()
+        self.dialogue_list.set_character_colors(color_map)
+        self.stage_panel.set_character_colors(color_map)
+        self.dialogue_list.refresh()
+        self.stage_panel.refresh()
+        self.effect_timeline.refresh()
+        # segment editor 的候選也可能變（角色 / 服裝被編輯）
+        if self._project:
+            self.segment_editor.set_project(self._project)
+
+    # ── Signal handlers ────────────────────────────────────
+
+    def _on_dialogue_moved(self, src: int, dst: int) -> None:
+        scene = self._get_current_scene()
+        if scene is None:
+            return
+        scene.move_dialogue(src, dst)
+        self.refresh()
+        self.project_changed.emit()
+
+    def _on_cursor_from_widget(self, idx: int) -> None:
+        # 三 widget 共享游標：轉發到另外兩個
+        if self._building:
+            return
+        sender = self.sender()
+        for w in (self.dialogue_list, self.stage_panel, self.effect_timeline):
+            if w is not sender:
+                w.set_cursor(idx)
+        # 預覽同步（Preview 已載入時）
+        if self._preview_stack.currentIndex() == 1 and self._current_scene_index >= 0:
+            self.preview.jump_to_dialogue(self._current_scene_index, idx)
+
+    def _on_stage_segment_selected(self, seg) -> None:
+        # stage 選中 → 清掉 effect 的選取
+        for lane in self.effect_timeline.lanes.values():
+            lane.select_segment(None)
+        self.segment_editor.set_segment(seg)
+
+    def _on_effect_segment_selected(self, seg) -> None:
+        for lane in self.stage_panel.lanes.values():
+            lane.select_segment(None)
+        self.segment_editor.set_segment(seg)
+
+    def _on_segment_committed(self) -> None:
+        """commit 邊界（拖完 / 雙擊新增 / Delete / 加軌道）：reload 預覽 + 標 dirty。
+
+        live drag 中的 segment_changed 不走這條，避免每 mouseMove 重載 webengine。
+        widget 自己已在 mouseMove 內 self.update() 完成重繪。
+        """
+        if self._building:
+            return
+        if self._project and self._current_scene_index >= 0:
+            self.preview.reload_preview(self._project)
+        self.project_changed.emit()
+
+    def _on_segment_edited(self) -> None:
+        """來自 SegmentEditor payload 變更：是單次動作（非 drag loop）。
+
+        StageSegment 的 character/costume/sprite 變了 → 對應 lane 需要重畫 chip；
+        EffectSegment 的 type/params 變了 → effect lane 重畫。
+        然後 reload 預覽 + 標 dirty。
+        """
+        if self._building:
+            return
+        self.stage_panel.refresh()
+        self.effect_timeline.refresh()
+        if self._project and self._current_scene_index >= 0:
+            self.preview.reload_preview(self._project)
+        self.project_changed.emit()
+
+    def _on_add_effect_track(self, name: str) -> None:
+        scene = self._get_current_scene()
+        if scene is None:
+            return
+        # 若同名已存在，加流水號
+        existing = {t.name for t in scene.effect_tracks}
+        final_name = name
+        n = 2
+        while final_name in existing:
+            final_name = f"{name}_{n}"
+            n += 1
+        self.effect_timeline.add_track(final_name)
+        # header 同步新標籤
+        if hasattr(self, "_effect_header"):
+            self._effect_header.append_track(final_name)
+        # 寬度重算
+        effect_lanes = max(1, len(scene.effect_tracks))
+        # col_effect 物件沒存 ref，但可從 _workspace_root 抓。為簡單起見，
+        # 讓 rebuild_workspace 完全重建。
+        self._rebuild_workspace()
+        self.project_changed.emit()
+
+    def _on_preview_dialogue_advanced(self, scene_idx: int, dlg_idx: int) -> None:
+        # Preview 自動播放 → 同步游標到對話 / 舞台 / 特效
+        if scene_idx != self._current_scene_index:
+            return
+        self.dialogue_list.set_cursor(dlg_idx)
+        self.stage_panel.set_cursor(dlg_idx)
+        self.effect_timeline.set_cursor(dlg_idx)
