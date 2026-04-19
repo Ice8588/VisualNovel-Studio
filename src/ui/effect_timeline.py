@@ -11,7 +11,9 @@ from dataclasses import dataclass
 
 from PyQt6.QtCore import QRect, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QFontMetrics, QMouseEvent, QPainter, QPen
-from PyQt6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QWidget
+from PyQt6.QtWidgets import (
+    QHBoxLayout, QInputDialog, QLabel, QMenu, QMessageBox, QPushButton, QWidget,
+)
 
 from src.core.models import EffectSegment, EffectTrack, Scene
 from src.ui import _timeline_shared as shared
@@ -294,6 +296,41 @@ class EffectTimelineWidget(QWidget):
         # 新增軌道是 commit 動作（不是 live drag），讓 caller 重載預覽 / 標 dirty
         self.segment_committed.emit()
 
+    def rename_track(self, old_name: str, new_name: str) -> bool:
+        """Phase 4：改 EffectTrack.name；目前 lane 字典 key 同步。
+
+        回 False：old_name 不存在 / new_name 已被佔用 / 名稱無變更（no-op）。
+        成功 True 時 emit segment_committed（讓 CenterPanel 重載預覽 / 標 dirty）。
+        """
+        if not new_name or new_name == old_name:
+            return False
+        if new_name in self.lanes:
+            return False
+        track = next((t for t in self.scene.effect_tracks if t.name == old_name), None)
+        if track is None:
+            return False
+        track.name = new_name
+        # rebuild lanes dict keep order
+        new_lanes: dict[str, EffectLaneWidget] = {}
+        for k, v in self.lanes.items():
+            new_lanes[new_name if k == old_name else k] = v
+        self.lanes = new_lanes
+        self.segment_committed.emit()
+        return True
+
+    def remove_track(self, name: str) -> bool:
+        """Phase 4：刪除整條 EffectTrack（含 segments）+ 拆 lane widget。"""
+        track = next((t for t in self.scene.effect_tracks if t.name == name), None)
+        if track is None:
+            return False
+        self.scene.effect_tracks.remove(track)
+        lane = self.lanes.pop(name)
+        self._layout.removeWidget(lane)
+        lane.setParent(None)
+        lane.deleteLater()
+        self.segment_committed.emit()
+        return True
+
     def _on_seg_selected(self, seg):
         sender = self.sender()
         for lane in self.lanes.values():
@@ -321,7 +358,42 @@ class EffectTimelineWidget(QWidget):
         return None
 
 
+class _TrackLabel(QLabel):
+    """Phase 4：軌道名稱 label，右鍵彈出 rename / delete 選單。"""
+    rename_requested = pyqtSignal(str)  # current name
+    delete_requested = pyqtSignal(str)  # current name
+
+    def __init__(self, name: str, parent=None):
+        super().__init__(name, parent)
+        self.track_name = name
+        self.setFixedWidth(shared.LANE_WIDTH)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setStyleSheet(
+            "color:#9AA0A6; background:#252526; padding:6px 0; font-weight:bold;"
+        )
+        self.setToolTip("右鍵：重新命名 / 刪除")
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def set_track_name(self, new_name: str) -> None:
+        self.track_name = new_name
+        self.setText(new_name)
+
+    def mousePressEvent(self, ev):
+        if ev.button() == Qt.MouseButton.RightButton:
+            menu = QMenu(self)
+            menu.addAction("重新命名…", lambda: self.rename_requested.emit(self.track_name))
+            menu.addAction("刪除軌道…", lambda: self.delete_requested.emit(self.track_name))
+            menu.exec(ev.globalPosition().toPoint())
+            return
+        super().mousePressEvent(ev)
+
+
 class EffectTimelineHeader(QWidget):
+    """軌道名稱列。Phase 4 新增：右鍵 rename / delete。"""
+
+    track_rename_requested = pyqtSignal(str, str)  # (old_name, new_name)
+    track_delete_requested = pyqtSignal(str)       # name
+
     def __init__(self, scene: Scene, on_add_track, parent=None):
         super().__init__(parent)
         self.scene = scene
@@ -329,6 +401,7 @@ class EffectTimelineHeader(QWidget):
         self._layout = QHBoxLayout(self)
         self._layout.setContentsMargins(0, 0, 0, 0)
         self._layout.setSpacing(2)
+        self._labels: dict[str, _TrackLabel] = {}
         for track in scene.effect_tracks:
             self._layout.addWidget(self._make_label(track.name))
         self._add_btn = QPushButton("+")
@@ -338,17 +411,56 @@ class EffectTimelineHeader(QWidget):
         self._layout.addWidget(self._add_btn)
         self._layout.addStretch(1)
 
-    def _make_label(self, name: str) -> QLabel:
-        l = QLabel(name)
-        l.setFixedWidth(shared.LANE_WIDTH)
-        l.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        l.setStyleSheet("color:#9AA0A6; background:#252526; padding:6px 0; font-weight:bold;")
-        return l
+    def _make_label(self, name: str) -> _TrackLabel:
+        lbl = _TrackLabel(name, self)
+        lbl.rename_requested.connect(self._on_rename_requested)
+        lbl.delete_requested.connect(self._on_delete_requested)
+        self._labels[name] = lbl
+        return lbl
 
     def append_track(self, name: str):
         idx = self._layout.indexOf(self._add_btn)
         self._layout.insertWidget(idx, self._make_label(name))
 
+    def update_track_name(self, old_name: str, new_name: str) -> None:
+        """軌道改名後同步 label."""
+        if old_name not in self._labels:
+            return
+        lbl = self._labels.pop(old_name)
+        lbl.set_track_name(new_name)
+        self._labels[new_name] = lbl
+
+    def remove_track_label(self, name: str) -> None:
+        """軌道刪除後拆 label."""
+        lbl = self._labels.pop(name, None)
+        if lbl is not None:
+            self._layout.removeWidget(lbl)
+            lbl.setParent(None)
+            lbl.deleteLater()
+
     def _handle_add(self):
         n = len(self.scene.effect_tracks) + 1
         self._on_add_track(f"軌道{n}")
+
+    def _on_rename_requested(self, name: str) -> None:
+        new_name, ok = QInputDialog.getText(
+            self, "重新命名特效軌道", f"舊名稱：「{name}」\n\n新名稱：", text=name,
+        )
+        new_name = (new_name or "").strip()
+        if not ok or not new_name or new_name == name:
+            return
+        self.track_rename_requested.emit(name, new_name)
+
+    def _on_delete_requested(self, name: str) -> None:
+        # 計算要連帶刪掉幾個 segment 顯示在訊息上
+        track = next((t for t in self.scene.effect_tracks if t.name == name), None)
+        n_seg = len(track.segments) if track else 0
+        msg = f"確定刪除特效軌道「{name}」？"
+        if n_seg:
+            msg += f"\n\n軌道內 {n_seg} 個 segment 會一併刪除。"
+        result = QMessageBox.question(
+            self, "刪除特效軌道", msg,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if result == QMessageBox.StandardButton.Yes:
+            self.track_delete_requested.emit(name)
