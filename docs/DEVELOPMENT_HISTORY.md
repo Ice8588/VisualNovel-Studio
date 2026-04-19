@@ -466,3 +466,92 @@ engine.js 不實作 JS 版 `stateAt`。改為 `Project.to_script_json` 呼叫 `s
 - 合 main 之前 user 必須跑一次完整 MP4 導出：含多立繪 + rain + screen_shake。
   本 Phase 已確保 Python 端資料攤平與 engine.js / Pillow 端讀取一致，但 MP4 視覺最終責任在人。
 - Phase 4+：自訂 effect kinds / 軌道 rename+delete / 同軌多特效疊加 / 焦點保護。
+
+---
+
+## Phase 4-6 Closeout 紀錄（2026-04-19）
+
+重構主線到此完成。task.md / 重構 plan 中原 Phase 4-6 的剩餘工作一次掃乾淨；
+本 closeout 無新大型 feature，後續新 feature 可直接從 `main` 開新分支。
+
+### 完成清單
+
+| # | 項目 | 交付 |
+|---|---|---|
+| 4.1 | 軌道 rename / delete | `feat/effect-track-rename-delete` 已 merge（closeout 前） |
+| 4.2 | EffectTrack 顏色 per-track override | 本分支 commit 1 |
+| 5.1 | reload_preview 後跳回原 dlg 位置（焦點保護） | 本分支 commit 2 |
+| 6.1 | 頭像上 40% × 中 40% 裁切 | `left_panel.py:541-556` 已實作（closeout 前） |
+| 6.2 | qfluentwidgets 樣式 review pass | 本分支 Step 3，純 review（見下） |
+| 6.3 | 本紀錄 | 本分支 commit 3 |
+
+### Step 1 重點：4.2 EffectTrack 顏色覆寫
+
+- `EffectTrack` 加 `color: str | None`；`to_dict` 僅在有值時輸出、`from_dict` 容忍缺欄
+- `_paint_segment` 優先取 `self.track.color`，fallback 到 effect_type 預設
+- `_TrackLabel` 新增 `color_requested` signal + 右鍵「設定顏色…」項 +
+  `set_accent_color` 在 label 左側畫 4px 豎條反映目前色
+- `EffectTimelineHeader` 新 `track_color_changed(name, hex)` + `_on_color_requested`（開 `QColorDialog`）
+- `EffectTimelineWidget.set_track_color(name, color|None) -> bool`；no-op / 不存在皆回 False
+- `CenterPanel._on_effect_track_color_changed` 串起 widget + label 同步 + 標 dirty
+
+**設計權衡（ADR 補充）：** 角色色（`Character.name_color`）與軌道色（`EffectTrack.color`）同時存在時，
+**舞台 segment 仍只用角色色**、**特效 lane 才吃 `track.color`**——避免兩套顏色制度在同一條 lane 打架。
+
+### Step 2 重點：5.1 preview 位置保護
+
+- `CenterPanel._last_preview_pos: tuple[int, int]` 追蹤目前停留位置
+- 三處更新點：`_on_cursor_from_widget` / `_on_preview_dialogue_advanced` / `set_current_scene`
+- 新 helper `_reload_preview_keep_position`：`reload_preview(project)` 後 `QTimer.singleShot(500ms)` 跳回
+- `_on_segment_committed` / `_on_segment_edited` 改走 helper；外部 API
+  `CenterPanel.reload_preview(project)` 維持原行為（全新 project 不 keep）
+
+**已知限制：** 500ms 在某些慢機仍可能看到短暫跳首，屬計畫書已文件化的風險條 1。
+自動化測試因 webengine timing 難寫，採手動驗收：「拖 segment 端點 → release 後預覽仍停原處」。
+
+### Step 3 重點：6.2 qfluentwidgets 樣式 review pass（純 review，0 改動）
+
+**Review 方法：** 靜態掃所有 `src/ui/*.py` 的 hardcoded hex 顏色；
+分類「dark 專用硬編」vs「強調色 light/dark 皆可」；
+計畫書 3.4 指明「保守 = 只記錄不修，避免變大重構」，本 phase 不改碼。
+
+**已知 follow-up（light 主題下不一致）：**
+
+| 位置 | 硬編色 | light 主題風險 |
+|---|---|---|
+| `src/ui/segment_editor.py:56` | popup `#2D2D30` + `#3D8AC4` 邊 | 深底突兀 |
+| `src/ui/segment_editor.py:106-121` | ToolButton / placeholder `#9AA0A6` | 灰字對比低 |
+| `src/ui/effect_timeline.py:421` | `_TrackLabel` bg `#252526` | 深色列頭 |
+| `src/ui/effect_timeline.py:455` | 新增軌道 `+` btn `#3D3D40` | 同上 |
+| `src/ui/center_panel.py:211` | 對話 header `#252526` | 深底 |
+| `src/ui/stage_panel.py:437` | 舞台 header `#252526` | 深底 |
+| `src/ui/dialogue_list.py:106` | 卡片底 `#2D2D30` / `#2E3440` | 深底 |
+| `src/ui/_timeline_shared.py` | `BG_DARK` / `BG_PANEL` / `GRID_LINE` | 時間軸 canvas 深底 |
+
+**不算破綻（light/dark 皆可辨識）：** `CURSOR_LINE #FFB300`、`DROP_INDICATOR #00B7C3`、
+segment 上白字 `#FFFFFF`、`character_color` / `effect_color` 使用者強調色。
+
+**建議未來補做：** 在 `_timeline_shared.py` 加 `set_theme_mode(mode)` + 兩組色（dark/light），
+各 widget 從 shared 讀而非硬編；約 1-2 工作天。本 phase 刻意不做，以免變大重構。
+
+### 排除（明確 future work，非 bug）
+
+- EffectSegment payload editor 改 known-kinds form（目前 JSON 夠用、engine.js 未消化大部分 params）
+- RemovalReport pattern（UI 無「刪除單一對話」入口，無從觸發）
+- Multi-effect 同 lane 疊加（設計決定互斥；要疊加就開多條軌道）
+- UI 全面 light/dark theme-aware（Step 3 列表的 follow-up）
+
+### 測試結果
+
+- Step 1 後 `QT_QPA_PLATFORM=offscreen pytest tests/ -q` → 210 passed + 1 skipped（+7 新測試）
+- Step 2 後同指令 → 210 passed + 1 skipped（無新自動測試，手動驗收）
+- 完整 closeout 後 → 210 passed + 1 skipped
+
+### 給下一位的備忘
+
+- 重構主線到此告一段落。後續新 feature 直接在 `main` 開新分支（`feat/xxx`）。
+- `experimental/timeline_poc/` / `experimental/phase3_mp4_verify/` 是歷史 fixture，
+  動 `engine.js` / `exporter_video.py` / `webengine_capture.py` 時建議手動跑一次做目視驗收。
+- Step 3 列的 light-mode follow-up 若使用者要求淺色主題完整支援，優先從 `_timeline_shared.py`
+  抽 theme 常數開始；否則保持現狀，屬深色主題下的實用工具。
+

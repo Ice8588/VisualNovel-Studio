@@ -12,7 +12,8 @@ from dataclasses import dataclass
 from PyQt6.QtCore import QRect, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QFontMetrics, QMouseEvent, QPainter, QPen
 from PyQt6.QtWidgets import (
-    QHBoxLayout, QInputDialog, QLabel, QMenu, QMessageBox, QPushButton, QWidget,
+    QColorDialog, QHBoxLayout, QInputDialog, QLabel, QMenu, QMessageBox,
+    QPushButton, QWidget,
 )
 
 from src.core.models import EffectSegment, EffectTrack, Scene
@@ -97,7 +98,10 @@ class EffectLaneWidget(QWidget):
 
     def _paint_segment(self, p: QPainter, seg: EffectSegment):
         rect = self._seg_rect(seg)
-        base = _effect_color(seg.effect_type)
+        # Phase 4.2：track.color 優先，否則 fallback 到 effect_type 預設色
+        base = QColor(self.track.color) if self.track.color else _effect_color(seg.effect_type)
+        if not base.isValid():
+            base = _effect_color(seg.effect_type)
         p.setBrush(base)
         if seg is self._selected:
             p.setPen(QPen(shared.CURSOR_LINE, 2))
@@ -296,6 +300,25 @@ class EffectTimelineWidget(QWidget):
         # 新增軌道是 commit 動作（不是 live drag），讓 caller 重載預覽 / 標 dirty
         self.segment_committed.emit()
 
+    def set_track_color(self, name: str, color: str | None) -> bool:
+        """Phase 4.2：覆寫軌道顏色（hex 字串如 `"#RRGGBB"`；傳 None / 空字串 = 清除 override）。
+
+        成功 True 時 emit segment_committed（讓 CenterPanel 重載預覽 / 標 dirty）。
+        軌道不存在 → False。
+        """
+        track = next((t for t in self.scene.effect_tracks if t.name == name), None)
+        if track is None:
+            return False
+        normalized = color if color else None
+        if track.color == normalized:
+            return False  # no-op
+        track.color = normalized
+        lane = self.lanes.get(name)
+        if lane is not None:
+            lane.update()
+        self.segment_committed.emit()
+        return True
+
     def rename_track(self, old_name: str, new_name: str) -> bool:
         """Phase 4：改 EffectTrack.name；目前 lane 字典 key 同步。
 
@@ -359,29 +382,50 @@ class EffectTimelineWidget(QWidget):
 
 
 class _TrackLabel(QLabel):
-    """Phase 4：軌道名稱 label，右鍵彈出 rename / delete 選單。"""
+    """Phase 4：軌道名稱 label，右鍵彈出 rename / delete / 設定顏色選單。
+
+    Phase 4.2：左側 4px 豎條反映 `track.color`（None 時不畫）。
+    """
     rename_requested = pyqtSignal(str)  # current name
     delete_requested = pyqtSignal(str)  # current name
+    color_requested = pyqtSignal(str)   # current name（Phase 4.2）
 
     def __init__(self, name: str, parent=None):
         super().__init__(name, parent)
         self.track_name = name
+        self._accent: str | None = None
         self.setFixedWidth(shared.LANE_WIDTH)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setStyleSheet(
-            "color:#9AA0A6; background:#252526; padding:6px 0; font-weight:bold;"
-        )
-        self.setToolTip("右鍵：重新命名 / 刪除")
+        self._apply_stylesheet()
+        self.setToolTip("右鍵：重新命名 / 刪除 / 設定顏色")
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
     def set_track_name(self, new_name: str) -> None:
         self.track_name = new_name
         self.setText(new_name)
 
+    def set_accent_color(self, color: str | None) -> None:
+        """Phase 4.2：同步 track.color → label 左側 4px 豎條。None → 清除。"""
+        self._accent = color
+        self._apply_stylesheet()
+
+    def _apply_stylesheet(self) -> None:
+        accent = self._accent
+        if accent:
+            border = f"border-left: 4px solid {accent};"
+            padding = "padding: 6px 0 6px 0;"  # 4px border 已吃左側
+        else:
+            border = ""
+            padding = "padding: 6px 0;"
+        self.setStyleSheet(
+            f"color:#9AA0A6; background:#252526; {padding} {border} font-weight:bold;"
+        )
+
     def mousePressEvent(self, ev):
         if ev.button() == Qt.MouseButton.RightButton:
             menu = QMenu(self)
             menu.addAction("重新命名…", lambda: self.rename_requested.emit(self.track_name))
+            menu.addAction("設定顏色…", lambda: self.color_requested.emit(self.track_name))
             menu.addAction("刪除軌道…", lambda: self.delete_requested.emit(self.track_name))
             menu.exec(ev.globalPosition().toPoint())
             return
@@ -389,10 +433,11 @@ class _TrackLabel(QLabel):
 
 
 class EffectTimelineHeader(QWidget):
-    """軌道名稱列。Phase 4 新增：右鍵 rename / delete。"""
+    """軌道名稱列。Phase 4 新增：右鍵 rename / delete / 設定顏色。"""
 
     track_rename_requested = pyqtSignal(str, str)  # (old_name, new_name)
     track_delete_requested = pyqtSignal(str)       # name
+    track_color_changed = pyqtSignal(str, str)     # (name, hex) — 空 hex 代表清除（Phase 4.2）
 
     def __init__(self, scene: Scene, on_add_track, parent=None):
         super().__init__(parent)
@@ -403,7 +448,7 @@ class EffectTimelineHeader(QWidget):
         self._layout.setSpacing(2)
         self._labels: dict[str, _TrackLabel] = {}
         for track in scene.effect_tracks:
-            self._layout.addWidget(self._make_label(track.name))
+            self._layout.addWidget(self._make_label(track.name, track.color))
         self._add_btn = QPushButton("+")
         self._add_btn.setFixedSize(32, 28)
         self._add_btn.clicked.connect(self._handle_add)
@@ -411,16 +456,19 @@ class EffectTimelineHeader(QWidget):
         self._layout.addWidget(self._add_btn)
         self._layout.addStretch(1)
 
-    def _make_label(self, name: str) -> _TrackLabel:
+    def _make_label(self, name: str, color: str | None = None) -> _TrackLabel:
         lbl = _TrackLabel(name, self)
+        lbl.set_accent_color(color)
         lbl.rename_requested.connect(self._on_rename_requested)
         lbl.delete_requested.connect(self._on_delete_requested)
+        lbl.color_requested.connect(self._on_color_requested)
         self._labels[name] = lbl
         return lbl
 
     def append_track(self, name: str):
         idx = self._layout.indexOf(self._add_btn)
-        self._layout.insertWidget(idx, self._make_label(name))
+        track = next((t for t in self.scene.effect_tracks if t.name == name), None)
+        self._layout.insertWidget(idx, self._make_label(name, track.color if track else None))
 
     def update_track_name(self, old_name: str, new_name: str) -> None:
         """軌道改名後同步 label."""
@@ -429,6 +477,12 @@ class EffectTimelineHeader(QWidget):
         lbl = self._labels.pop(old_name)
         lbl.set_track_name(new_name)
         self._labels[new_name] = lbl
+
+    def update_track_color(self, name: str, color: str | None) -> None:
+        """Phase 4.2：軌道 color 變更後同步 label 左側豎條。"""
+        lbl = self._labels.get(name)
+        if lbl is not None:
+            lbl.set_accent_color(color)
 
     def remove_track_label(self, name: str) -> None:
         """軌道刪除後拆 label."""
@@ -450,6 +504,16 @@ class EffectTimelineHeader(QWidget):
         if not ok or not new_name or new_name == name:
             return
         self.track_rename_requested.emit(name, new_name)
+
+    def _on_color_requested(self, name: str) -> None:
+        """Phase 4.2：右鍵「設定顏色…」→ QColorDialog。選好 emit track_color_changed。"""
+        track = next((t for t in self.scene.effect_tracks if t.name == name), None)
+        if track is None:
+            return
+        initial = QColor(track.color) if track.color else QColor("#5F6368")
+        chosen = QColorDialog.getColor(initial, self, "選擇軌道顏色")
+        if chosen.isValid():
+            self.track_color_changed.emit(name, chosen.name())  # "#RRGGBB"
 
     def _on_delete_requested(self, name: str) -> None:
         # 計算要連帶刪掉幾個 segment 顯示在訊息上

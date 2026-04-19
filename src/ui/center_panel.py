@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import QPoint, Qt, pyqtSignal
+from PyQt6.QtCore import QPoint, Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
     QDoubleSpinBox,
     QHBoxLayout,
@@ -71,6 +71,8 @@ class CenterPanel(QWidget):
         self._project: Project | None = None
         self._current_scene_index: int = -1
         self._building: bool = False
+        # Phase 5.1 焦點保護：追蹤 preview 上次停留位置，segment commit 後 reload 完跳回
+        self._last_preview_pos: tuple[int, int] = (0, 0)
         self._setup_ui()
 
     # ── UI 組裝 ─────────────────────────────────────────────
@@ -214,6 +216,8 @@ class CenterPanel(QWidget):
             # Phase 4 lane mgmt：rename / delete 軌道
             effect_header.track_rename_requested.connect(self._on_rename_effect_track)
             effect_header.track_delete_requested.connect(self._on_delete_effect_track)
+            # Phase 4.2：軌道顏色覆寫
+            effect_header.track_color_changed.connect(self._on_effect_track_color_changed)
 
             col_dialogue = _Column(dialogue_header, self.dialogue_list)
             col_stage = _Column(stage_header, self.stage_panel)
@@ -302,6 +306,8 @@ class CenterPanel(QWidget):
 
     def set_current_scene(self, index: int) -> None:
         self._current_scene_index = index
+        # Phase 5.1：切 scene → preview 位置重置到該 scene 開頭
+        self._last_preview_pos = (max(0, index), 0)
         self._rebuild_workspace()
         self._update_empty_state()
 
@@ -369,6 +375,8 @@ class CenterPanel(QWidget):
         # 預覽同步（Preview 已載入時）
         if self._preview_stack.currentIndex() == 1 and self._current_scene_index >= 0:
             self.preview.jump_to_dialogue(self._current_scene_index, idx)
+            # Phase 5.1：記下目前停留位置，供後續 reload 恢復
+            self._last_preview_pos = (self._current_scene_index, idx)
 
     def _on_stage_segment_selected(self, seg) -> None:
         # stage 選中 → 清掉 effect 的選取
@@ -421,16 +429,28 @@ class CenterPanel(QWidget):
         for lane in self.effect_timeline.lanes.values():
             lane.select_segment(None)
 
+    def _reload_preview_keep_position(self) -> None:
+        """Phase 5.1：reload 預覽後跳回 `_last_preview_pos`，避免每次 commit 都回到第 0 句。
+
+        QTimer 500ms 是保守值：等 QtWebEngine loadFinished + engine.js 初始化。
+        若使用者環境慢仍會看到短暫跳首，屬已知限制（計畫書風險條 1）。
+        """
+        if not self._project or self._current_scene_index < 0:
+            return
+        scene_idx, dlg_idx = self._last_preview_pos
+        self.preview.reload_preview(self._project)
+        QTimer.singleShot(500, lambda: self.preview.jump_to_dialogue(scene_idx, dlg_idx))
+
     def _on_segment_committed(self) -> None:
-        """commit 邊界（拖完 / 雙擊新增 / Delete / 加軌道）：reload 預覽 + 標 dirty。
+        """commit 邊界（拖完 / 雙擊新增 / Delete / 加軌道 / 改軌道色）：reload 預覽 + 標 dirty。
 
         live drag 中的 segment_changed 不走這條，避免每 mouseMove 重載 webengine。
         widget 自己已在 mouseMove 內 self.update() 完成重繪。
+        Phase 5.1：reload 後跳回原位置。
         """
         if self._building:
             return
-        if self._project and self._current_scene_index >= 0:
-            self.preview.reload_preview(self._project)
+        self._reload_preview_keep_position()
         self.project_changed.emit()
 
     def _on_segment_edited(self) -> None:
@@ -438,14 +458,13 @@ class CenterPanel(QWidget):
 
         StageSegment 的 character/costume/sprite 變了 → 對應 lane 需要重畫 chip；
         EffectSegment 的 type/params 變了 → effect lane 重畫。
-        然後 reload 預覽 + 標 dirty。
+        然後 reload 預覽 + 標 dirty（Phase 5.1：跳回原位置）。
         """
         if self._building:
             return
         self.stage_panel.refresh()
         self.effect_timeline.refresh()
-        if self._project and self._current_scene_index >= 0:
-            self.preview.reload_preview(self._project)
+        self._reload_preview_keep_position()
         self.project_changed.emit()
 
     def _on_add_effect_track(self, name: str) -> None:
@@ -499,8 +518,25 @@ class CenterPanel(QWidget):
         self._rebuild_workspace()
         self.project_changed.emit()
 
+    def _on_effect_track_color_changed(self, name: str, hex_color: str) -> None:
+        """Phase 4.2：Header 用 QColorDialog 選好 color → 寫入 track 並同步 label 左豎條。
+
+        空字串 hex 代表清除 override。segment_committed 由 set_track_color 內部 emit。
+        """
+        scene = self._get_current_scene()
+        if scene is None:
+            return
+        normalized = hex_color or None
+        if not self.effect_timeline.set_track_color(name, normalized):
+            return
+        if hasattr(self, "_effect_header"):
+            self._effect_header.update_track_color(name, normalized)
+        self.project_changed.emit()
+
     def _on_preview_dialogue_advanced(self, scene_idx: int, dlg_idx: int) -> None:
         # Preview 自動播放 → 同步游標到對話 / 舞台 / 特效
+        # Phase 5.1：不論是否為 current scene 都記位置，讓跨 scene AUTO 播放也能被恢復
+        self._last_preview_pos = (scene_idx, dlg_idx)
         if scene_idx != self._current_scene_index:
             return
         self.dialogue_list.set_cursor(dlg_idx)
