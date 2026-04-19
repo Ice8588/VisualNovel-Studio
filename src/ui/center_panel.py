@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import QPoint, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QDoubleSpinBox,
     QHBoxLayout,
@@ -155,10 +155,7 @@ class CenterPanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
 
-        self._bottom_splitter = QSplitter(Qt.Orientation.Vertical)
-        self._bottom_splitter.setHandleWidth(5)
-
-        # 先放占位的工作區；真正內容於 set_current_scene 重建
+        # Phase 4：SegmentEditor 改為浮動視窗（不再吃掉工作區的垂直空間）
         self._workspace_scroll = QScrollArea()
         self._workspace_scroll.setWidgetResizable(True)
         self._workspace_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
@@ -166,18 +163,16 @@ class CenterPanel(QWidget):
         self._workspace_placeholder_html = QLabel("載入中…")
         self._workspace_placeholder_html.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._workspace_scroll.setWidget(self._workspace_placeholder_html)
-        self._bottom_splitter.addWidget(self._workspace_scroll)
 
-        # SegmentEditor
-        self.segment_editor = SegmentEditor()
-        self.segment_editor.setMinimumHeight(140)
+        layout.addWidget(self._workspace_scroll)
+
+        # SegmentEditor 改為 self 的子 widget，預設 hidden；選 segment 時 show + raise + move
+        self.segment_editor = SegmentEditor(parent=self)
+        self.segment_editor.hide()
+        self.segment_editor.setFixedWidth(280)
+        self.segment_editor.setMinimumHeight(180)
         self.segment_editor.segment_changed.connect(self._on_segment_edited)
-        self._bottom_splitter.addWidget(self.segment_editor)
-        self._bottom_splitter.setStretchFactor(0, 1)
-        self._bottom_splitter.setStretchFactor(1, 0)
-        self._bottom_splitter.setSizes([420, 160])
-
-        layout.addWidget(self._bottom_splitter)
+        self.segment_editor.closed.connect(self._on_segment_editor_closed)
 
         # 三域 widget 屬性：用 empty scene 預先建立，set_project 再綁真資料
         self._empty_scene = Scene(id="__empty__", dialogues=[])
@@ -241,8 +236,9 @@ class CenterPanel(QWidget):
             # 如果 segment editor 有帶 project，更新它的候選清單
             if self._project:
                 self.segment_editor.set_project(self._project)
-            # 切 scene 清掉 editor
+            # 切 scene 清掉 editor 並隱藏浮動視窗
             self.segment_editor.set_segment(None)
+            self.segment_editor.hide()
         finally:
             self._building = False
 
@@ -375,12 +371,52 @@ class CenterPanel(QWidget):
         # stage 選中 → 清掉 effect 的選取
         for lane in self.effect_timeline.lanes.values():
             lane.select_segment(None)
-        self.segment_editor.set_segment(seg)
+        self._show_segment_editor_for(seg, self.stage_panel)
 
     def _on_effect_segment_selected(self, seg) -> None:
         for lane in self.stage_panel.lanes.values():
             lane.select_segment(None)
+        self._show_segment_editor_for(seg, self.effect_timeline)
+
+    def _show_segment_editor_for(self, seg, source_widget) -> None:
+        """Phase 4：浮動 SegmentEditor 定位在 segment 旁；seg=None 則隱藏。"""
+        if seg is None:
+            self.segment_editor.hide()
+            self.segment_editor.set_segment(None)
+            return
+
         self.segment_editor.set_segment(seg)
+        # 取 segment 全域座標 → 轉成 self 的 local 座標
+        seg_global_rect = source_widget.global_rect_of_segment(seg)
+        if seg_global_rect is None:
+            return
+        editor_w = self.segment_editor.width() or 280
+        editor_h = max(self.segment_editor.sizeHint().height(), 180)
+        # 預設放右側
+        target_global_x = seg_global_rect.right() + 8
+        # 若超出 self 右緣 → 改放左側
+        self_global_right = self.mapToGlobal(self.rect().topRight()).x()
+        if target_global_x + editor_w > self_global_right:
+            target_global_x = max(0, seg_global_rect.left() - editor_w - 8)
+        target_global_y = max(0, seg_global_rect.top())
+        # 若超出 self 下緣 → 上移
+        self_global_bottom = self.mapToGlobal(self.rect().bottomLeft()).y()
+        if target_global_y + editor_h > self_global_bottom:
+            target_global_y = max(0, self_global_bottom - editor_h - 8)
+        local = self.mapFromGlobal(QPoint(target_global_x, target_global_y))
+        self.segment_editor.move(local)
+        self.segment_editor.raise_()
+        self.segment_editor.show()
+        self.segment_editor.setFocus()  # 收 ESC
+
+    def _on_segment_editor_closed(self) -> None:
+        """X 鈕或 ESC 觸發；關閉浮動視窗並清除 segment 選取。"""
+        self.segment_editor.hide()
+        self.segment_editor.set_segment(None)
+        for lane in self.stage_panel.lanes.values():
+            lane.select_segment(None)
+        for lane in self.effect_timeline.lanes.values():
+            lane.select_segment(None)
 
     def _on_segment_committed(self) -> None:
         """commit 邊界（拖完 / 雙擊新增 / Delete / 加軌道）：reload 預覽 + 標 dirty。

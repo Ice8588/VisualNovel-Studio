@@ -12,12 +12,14 @@ import json
 from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QKeyEvent
 from PyQt6.QtWidgets import (
     QFormLayout,
+    QHBoxLayout,
     QLabel,
     QPlainTextEdit,
     QStackedLayout,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -33,9 +35,10 @@ _KNOWN_EFFECT_TYPES = ["rain", "snow", "crt", "screen_shake", "pixel_dark"]
 
 
 class SegmentEditor(QWidget):
-    """選中 segment 時顯示對應 payload 的 inline 編輯器。"""
+    """選中 segment 時顯示對應 payload 的 inline 編輯器（Phase 4 改為浮動視窗）。"""
 
     segment_changed = pyqtSignal()  # payload 改動（UI 端需重繪 / 預覽 refresh）
+    closed = pyqtSignal()           # Phase 4：使用者按 X 或 ESC 關閉浮動視窗
 
     # 方便單測以字串比對模式
     MODE_NONE = "none"
@@ -47,6 +50,13 @@ class SegmentEditor(QWidget):
         self._project: "Project | None" = project_ref
         self._segment: object | None = None
         self._suppress_signals: bool = False
+        # Phase 4：浮動視窗外觀（陰影 + 邊框 + 圓角）
+        self.setObjectName("segmentEditorPopup")
+        self.setStyleSheet(
+            "#segmentEditorPopup { background:#2D2D30; border:1px solid #3D8AC4;"
+            " border-radius:6px; }"
+        )
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)  # 收 ESC
         self._build_ui()
         self.set_segment(None)
 
@@ -83,9 +93,22 @@ class SegmentEditor(QWidget):
         root.setContentsMargins(8, 8, 8, 8)
         root.setSpacing(6)
 
+        # Header：標題 + 關閉 X 鈕
+        header = QHBoxLayout()
+        header.setContentsMargins(0, 0, 0, 0)
         self._title = BodyLabel("Segment 編輯器")
         self._title.setFont(QFont("sans", 10, QFont.Weight.Bold))
-        root.addWidget(self._title)
+        header.addWidget(self._title, 1)
+        self._btn_close = QToolButton()
+        self._btn_close.setText("✕")
+        self._btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_close.setStyleSheet(
+            "QToolButton { color:#9AA0A6; border:none; padding:0 6px; font-size:14px; }"
+            "QToolButton:hover { color:#FFFFFF; }"
+        )
+        self._btn_close.clicked.connect(self.closed.emit)
+        header.addWidget(self._btn_close, 0)
+        root.addLayout(header)
 
         self._stack = QStackedLayout()
         root.addLayout(self._stack, 1)
@@ -249,6 +272,12 @@ class SegmentEditor(QWidget):
         if obj is self._params_edit and event.type().name == "FocusOut":
             self._commit_params_json()
         return super().eventFilter(obj, event)
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        if event.key() == Qt.Key.Key_Escape:
+            self.closed.emit()
+            return
+        super().keyPressEvent(event)
 
     def _commit_params_json(self) -> None:
         if not isinstance(self._segment, EffectSegment):

@@ -309,6 +309,17 @@ class EffectTimelineWidget(QWidget):
         for lane in self.lanes.values():
             lane.refresh()
 
+    def global_rect_of_segment(self, seg: EffectSegment):
+        """回傳 seg 在螢幕全域座標的 QRect；找不到回 None。Phase 4 給 SegmentEditor 浮動定位用。"""
+        from PyQt6.QtCore import QRect, QPoint
+        for lane in self.lanes.values():
+            if seg in lane.track.segments:
+                top, bottom = shared.idx_range_to_rect_y(seg.start, seg.end)
+                top_left_global = lane.mapToGlobal(QPoint(0, top))
+                return QRect(top_left_global, QPoint(top_left_global.x() + lane.width(),
+                                                      top_left_global.y() + (bottom - top)))
+        return None
+
 
 class EffectTimelineHeader(QWidget):
     def __init__(self, scene: Scene, on_add_track, parent=None):
