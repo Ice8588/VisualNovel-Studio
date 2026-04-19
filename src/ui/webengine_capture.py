@@ -268,6 +268,24 @@ class WebEngineVideoExporter:
         QTimer.singleShot(ms, loop.quit)
         loop.exec()
 
+    def _wait_for_images_loaded(self, view: QWebEngineView, timeout_ms: int = 800) -> None:
+        """輪詢直到所有 <img> 都 complete=True，避免截到 opacity-0 / 半載入的立繪。
+
+        Phase 4 修 #4：renderStageSlot 在新 src 時走 opacity 0 → onload → 1 的 dance；
+        若截幀時機落在 onload 之前，會抓到「沒立繪」的幀，於 MP4 看起來像閃爍。
+        此 poll 確保截幀時所有 image 都已完成載入。
+        """
+        interval = 20
+        elapsed = 0
+        js = "Array.from(document.images).every(function(img){return img.complete;})"
+        while elapsed < timeout_ms:
+            if self._run_js(view, js):
+                return
+            self._sleep_ms(interval)
+            elapsed += interval
+        # 逾時：不擲例外，盡力輸出當前狀態
+        logger.warning("等待 images.complete 逾時（%dms）；可能截到未完全載入的立繪。", timeout_ms)
+
     def _wait_for_capture_api(self, view: QWebEngineView, timeout_ms: int = 8000) -> None:
         """輪詢直到 VNCaptureAPI 初始化完成，或逾時拋出例外。"""
         interval = 100
@@ -336,10 +354,13 @@ class WebEngineVideoExporter:
                     self._run_js(view, f"VNCaptureAPI.goToDialogue({di})")
                     self._sleep_ms(100)  # 等待 DOM 完全穩定
 
+                # Phase 4 修 #4：截第一幀前，先確保所有 <img> 載完，避免 opacity 0 閃爍
+                self._wait_for_images_loaded(view)
+
                 duration = _calc_duration(dlg.text)
 
                 if has_effect:
-                    # 有特效：按 fps 截多幀（讓粒子動起來）
+                    # 有特效：按 fps 截多幀（讓粒子動起來、screen_shake/text shake 顯示）
                     n_frames = max(1, int(duration * self._fps))
                     frame_interval = duration / n_frames
                     interval_ms = max(1, int(1000 / self._fps))
@@ -351,7 +372,7 @@ class WebEngineVideoExporter:
                         concat_entries.append((filename, frame_interval))
                         frame_idx += 1
 
-                        # 等待下一個動畫幀（讓 requestAnimationFrame 推進特效）
+                        # 等待下一個動畫幀（讓 requestAnimationFrame / CSS animation 推進）
                         if fi < n_frames - 1:
                             self._sleep_ms(interval_ms)
                 else:

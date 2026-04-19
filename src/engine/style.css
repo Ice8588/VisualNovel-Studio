@@ -255,11 +255,11 @@ body.capture-mode #stage-overlay { display: none !important; }
 }
 #dialogue-text.fx-blink { animation: vn-blink 1s ease-in-out infinite; }
 
-/* Capture Mode 下已有 `* { animation: none !important }` 抑制，這裡不需額外處理 */
+/* Phase 4：Capture Mode 下保留 animation；多幀截圖會抓不同位置，在 MP4 顯現 shake/blink。 */
 
 /* ── Phase 3：畫面特效的 body class（VNEffects.setActive 加/解） ── */
 
-/* screen_shake：整個遊戲容器小幅度左右晃動。CAPTURE_MODE 下被 `* { animation: none }` 抑制 */
+/* screen_shake：整個遊戲容器小幅度左右晃動。Phase 4：CAPTURE_MODE 下仍跑動畫（多幀截圖才能呈現出抖動）。 */
 @keyframes vn-screen-shake {
   0%   { transform: translate(0, 0); }
   20%  { transform: translate(-4px, 2px); }
@@ -272,7 +272,7 @@ body.fx-screen_shake #game-container {
   animation: vn-screen-shake 0.3s linear infinite;
   will-change: transform;
 }
-/* Capture Mode 下 body.fx-screen_shake 仍可加，但 animation 被全域 none 蓋掉（不晃動但保留標記） */
+/* Phase 4：CAPTURE_MODE 下動畫照跑；webengine_capture 多幀截圖會抓到不同 transform 位置，MP4 即可呈現晃動。 */
 
 /* ── Quick Menu（對話框下方按鈕列） ── */
 

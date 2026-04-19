@@ -59,10 +59,12 @@
   // ── 初始化 ──
 
   function init() {
-    // Capture 模式：禁用所有 CSS 動畫/轉場，避免截幀出現中間狀態
+    // Capture 模式：禁用所有 CSS 轉場（避免截幀剛好抓在 transition 中間態），
+    // 但**保留** animation——webengine_capture 的 has_effect 路徑採多幀截圖，
+    // 讓 screen_shake / 文字 fx-shake / fx-blink 等 keyframe 動畫能在 MP4 呈現。
     if (CAPTURE_MODE) {
       var noTransitionStyle = document.createElement("style");
-      noTransitionStyle.textContent = "* { transition: none !important; animation: none !important; }";
+      noTransitionStyle.textContent = "* { transition: none !important; }";
       document.head.appendChild(noTransitionStyle);
     }
 
