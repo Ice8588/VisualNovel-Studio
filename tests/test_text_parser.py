@@ -73,11 +73,11 @@ class TestClassifyLines:
         assert result[0].text == "「我已經決定了。」"
 
     def test_narration_default_fields(self):
-        """旁白的 character 和 sprite 預設為 None。"""
+        """旁白的 character 預設為 None；text_effects 預設為空 list。"""
         lines = ["這是旁白。"]
         result = _classify_lines(lines)
         assert result[0].character is None
-        assert result[0].sprite is None
+        assert result[0].text_effects == []
 
     def test_whitespace_only_lines_skipped(self):
         lines = ["  ", "\t", "旁白"]

@@ -86,87 +86,211 @@ class Character:
 
 @dataclass
 class Dialogue:
-    """一條對話或旁白。"""
+    """一條對話或旁白。
+
+    Phase 1 瘦身：sprite / costume / stage 已移至 Scene 層級的 StageSegment；
+    effects 改名 text_effects 以與畫面特效 EffectSegment 區分。
+    """
 
     type: str  # "dialogue" 或 "narration"
     text: str
     character: str | None = None
-    sprite: str | None = None    # 差分標籤（對應 SpriteVariant.label）
-    costume: str | None = None   # 服裝名稱（對應 Costume.name）
-    effects: list[str] = field(default_factory=list)  # 文字效果，如 ["bold", "italic"]
-    stage: dict[str, dict | None] = field(
-        default_factory=lambda: {"left": None, "center": None, "right": None}
-    )  # 舞台槽位：{"left": {"character": str, "sprite": str|None, "costume": str|None} | None, ...}
-
-    def set_stage_slot(self, position: str, value: dict | None) -> None:
-        """設定 stage 槽位；若 value 的角色已在此 Dialogue 其他槽，自動把舊槽清空。
-
-        去重範圍僅限此 Dialogue 內三槽（同一對話列）；跨 Dialogue 不干涉。
-        ``value`` 為 None（clear）時不觸發去重。
-        """
-        if position not in ("left", "center", "right"):
-            raise ValueError(f"invalid stage position: {position}")
-        if value and value.get("character"):
-            new_char = value["character"]
-            for other in ("left", "center", "right"):
-                if other == position:
-                    continue
-                slot = self.stage.get(other)
-                if slot and slot.get("character") == new_char:
-                    self.stage[other] = None
-        self.stage[position] = value
+    text_effects: list[str] = field(default_factory=list)  # per-row 文字樣式，如 ["bold", "italic"]
 
     def to_dict(self) -> dict:
         d: dict = {
             "type": self.type,
             "text": self.text,
             "character": self.character,
-            "sprite": self.sprite,
         }
-        if self.costume is not None:
-            d["costume"] = self.costume
-        if self.effects:
-            d["effects"] = self.effects
-        if any(v is not None for v in self.stage.values()):
-            d["stage"] = self.stage
+        if self.text_effects:
+            d["text_effects"] = self.text_effects
         return d
 
     @classmethod
     def from_dict(cls, data: dict) -> Dialogue:
-        raw_stage = data.get("stage") or {}
-        stage = {
-            "left":   raw_stage.get("left"),
-            "center": raw_stage.get("center"),
-            "right":  raw_stage.get("right"),
-        }
         return cls(
             type=data["type"],
             text=data["text"],
             character=data.get("character"),
-            sprite=data.get("sprite"),
+            text_effects=data.get("text_effects", []),
+        )
+
+
+@dataclass
+class StageSegment:
+    """舞台立繪區間：在 dialogue 索引 [start, end] 範圍內，此槽位顯示指定角色的立繪。"""
+
+    start: int  # dialogue index inclusive
+    end: int    # dialogue index inclusive
+    character: str  # 必填（沒角色即無意義）
+    costume: str | None = None
+    sprite: str | None = None  # 差分（表情）
+
+    def to_dict(self) -> dict:
+        return {
+            "start": self.start,
+            "end": self.end,
+            "character": self.character,
+            "costume": self.costume,
+            "sprite": self.sprite,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> StageSegment:
+        return cls(
+            start=int(data["start"]),
+            end=int(data["end"]),
+            character=data["character"],
             costume=data.get("costume"),
-            effects=data.get("effects", []),
-            stage=stage,
+            sprite=data.get("sprite"),
+        )
+
+
+@dataclass
+class EffectSegment:
+    """畫面特效區間：在 [start, end] 範圍內觸發 effect_type。"""
+
+    start: int
+    end: int
+    effect_type: str  # rain / snow / crt / screen_shake / pixel_dark / 自訂
+    params: dict = field(default_factory=dict)
+
+    def to_dict(self) -> dict:
+        d: dict = {
+            "start": self.start,
+            "end": self.end,
+            "effect_type": self.effect_type,
+        }
+        if self.params:
+            d["params"] = self.params
+        return d
+
+    @classmethod
+    def from_dict(cls, data: dict) -> EffectSegment:
+        return cls(
+            start=int(data["start"]),
+            end=int(data["end"]),
+            effect_type=data["effect_type"],
+            params=data.get("params", {}),
+        )
+
+
+@dataclass
+class EffectTrack:
+    """命名特效軌道，內含多個 EffectSegment（同軌內目前以互斥為前提；多特效並存請開多條軌道）。"""
+
+    name: str
+    segments: list[EffectSegment] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "segments": [s.to_dict() for s in self.segments],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> EffectTrack:
+        return cls(
+            name=data["name"],
+            segments=[EffectSegment.from_dict(s) for s in data.get("segments", [])],
         )
 
 
 @dataclass
 class Scene:
-    """一個場景，包含背景、音樂、特效和對話列表。"""
+    """一個場景，包含背景、音樂、對話列表，以及舞台與特效的 range-based segments。"""
 
     id: str
     background: str | None = None
     bgm: str | None = None
-    effect: str | None = None  # "rain" / "snow" / "crt" / "pixel_dark" / None
     dialogues: list[Dialogue] = field(default_factory=list)
+    stage_left: list[StageSegment] = field(default_factory=list)
+    stage_center: list[StageSegment] = field(default_factory=list)
+    stage_right: list[StageSegment] = field(default_factory=list)
+    effect_tracks: list[EffectTrack] = field(default_factory=list)
+
+    # ── 跨 domain 同步 API ──
+
+    def insert_dialogue(self, index: int, dlg: Dialogue) -> None:
+        """在 index 位置插入新對話；start/end >= index 的 segment 端點自動 +1。"""
+        index = max(0, min(index, len(self.dialogues)))
+        self.dialogues.insert(index, dlg)
+        self._shift_segments_after_insert(index)
+
+    def remove_dialogue(self, index: int) -> None:
+        """移除第 index 個對話；端點跨越此列的 segment 縮短，長度歸零者被刪除。"""
+        if not (0 <= index < len(self.dialogues)):
+            return
+        del self.dialogues[index]
+        self._shift_segments_after_remove(index)
+
+    def move_dialogue(self, src: int, dst: int) -> None:
+        """把 dialogues[src] 搬到位置 dst（移動後的目標索引）。
+
+        語意等價於 remove + insert：被搬的對話脫離原本所在的 segment，
+        segments 與其他周邊對話綁定（符合拖曳直覺，POC 已驗證）。
+        """
+        if src == dst or not (0 <= src < len(self.dialogues)):
+            return
+        dst = max(0, min(dst, len(self.dialogues) - 1))
+        item = self.dialogues.pop(src)
+        self._shift_segments_after_remove(src)
+        self.dialogues.insert(dst, item)
+        self._shift_segments_after_insert(dst)
+
+    # ── 內部 segment 端點調整 ──
+
+    def _all_segments_with_owner(self):
+        for seg in self.stage_left:
+            yield seg, self.stage_left
+        for seg in self.stage_center:
+            yield seg, self.stage_center
+        for seg in self.stage_right:
+            yield seg, self.stage_right
+        for track in self.effect_tracks:
+            for seg in track.segments:
+                yield seg, track.segments
+
+    def _all_segments(self):
+        for seg, _ in self._all_segments_with_owner():
+            yield seg
+
+    def _shift_segments_after_insert(self, idx: int) -> None:
+        for seg in self._all_segments():
+            if seg.start >= idx:
+                seg.start += 1
+            if seg.end >= idx:
+                seg.end += 1
+
+    def _shift_segments_after_remove(self, idx: int) -> None:
+        to_delete: list = []
+        for seg, owner in self._all_segments_with_owner():
+            if seg.start == seg.end == idx:
+                to_delete.append((seg, owner))
+                continue
+            if seg.start > idx:
+                seg.start -= 1
+            if seg.end >= idx:
+                seg.end -= 1
+            if seg.end < seg.start:
+                to_delete.append((seg, owner))
+        for seg, owner in to_delete:
+            if seg in owner:
+                owner.remove(seg)
+
+    # ── 序列化 ──
 
     def to_dict(self) -> dict:
         return {
             "id": self.id,
             "background": self.background,
             "bgm": self.bgm,
-            "effect": self.effect,
             "dialogues": [d.to_dict() for d in self.dialogues],
+            "stage_left": [s.to_dict() for s in self.stage_left],
+            "stage_center": [s.to_dict() for s in self.stage_center],
+            "stage_right": [s.to_dict() for s in self.stage_right],
+            "effect_tracks": [t.to_dict() for t in self.effect_tracks],
         }
 
     @classmethod
@@ -175,8 +299,11 @@ class Scene:
             id=data["id"],
             background=data.get("background"),
             bgm=data.get("bgm"),
-            effect=data.get("effect"),
             dialogues=[Dialogue.from_dict(d) for d in data.get("dialogues", [])],
+            stage_left=[StageSegment.from_dict(s) for s in data.get("stage_left", [])],
+            stage_center=[StageSegment.from_dict(s) for s in data.get("stage_center", [])],
+            stage_right=[StageSegment.from_dict(s) for s in data.get("stage_right", [])],
+            effect_tracks=[EffectTrack.from_dict(t) for t in data.get("effect_tracks", [])],
         )
 
 

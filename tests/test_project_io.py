@@ -21,7 +21,7 @@ def sample_project():
                 bgm="bgm_peaceful.mp3",
                 dialogues=[
                     Dialogue(type="narration", text="他站在窗邊。"),
-                    Dialogue(type="dialogue", text="你好嗎？", character="小明", sprite="char_xm.png"),
+                    Dialogue(type="dialogue", text="你好嗎？", character="小明"),
                 ],
             ),
             Scene(id="scene_002", dialogues=[]),

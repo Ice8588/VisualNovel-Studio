@@ -7,23 +7,38 @@ from src.core.models import Character, Costume, Dialogue, GameSettings, Project,
 
 class TestDialogue:
     def test_dialogue_to_dict(self):
-        d = Dialogue(type="dialogue", text="你好", character="小明", sprite="char_xm.png")
+        d = Dialogue(type="dialogue", text="你好", character="小明")
         result = d.to_dict()
         assert result == {
             "type": "dialogue",
             "text": "你好",
             "character": "小明",
-            "sprite": "char_xm.png",
         }
 
-    def test_narration_to_dict_null_fields(self):
+    def test_dialogue_to_dict_omits_empty_text_effects(self):
+        d = Dialogue(type="dialogue", text="hi", character="A")
+        assert "text_effects" not in d.to_dict()
+
+    def test_dialogue_to_dict_includes_text_effects(self):
+        d = Dialogue(type="dialogue", text="hi", character="A", text_effects=["bold", "italic"])
+        assert d.to_dict()["text_effects"] == ["bold", "italic"]
+
+    def test_narration_to_dict_null_character(self):
         d = Dialogue(type="narration", text="他走了。")
         result = d.to_dict()
         assert result["character"] is None
-        assert result["sprite"] is None
+
+    def test_dialogue_to_dict_no_legacy_fields(self):
+        """Phase 1：sprite / costume / stage 已從 Dialogue 移除，序列化不應輸出。"""
+        d = Dialogue(type="dialogue", text="hi", character="A")
+        out = d.to_dict()
+        assert "sprite" not in out
+        assert "costume" not in out
+        assert "stage" not in out
+        assert "effects" not in out  # 改名為 text_effects
 
     def test_dialogue_roundtrip(self):
-        original = Dialogue(type="dialogue", text="測試", character="角色A", sprite="s.png")
+        original = Dialogue(type="dialogue", text="測試", character="角色A", text_effects=["shake"])
         restored = Dialogue.from_dict(original.to_dict())
         assert restored == original
 
@@ -248,20 +263,3 @@ class TestCharacterCostume:
         sprites = result["characters"]["角色A"]["sprites"]
         assert sprites == {"普通": "a_normal.png", "開心": "a_happy.png"}
 
-    def test_dialogue_costume_field_serialization(self):
-        """Dialogue 含 costume 欄位的序列化與反序列化。"""
-        dlg = Dialogue(
-            type="dialogue",
-            text="你好",
-            character="小明",
-            sprite="普通",
-            costume="校服",
-        )
-        data = dlg.to_dict()
-        assert data["costume"] == "校服"
-        restored = Dialogue.from_dict(data)
-        assert restored.costume == "校服"
-
-        # costume=None 時不應出現在 dict 中
-        dlg_no_costume = Dialogue(type="narration", text="旁白")
-        assert "costume" not in dlg_no_costume.to_dict()
