@@ -323,7 +323,9 @@ class VideoExporter:
 
                 # 合成幀
                 bg_path = self._resolve_asset(scene.background)
-                sprite_path = self._resolve_asset(dlg.sprite)
+                # Phase 1：Dialogue.sprite 已移除；Phase 3 改為查 scene_state.state_at(scene, idx)
+                # 取出該列 active 的 stage segment 的 sprite。暫時 None 讓影片仍可導出（無立繪）。
+                sprite_path = None
 
                 # 查找角色資訊
                 name_color = None

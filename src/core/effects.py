@@ -5,7 +5,7 @@
 2. 同步修改 `src/engine/engine.js::TEXT_EFFECTS` 與對應的 CSS / keyframe。
 3. 補 `tests/test_effects_sync.py`。
 
-鍵（key）是資料模型中 `Dialogue.effects` 儲存的識別字串；
+鍵（key）是資料模型中 `Dialogue.text_effects` 儲存的識別字串；
 顯示字（display）僅供 UI ComboBox/Menu 呈現，engine 端不直接使用。
 """
 
