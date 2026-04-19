@@ -189,11 +189,8 @@ QSpinBox, QDoubleSpinBox {{
     font-size: {font_size}px;
     min-height: 22px;
 }}
-QSpinBox::up-button, QDoubleSpinBox::up-button,
-QSpinBox::down-button, QDoubleSpinBox::down-button {{
-    width: 18px;
-    border: none;
-}}
+/* Phase 4 修 #5：不再 override up-button/down-button；讓原生 Qt style 畫上下箭頭，
+   使用者才能用上下調節，不必只靠手動輸入。 */
 QCheckBox, QRadioButton {{
     color: #ddd;
     spacing: 8px;
@@ -453,11 +450,7 @@ QSpinBox, QDoubleSpinBox {{
     font-size: {font_size}px;
     min-height: 22px;
 }}
-QSpinBox::up-button, QDoubleSpinBox::up-button,
-QSpinBox::down-button, QDoubleSpinBox::down-button {{
-    width: 18px;
-    border: none;
-}}
+/* Phase 4 修 #5：見深色主題同段註解。 */
 QCheckBox, QRadioButton {{
     color: #333;
     spacing: 8px;
