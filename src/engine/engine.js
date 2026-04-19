@@ -69,7 +69,6 @@
     els.container = document.getElementById("game-container");
     els.bg = document.getElementById("background");
     els.bgNext = document.getElementById("background-next");
-    els.sprite = document.getElementById("sprite");
     els.stageSprites = {
       left:   document.getElementById("sprite-left"),
       center: document.getElementById("sprite-center"),
@@ -243,10 +242,7 @@
       currentBgmFile = bgmFile;
     }
 
-    // 切換特效
-    if (typeof VNEffects !== "undefined") {
-      VNEffects.setEffect(scene.effect || null);
-    }
+    // Phase 3：scene-wide effect 已移除；畫面特效由 showDialogue 依 d.active_effects 切換。
 
     showDialogue();
   }
@@ -308,21 +304,19 @@
       els.namePlate.style.visibility = "hidden";
     }
 
-    // 立繪：優先用 stage；三槽皆空時退回 legacy 單立繪
+    // 立繪：d.stage 由 Python `state_at` 預計算，永遠存在（三槽皆 null 代表沒人）
     var stage = d.stage || {left: null, center: null, right: null};
-    var hasStage = stage.left || stage.center || stage.right;
-    if (hasStage) {
-      renderStageSlot("left",   stage.left);
-      renderStageSlot("center", stage.center);
-      renderStageSlot("right",  stage.right);
-      els.sprite.style.display = "none";
-    } else {
-      hideAllStageSlots();
-      renderLegacySprite(d, charInfo);
+    renderStageSlot("left",   stage.left);
+    renderStageSlot("center", stage.center);
+    renderStageSlot("right",  stage.right);
+
+    // 畫面特效：d.active_effects 由 Python 預計算，列出此 dialogue 當下所有 active effect
+    if (typeof VNEffects !== "undefined") {
+      VNEffects.setActive(d.active_effects || []);
     }
 
     // 套用文字效果（D1 多選）：對 #dialogue-text 加 fx-{key} class
-    applyTextEffects(d.effects || []);
+    applyTextEffects(d.text_effects || []);
 
     // Skip / Capture 模式：跳過打字機，直接顯示完整文字
     if (isSkipping || CAPTURE_MODE) {
@@ -351,26 +345,6 @@
       window._bridge.on_dialogue_shown(sceneIndex, dialogueIndex);
     }
     _jumpedFromPython = false;
-  }
-
-  function resolveSpriteFile(dialogue, charInfo) {
-    if (!dialogue.sprite) return null;
-    if (isDataUri(dialogue.sprite)) return dialogue.sprite;
-    if (charInfo && charInfo.sprites && charInfo.sprites[dialogue.sprite]) {
-      return charInfo.sprites[dialogue.sprite];
-    }
-    return dialogue.sprite;
-  }
-
-  function setSpritePosition(position) {
-    els.sprite.className = "";
-    if (position === "left") {
-      els.sprite.className = "sprite-left";
-    } else if (position === "right") {
-      els.sprite.className = "sprite-right";
-    } else {
-      els.sprite.className = "sprite-center";
-    }
   }
 
   // ── 三槽位立繪輔助函數 ──
@@ -417,32 +391,11 @@
     els.stageSprites.right.style.display  = "none";
   }
 
-  function renderLegacySprite(d, charInfo) {
-    var spriteFile = resolveSpriteFile(d, charInfo);
-    if (spriteFile) {
-      var spriteUrl = isDataUri(spriteFile) ? spriteFile : ASSETS_DIR + spriteFile;
-      if (els.sprite.getAttribute("src") !== spriteUrl) {
-        els.sprite.style.opacity = "0";
-        els.sprite.src = spriteUrl;
-        els.sprite.onload = function () {
-          els.sprite.style.display = "block";
-          els.sprite.style.opacity = "1";
-        };
-      } else {
-        els.sprite.style.display = "block";
-        els.sprite.style.opacity = "1";
-      }
-      setSpritePosition(charInfo ? charInfo.position : "center");
-    } else {
-      els.sprite.style.display = "none";
-    }
-  }
-
   function isDataUri(str) {
     return str && str.indexOf("data:") === 0;
   }
 
-  // D1：文字效果 — 依 d.effects 陣列套用 fx-{key} class；未知 key 忽略
+  // D1：文字效果 — 依 d.text_effects 陣列套用 fx-{key} class；未知 key 忽略
   function applyTextEffects(effects) {
     if (!els.dialogueText) return;
     // 先清除所有現有 fx-* class
@@ -741,7 +694,7 @@
       VNEffects.stop();
     }
     els.dialogueBox.style.display = "none";
-    els.sprite.style.display = "none";
+    hideAllStageSlots();
     els.quickMenu.style.display = "none";
     els.endScreen.style.display = "flex";
   }

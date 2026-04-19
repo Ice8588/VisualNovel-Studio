@@ -257,6 +257,23 @@ body.capture-mode #stage-overlay { display: none !important; }
 
 /* Capture Mode 下已有 `* { animation: none !important }` 抑制，這裡不需額外處理 */
 
+/* ── Phase 3：畫面特效的 body class（VNEffects.setActive 加/解） ── */
+
+/* screen_shake：整個遊戲容器小幅度左右晃動。CAPTURE_MODE 下被 `* { animation: none }` 抑制 */
+@keyframes vn-screen-shake {
+  0%   { transform: translate(0, 0); }
+  20%  { transform: translate(-4px, 2px); }
+  40%  { transform: translate(3px, -2px); }
+  60%  { transform: translate(-2px, 3px); }
+  80%  { transform: translate(2px, -1px); }
+  100% { transform: translate(0, 0); }
+}
+body.fx-screen_shake #game-container {
+  animation: vn-screen-shake 0.3s linear infinite;
+  will-change: transform;
+}
+/* Capture Mode 下 body.fx-screen_shake 仍可加，但 animation 被全域 none 蓋掉（不晃動但保留標記） */
+
 /* ── Quick Menu（對話框下方按鈕列） ── */
 
 #quick-menu {

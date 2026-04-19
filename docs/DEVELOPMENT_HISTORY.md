@@ -386,3 +386,83 @@ import 改寫後接 `src/core/models.py` 的正式 dataclass。
 - center_panel 重寫 regression：Step 3 單元測試 + 端對端 `MainWindow()` 建構測試護守。
 - SegmentEditor cascade race：character 改動時同步 reset costume/sprite，
   `test_changing_stage_character_emits_signal_and_resets_costume` 守護。
+
+---
+
+## Phase 3 紀錄（2026-04-19）
+
+### 目標
+讓 `src/engine/engine.js` / `exporter_video.py` / `exporter_html.py` / `webengine_capture.py`
+適配 Phase 1 新資料模型（`StageSegment` / `EffectSegment` / `EffectTrack`）；
+ADR-003 守護 CAPTURE_MODE 下多立繪渲染；MP4 端到端 live 驗收後可 merge phase-1+2+3。
+
+### 關鍵決策：Python 端預先計算 state（ADR-004）
+engine.js 不實作 JS 版 `stateAt`。改為 `Project.to_script_json` 呼叫 `src/core/scene_state.state_at`
+把每筆 dialogue 的 `stage{left,center,right}` 與 `active_effects` 攤平後寫入 data.js。
+
+**理由**：
+1. 單一 source of truth（Python `state_at`）——不需要 JS/Python parity test。
+2. engine.js 邏輯簡化為純讀取，diff 最小化。
+3. data.js 略大 ~10-20%，但語義清晰、debug 容易。
+
+輸出 shape（to_script_json 後每筆 dialogue）：
+```json
+{
+  "type": "dialogue", "text": "...", "character": "A", "text_effects": ["bold"],
+  "stage": {"left": {"character":"A","costume":"便服","sprite":"微笑"}, "center": null, "right": null},
+  "active_effects": [{"effect_type":"rain","params":{"intensity":0.7}}]
+}
+```
+
+### engine.js 改動
+- 刪：`resolveSpriteFile` / `renderLegacySprite` / `setSpritePosition` 三個 legacy 函式
+- 刪：`<img id="sprite">` legacy DOM 元素（index.html）
+- 刪：`els.sprite` 快取與所有引用
+- 改：`showDialogue` 讀 `d.text_effects`（原 d.effects）、`d.stage`（永遠存在，無 hasStage 分支）、`d.active_effects`
+- 改：`enterScene` 移除 `VNEffects.setEffect(scene.effect)`；特效切換改由 showDialogue 觸發
+- 保留：`refreshStageOverlayButtons(d)` 邏輯不動（d.stage shape 不變）
+
+### effects.js 改動
+- 新增 `VNEffects.setActive(activeList)`：分流 canvas 型（rain/snow/crt：互斥）、
+  body-class/filter 型（pixel_dark、screen_shake：可疊加）
+- `setEffect(name)` 改為 thin wrapper，向下相容但建議不再使用
+- 未知 effect_type 僅 `console.warn`，不崩
+
+### style.css 改動
+- 新增 `@keyframes vn-screen-shake` + `body.fx-screen_shake #game-container { animation: ... }`
+- CAPTURE_MODE 下由既有 `* { animation: none !important }` 抑制（不晃但 class 仍在）
+- `pixel_dark` 仍透過 `container.style.filter` 套 brightness（非動畫、capture 下仍生效）
+
+### exporter_video.py (v1 Pillow) 改動
+- import `state_at` + `StageSegment`
+- `_generate_frames` 對每列呼叫 `state_at(scene, idx)` 取 stage
+- 新增 `_lookup_sprite_filename(StageSegment)`：character → costume → expression → filename
+- sprite 挑選順序：speaker 對應的 stage 槽 > center > left > right > None（ADR-003 規定 v1 只渲染單張）
+- 刪除 Phase 1 留下的 `sprite_path = None` stub
+
+### exporter_html.py 改動
+- 移除 lines 170-173 對 `dlg.get("sprite")` 的殘餘讀取（Phase 1 已無此欄位）
+- 立繪檔名 → data URI 替換完全由 `characters[].sprites` dict 負責（engine.js 用 label 查）
+
+### webengine_capture.py
+- `has_effect` 判定改為 `any(t.segments for t in scene.effect_tracks)`（Phase 2 已改，Phase 3 無需動）
+- Preview / Capture 皆透過新 `to_script_json` 消化，engine.js 只讀預計算欄位
+
+### 新測試
+- `tests/test_to_script_json_phase3.py`（6 tests）：stage / active_effects 預計算輸出守護
+- `tests/test_exporter_video_phase3.py`（5 tests）：`_lookup_sprite_filename` 與 state_at 整合
+- `tests/test_capture_multi_sprite.py`：ADR-003 守護，左紅/右藍立繪同幀渲染，
+  以 PIL pixel 斷言。預設 skip（`VNSTUDIO_E2E=1` 啟用）；
+  MP4 端到端最終由 user 手動跑播放器驗收。
+
+### 驗收
+- `QT_QPA_PLATFORM=offscreen python -m pytest tests/ -q` → 195 passed + 1 skipped。
+- `VNSTUDIO_E2E=1 ...` → 196 passed（本機驗證 capture 端到端。）
+- MP4 live 播放驗收由 user 執行（兩立繪 + rain + screen_shake）——通過後解封 main merge。
+
+### 給 CODEX / 下一位的備忘
+- 測試套件預設 skip `test_capture_multi_sprite.py`；設 `VNSTUDIO_E2E=1` 才跑。
+  此環境下 capture 路徑以紅/藍色塊驗證左右立繪同時渲染，等同 ADR-003 自動守護。
+- 合 main 之前 user 必須跑一次完整 MP4 導出：含多立繪 + rain + screen_shake。
+  本 Phase 已確保 Python 端資料攤平與 engine.js / Pillow 端讀取一致，但 MP4 視覺最終責任在人。
+- Phase 4+：自訂 effect kinds / 軌道 rename+delete / 同軌多特效疊加 / 焦點保護。

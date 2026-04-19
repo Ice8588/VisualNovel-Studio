@@ -166,11 +166,8 @@ def _replace_asset_paths(script_data: dict, asset_map: dict[str, str]) -> None:
         if bgm and bgm in asset_map:
             scene["bgm"] = asset_map[bgm]
 
-        # 對話中的立繪
-        for dlg in scene.get("dialogues", []):
-            sprite = dlg.get("sprite")
-            if sprite and sprite in asset_map:
-                dlg["sprite"] = asset_map[sprite]
+        # Phase 3：dialogue 已無 top-level sprite 欄位；stage 槽位僅存放 sprite label，
+        # 實際檔名到 data URI 的映射透過下方 characters[].sprites 處理。
 
     # Characters 中的 sprites
     for char_data in script_data.get("characters", {}).values():
