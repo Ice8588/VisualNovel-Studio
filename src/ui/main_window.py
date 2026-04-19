@@ -218,7 +218,7 @@ class MainWindow(QMainWindow):
             if sv.filename and sv.filename not in self._project.assets["sprites"]:
                 self._project.assets["sprites"].append(sv.filename)
         self.left_panel.refresh_characters(keep_tab=True)
-        self.center_panel._refresh_dialogue_table()
+        self.center_panel.refresh()
         self._on_project_changed()
 
     def _on_remove_character(self, index: int) -> None:
@@ -243,17 +243,17 @@ class MainWindow(QMainWindow):
         )
         if result != QMessageBox.StandardButton.Yes:
             return
-        # 軟性解綁：將所有引用此角色的對話降級為旁白
+        # 軟性解綁：對話降級為旁白；stage 三 lane 清掉該角色的 segment
         for scene in self._project.scenes:
             for dlg in scene.dialogues:
                 if dlg.character == name:
                     dlg.character = None
-                    dlg.costume = None
-                    dlg.sprite = None
                     dlg.type = "narration"
+            for lane in scene.all_stage_lanes().values():
+                lane[:] = [seg for seg in lane if seg.character != name]
         self._project.characters.pop(index)
         self.left_panel.refresh_characters()
-        self.center_panel._refresh_dialogue_table()
+        self.center_panel.refresh()
         self._on_project_changed()
 
     def _on_costume_edit(self, char_index: int) -> None:
@@ -270,12 +270,12 @@ class MainWindow(QMainWindow):
                 self._project.assets["sprites"].append(sv.filename)
         self.left_panel.refresh_characters(keep_tab=True)
         self.left_panel.refresh_costume_list()
-        self.center_panel._refresh_dialogue_table()
+        self.center_panel.refresh()
         self._on_project_changed()
 
     def _on_character_property_changed(self) -> None:
         self.left_panel.refresh_characters(keep_tab=True)
-        self.center_panel._refresh_dialogue_table()
+        self.center_panel.refresh()
         self._on_project_changed()
 
     # ── 主題 / 字體 ──

@@ -314,3 +314,75 @@
 ### 給 Phase B 的備忘
 - `CenterPanel` 的 `preview_toolbar` 已有 `btn_refresh_preview` / `spin_dlg_font` / `spin_name_font` / `spin_opacity` SpinBox，MainWindow 有 `_on_game_setting_changed` 即時連接；B3 主要只需評估是否把 SpinBox 改用 qfluentwidgets ComboBox/Slider。
 - 主視窗已無「設定」menu，B1 視為已完成。
+
+---
+
+## Phase 2 紀錄（2026-04-19）
+
+### 目標
+把 `src/ui/center_panel.py` 的 `QTableWidget` 對話編輯器替換成 POC 驗證過的三域分離結構
+（左卡片列 + 中舞台三 lane + 右特效 timeline），接上 Phase 1 的新 `Scene` API
+（`stage_left/center/right`、`effect_tracks`、`insert/remove/move_dialogue`）。
+
+### 拆掉的東西
+- `QTableWidget` 整套：`_DraggableTable`、`_MultilineDelegate`、`_IndexDelegate`、
+  `_HoverFilter`、`_StageCellWidget`、`_EffectsMenuButton`、`_BatchToolbar`。
+- 7 處欄位寫入點（角色 / 服裝 / 差分 / 效果 / 舞台 / 文字 / 批次）全部移除；
+  `_refresh_dialogue_table` → 改名公開 API `CenterPanel.refresh()`，MainWindow 四處呼叫同步改。
+- 搜尋 / 高亮 / Ctrl+C/V 批次（Phase 5 重新設計）。
+- `left_panel.combo_effect` + 對應的 `_on_effect_changed` + `scene.effect` 讀寫
+  （場景層級 scene-wide 特效改以 EffectTimeline 拖一條 full-length segment 取代，消除兩個 source of truth）。
+- `dialogs.py`：`StageSlotPickerDialog`、`StageBatchDialog`、`BatchAssignDialog` 三 class 刪除；
+  對應的 Qt import 一併清理。
+
+### 新結構
+```
+CenterPanel (QSplitter Vertical)
+├─ PreviewWidget (上；既有)
+└─ Bottom (QSplitter Vertical)
+    ├─ Workspace (QScrollArea + QSplitter Horizontal)
+    │    ├─ DialogueColumn   左，拉伸
+    │    ├─ StagePanel       中，3 * LANE_WIDTH
+    │    └─ EffectTimelineWidget 右，N * LANE_WIDTH
+    └─ SegmentEditor（底，固定 ~160px）
+```
+
+三域 widget（`src/ui/dialogue_list.py` / `stage_panel.py` / `effect_timeline.py`）
+與共用常數（`src/ui/_timeline_shared.py`）由 `experimental/timeline_poc/` 原樣移植，
+import 改寫後接 `src/core/models.py` 的正式 dataclass。
+
+`SegmentEditor`（`src/ui/segment_editor.py`）為 inline panel：
+- StageSegment 模式：Character / Costume / Sprite 三級聯 ComboBox，
+  改 character 會把 costume/sprite cascade reset（POC 沒做這部分）。
+- EffectSegment 模式：effect_type ComboBox + params JSON (`QPlainTextEdit`)，
+  blur 時嘗試 `json.loads` 寫回，解析失敗保留原值不 emit。
+
+### 跨 domain 同步
+- `DialogueColumn.dialogue_moved` → `Scene.move_dialogue(src, dst)` →
+  segments 端點自動依 POC 驗證的 pop+insert 語意 shift（Phase 1 已實作）。
+- 三 widget 共享游標：`cursor_changed` 互相轉發 + preview goto。
+- `segment_changed`：stage / effect 任何 segment 動了 → 重繪三 widget + 預覽 reload + `project_changed`。
+
+### 驗收
+- `QT_QPA_PLATFORM=offscreen python -m pytest tests/ -v` → 179 passed（151 Phase 1 + 28 Phase 2）。
+- `python main.py` 可開、可拖卡片、可拖 segment、可改 segment payload。
+
+### 給 CODEX / 下一位的備忘
+- **MP4 匯出仍壞**：此階段 engine.js 尚讀舊欄位 → fallback 為 null；影片會是空白舞台、
+  無特效。Phase 3 的工作是把 `src/engine/engine.js` 與 `src/ui/webengine_capture.py` 全部改用
+  `Scene.state_at(dlg_idx)` 查當下狀態。
+- `Project.to_script_json()` 目前仍輸出 Phase 1 前的 `characters[].position`（legacy），以及
+  `Scene.to_dict()` 輸出新 schema；engine 未消費新欄位 → 預覽呈現不符合預期（已知）。
+- `src/ui/webengine_capture.py` 的 `has_effect` 改為 `any(t.segments for t in scene.effect_tracks)`
+  以避開 `scene.effect` 屬性（已刪），但語意不精確，Phase 3 隨 engine.js 重寫。
+- `Preview.bridge.stage_slot_clicked` signal 保留但無 listener（engine.js 端 hook 未動；
+  Phase 3 決定要不要整個拔掉）。
+- `tests/conftest.py` 已加全域 session-scoped `qapp` fixture，
+  處理 QtWebEngine + qfluentwidgets 的 global singleton 生命週期耦合——
+  後續新 Qt widget 測試一律用這個 fixture，不要自己建 QApplication。
+
+### 風險（已驗證 mitigation）
+- POC 固定列高 52px：視覺已跑 main.py 確認無擠壓。
+- center_panel 重寫 regression：Step 3 單元測試 + 端對端 `MainWindow()` 建構測試護守。
+- SegmentEditor cascade race：character 改動時同步 reset costume/sprite，
+  `test_changing_stage_character_emits_signal_and_resets_costume` 守護。

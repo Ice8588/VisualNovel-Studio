@@ -315,7 +315,9 @@ class WebEngineVideoExporter:
             if not scene.dialogues:
                 continue
 
-            has_effect = bool(scene.effect)
+            # Phase 2：scene-wide effect 已改為 effect_tracks；這裡僅用於 warm-up 時長判斷。
+            # Phase 3 會把 engine.js 改為真正依 EffectSegment 生效。
+            has_effect = any(t.segments for t in scene.effect_tracks)
 
             # 切換場景（背景 + 特效）
             self._run_js(view, f"VNCaptureAPI.goToScene({si})")

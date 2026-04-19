@@ -38,7 +38,6 @@ PRESET_COLORS = [
 ]
 
 NONE_LABEL = "(無)"
-EFFECT_OPTIONS = [NONE_LABEL, "rain", "snow", "crt", "pixel_dark"]
 
 
 class _HoverDeleteItemWidget(QWidget):
@@ -108,7 +107,7 @@ class LeftPanel(QWidget):
     scene_added = pyqtSignal()
     scene_removed = pyqtSignal(int)         # scene index
     scenes_reordered = pyqtSignal()
-    scene_property_changed = pyqtSignal()   # 背景/BGM/特效 changed
+    scene_property_changed = pyqtSignal()   # 背景/BGM changed
 
     # 角色信號
     character_add_requested = pyqtSignal()
@@ -215,12 +214,7 @@ class LeftPanel(QWidget):
         self.btn_import_music = PushButton("匯入")
         bgm_row.addWidget(self.btn_import_music)
         props_layout.addLayout(bgm_row)
-        effect_row = QHBoxLayout()
-        effect_row.addWidget(QLabel("特效:"))
-        self.combo_effect = ComboBox()
-        self.combo_effect.addItems(EFFECT_OPTIONS)
-        effect_row.addWidget(self.combo_effect, 1)
-        props_layout.addLayout(effect_row)
+        # Phase 2：場景層級的特效 ComboBox 移除，改由特效 timeline 拖 segment 管理。
         props_layout.addStretch()
         scene_props.setLayout(props_layout)
         self._inspector.addWidget(scene_props)
@@ -292,7 +286,6 @@ class LeftPanel(QWidget):
         self.scene_list.model().rowsMoved.connect(self._on_scenes_reordered)
         self.combo_background.currentIndexChanged.connect(self._on_background_changed)
         self.combo_bgm.currentIndexChanged.connect(self._on_bgm_changed)
-        self.combo_effect.currentIndexChanged.connect(self._on_effect_changed)
         self.btn_import_bg.clicked.connect(self.bg_import_requested.emit)
         self.btn_import_music.clicked.connect(self.music_import_requested.emit)
 
@@ -398,13 +391,9 @@ class LeftPanel(QWidget):
         if scene:
             self._set_combo_value(self.combo_background, scene.background)
             self._set_combo_value(self.combo_bgm, scene.bgm)
-            effect_val = scene.effect or NONE_LABEL
-            idx = self.combo_effect.findText(effect_val)
-            self.combo_effect.setCurrentIndex(max(0, idx))
         else:
             self.combo_background.setCurrentIndex(0)
             self.combo_bgm.setCurrentIndex(0)
-            self.combo_effect.setCurrentIndex(0)
         self._updating = False
 
     @staticmethod
@@ -434,15 +423,6 @@ class LeftPanel(QWidget):
         scene.bgm = None if index == 0 else self.combo_bgm.currentText()
         self.scene_property_changed.emit()
 
-    def _on_effect_changed(self, index: int) -> None:
-        if self._updating:
-            return
-        scene = self._get_current_scene()
-        if not scene:
-            return
-        scene.effect = None if index == 0 else self.combo_effect.currentText()
-        self.scene_property_changed.emit()
-
     def _refresh_scene_list_label(self) -> None:
         """更新當前場景在列表 widget 中的顯示文字。"""
         scene = self._get_current_scene()
@@ -467,17 +447,23 @@ class LeftPanel(QWidget):
         self.scene_added.emit()
 
     def _on_remove_scene_by_item(self, item: QListWidgetItem) -> None:
-        """由 item widget 的刪除按鈕觸發；場景有對話時先詢問確認。"""
+        """由 item widget 的刪除按鈕觸發；場景有對話 / segment 時先詢問確認。"""
         row = self.scene_list.row(item)
         if row < 0 or not self._project or row >= len(self._project.scenes):
             return
         scene = self._project.scenes[row]
-        dlg_count = len(scene.dialogues)
-        if dlg_count > 0:
+        n_dialogues = len(scene.dialogues)
+        n_stage = sum(len(lane) for lane in scene.all_stage_lanes().values())
+        n_effect = sum(len(t.segments) for t in scene.effect_tracks)
+        if n_dialogues + n_stage + n_effect > 0:
+            detail = (
+                f"場景「{scene.id}」將連帶刪除 {n_dialogues} 則對話、"
+                f"{n_stage} 條立繪 segment、{n_effect} 條特效 segment。\n確定要移除？"
+            )
             result = QMessageBox.question(
                 self,
                 "確認移除場景",
-                f"場景「{scene.id}」包含 {dlg_count} 條對話。\n確定要移除？",
+                detail,
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             )
             if result != QMessageBox.StandardButton.Yes:

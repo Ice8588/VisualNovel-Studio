@@ -212,6 +212,14 @@ class Scene:
 
     # ── 跨 domain 同步 API ──
 
+    def all_stage_lanes(self) -> dict[str, list[StageSegment]]:
+        """回傳三條舞台 lane 的 dict（live references）。UI 層用來統一枚舉。"""
+        return {
+            "left": self.stage_left,
+            "center": self.stage_center,
+            "right": self.stage_right,
+        }
+
     def insert_dialogue(self, index: int, dlg: Dialogue) -> None:
         """在 index 位置插入新對話；start/end >= index 的 segment 端點自動 +1。"""
         index = max(0, min(index, len(self.dialogues)))
