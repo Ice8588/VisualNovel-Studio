@@ -42,6 +42,8 @@ class StageLaneWidget(QWidget):
     segment_changed = pyqtSignal()              # 每次 mouseMove 拖端點都觸發（live；僅供 widget 自我重繪）
     segment_committed = pyqtSignal()            # commit 邊界：拖完 / 雙擊新增 / Delete（caller 用來重載預覽）
     segment_selected = pyqtSignal(object)       # StageSegment | None
+    # Phase 4：跨 lane 拖拉。release 時若 mouse 在別條 lane 上，由 StagePanel 接手 transfer
+    request_lane_transfer = pyqtSignal(object, object)  # (segment, release_global_pos: QPoint)
 
     def __init__(self, scene: Scene, position: str, parent=None):
         super().__init__(parent)
@@ -257,11 +259,21 @@ class StageLaneWidget(QWidget):
     def mouseReleaseEvent(self, ev: QMouseEvent):
         if self._drag is not None:
             was_dirty = self._drag_dirty
+            dragged_seg = self._drag.seg
+            drag_mode = self._drag.mode
             self._drag = None
             self._drag_dirty = False
             self._segments().sort(key=lambda s: s.start)
             self.unsetCursor()
             self.update()
+            # Phase 4：若拖中段（move 模式）且 release 點在 lane 外，請求 StagePanel 跨 lane 轉移
+            if drag_mode == "move":
+                local_pos = ev.pos()
+                if local_pos.x() < 0 or local_pos.x() > self.width():
+                    self.request_lane_transfer.emit(
+                        dragged_seg, ev.globalPosition().toPoint()
+                    )
+                    return  # transfer 內含 commit；不重複 emit
             if was_dirty:
                 self.segment_committed.emit()
 
@@ -326,6 +338,8 @@ class StagePanel(QWidget):
             lane.segment_changed.connect(self.segment_changed.emit)
             lane.segment_committed.connect(self.segment_committed.emit)
             lane.segment_selected.connect(self._on_segment_selected)
+            # Phase 4：跨 lane 拖拉
+            lane.request_lane_transfer.connect(self._on_request_lane_transfer)
             layout.addWidget(lane)
 
         layout.addStretch(1)
@@ -336,6 +350,52 @@ class StagePanel(QWidget):
         for lane in self.lanes.values():
             if lane is not sender:
                 lane.select_segment(None)
+        self.segment_selected.emit(seg)
+
+    def _on_request_lane_transfer(self, seg: StageSegment, release_global_pos):
+        """Phase 4：使用者把 segment 拖到別條 lane 上 release，這裡執行轉移。
+
+        若 release 點不在任何 lane 上 → 不轉移、segment 留原處（emit committed）。
+        若目標 lane 已被同範圍 segment 占用 → 不轉移（保守不破壞既有資料）。
+        """
+        source_lane = self.sender()
+        if not isinstance(source_lane, StageLaneWidget):
+            self.segment_committed.emit()
+            return
+
+        target_lane = None
+        for lane in self.lanes.values():
+            if lane is source_lane:
+                continue
+            local = lane.mapFromGlobal(release_global_pos)
+            if 0 <= local.x() < lane.width() and 0 <= local.y() < lane.height():
+                target_lane = lane
+                break
+        if target_lane is None:
+            # release 點不在任何別 lane → 維持原 lane 但 emit committed（位置可能改了）
+            self.segment_committed.emit()
+            return
+
+        # 檢查目標 lane 是否與 seg 範圍衝突
+        for s in target_lane._segments():
+            if not (seg.end < s.start or seg.start > s.end):
+                # 與既有 segment 重疊 → 拒絕轉移、留在原 lane
+                self.segment_committed.emit()
+                return
+
+        # 執行轉移
+        if seg in source_lane._segments():
+            source_lane._segments().remove(seg)
+        target_lane._segments().append(seg)
+        target_lane._segments().sort(key=lambda s: s.start)
+        # 重繪兩條 lane
+        source_lane.update()
+        target_lane.update()
+        # 清掉 source 的選取、設定 target 的選取
+        source_lane.select_segment(None)
+        target_lane.select_segment(seg)
+        # 對外觸發
+        self.segment_committed.emit()
         self.segment_selected.emit(seg)
 
     def set_cursor(self, idx: int | None):
@@ -349,6 +409,17 @@ class StagePanel(QWidget):
     def refresh(self):
         for lane in self.lanes.values():
             lane.refresh()
+
+    def global_rect_of_segment(self, seg: StageSegment):
+        """回傳 seg 在螢幕全域座標的 QRect；找不到回 None。Phase 4 給 SegmentEditor 浮動定位用。"""
+        from PyQt6.QtCore import QRect, QPoint
+        for lane in self.lanes.values():
+            if seg in lane._segments():
+                top, bottom = shared.idx_range_to_rect_y(seg.start, seg.end)
+                top_left_global = lane.mapToGlobal(QPoint(0, top))
+                return QRect(top_left_global, QPoint(top_left_global.x() + lane.width(),
+                                                      top_left_global.y() + (bottom - top)))
+        return None
 
 
 class StageHeader(QWidget):

@@ -162,3 +162,78 @@ def test_delete_key_removes_selected_segment(qapp):
 
     assert scene.stage_left == []
     assert committed == [True]  # Delete 也是 commit 動作
+
+
+# ── Phase 4：跨 lane 拖拉 ──
+
+def test_cross_lane_transfer_to_empty_target(qapp):
+    """把 left lane 的 segment 拖到 right lane（空）→ 轉移成功，原 lane 不再有此 seg。"""
+    scene = _make_scene(6)
+    seg = StageSegment(1, 3, "小明")
+    scene.stage_left.append(seg)
+    panel = StagePanel(scene)
+    panel.show()
+    qapp.processEvents()
+
+    committed: list = []
+    panel.segment_committed.connect(lambda: committed.append(True))
+
+    left_lane = panel.lanes["left"]
+    right_lane = panel.lanes["right"]
+
+    # 模擬 release 在 right lane 的中央
+    right_local_center = QPointF(float(right_lane.width() / 2), float(shared.idx_to_y(2)))
+    release_global = right_lane.mapToGlobal(right_local_center.toPoint())
+    panel._on_request_lane_transfer = panel._on_request_lane_transfer  # noqa: silence flake
+    # 直接呼叫：模擬從 left lane sender 觸發
+    # 由於 _on_request_lane_transfer 用 self.sender()，這裡需用 emit 才正確接通
+    left_lane.request_lane_transfer.emit(seg, release_global)
+
+    panel.hide()
+
+    assert seg not in scene.stage_left
+    assert seg in scene.stage_right
+    assert committed and committed[-1] is True
+
+
+def test_cross_lane_transfer_rejects_when_overlap(qapp):
+    """目標 lane 已有同範圍 segment → 拒絕轉移。"""
+    scene = _make_scene(6)
+    seg = StageSegment(1, 3, "小明")
+    blocker = StageSegment(2, 2, "小華")  # 與 seg [1,3] 重疊
+    scene.stage_left.append(seg)
+    scene.stage_right.append(blocker)
+    panel = StagePanel(scene)
+    panel.show()
+    qapp.processEvents()
+
+    right_lane = panel.lanes["right"]
+    release_global = right_lane.mapToGlobal(
+        QPointF(float(right_lane.width() / 2), float(shared.idx_to_y(2))).toPoint()
+    )
+    panel.lanes["left"].request_lane_transfer.emit(seg, release_global)
+
+    panel.hide()
+
+    assert seg in scene.stage_left  # 留原位
+    assert seg not in scene.stage_right
+    assert blocker in scene.stage_right  # 阻擋者也還在
+
+
+def test_cross_lane_transfer_release_outside_no_lane(qapp):
+    """release 點不在任何 lane 上 → seg 留在原 lane（emit committed 即可）。"""
+    scene = _make_scene(6)
+    seg = StageSegment(1, 3, "小明")
+    scene.stage_left.append(seg)
+    panel = StagePanel(scene)
+    panel.show()
+    qapp.processEvents()
+
+    # 用一個極遠的全域座標
+    far_pos = panel.mapToGlobal(panel.rect().bottomRight())
+    far_pos.setX(far_pos.x() + 9999)
+    panel.lanes["left"].request_lane_transfer.emit(seg, far_pos)
+
+    panel.hide()
+
+    assert seg in scene.stage_left
