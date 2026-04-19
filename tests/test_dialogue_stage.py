@@ -1,5 +1,7 @@
 """Tests for Dialogue.stage field — Block 1."""
 
+import pytest
+
 from src.core.models import Dialogue, Scene, Project, Character, GameSettings
 
 
@@ -116,3 +118,66 @@ def test_to_script_json_dialogue_omits_stage_when_empty():
     script = project.to_script_json()
     dlg = script["scenes"][0]["dialogues"][0]
     assert "stage" not in dlg
+
+
+# --- Bug 3：set_stage_slot 同列內去重 ---
+
+def test_stage_dedup_same_character_across_slots():
+    """left=A 時設 center=A → 自動清 left；center 保留。"""
+    d = Dialogue(
+        type="dialogue",
+        text="x",
+        stage={"left": {"character": "小明", "sprite": None, "costume": None},
+               "center": None, "right": None},
+    )
+    d.set_stage_slot("center", {"character": "小明", "sprite": "微笑", "costume": None})
+    assert d.stage["left"] is None
+    assert d.stage["center"] == {"character": "小明", "sprite": "微笑", "costume": None}
+    assert d.stage["right"] is None
+
+
+def test_stage_dedup_different_character_untouched():
+    """left=A 時設 center=B → left 不動。"""
+    d = Dialogue(
+        type="dialogue",
+        text="x",
+        stage={"left": {"character": "小明", "sprite": None, "costume": None},
+               "center": None, "right": None},
+    )
+    d.set_stage_slot("center", {"character": "小華", "sprite": None, "costume": None})
+    assert d.stage["left"] == {"character": "小明", "sprite": None, "costume": None}
+    assert d.stage["center"] == {"character": "小華", "sprite": None, "costume": None}
+
+
+def test_stage_dedup_clear_does_not_trigger():
+    """clear（value=None）不應觸發去重邏輯。"""
+    d = Dialogue(
+        type="dialogue",
+        text="x",
+        stage={"left": {"character": "小明", "sprite": None, "costume": None},
+               "center": {"character": "小華", "sprite": None, "costume": None},
+               "right": None},
+    )
+    d.set_stage_slot("right", None)
+    assert d.stage["left"] == {"character": "小明", "sprite": None, "costume": None}
+    assert d.stage["center"] == {"character": "小華", "sprite": None, "costume": None}
+    assert d.stage["right"] is None
+
+
+def test_stage_dedup_same_slot_update():
+    """同槽更新（在 left 重設 left=同角色）→ 不應自我清空。"""
+    d = Dialogue(
+        type="dialogue",
+        text="x",
+        stage={"left": {"character": "小明", "sprite": "微笑", "costume": None},
+               "center": None, "right": None},
+    )
+    d.set_stage_slot("left", {"character": "小明", "sprite": "生氣", "costume": None})
+    assert d.stage["left"] == {"character": "小明", "sprite": "生氣", "costume": None}
+
+
+def test_stage_set_slot_invalid_position():
+    """無效 position 字串 → ValueError。"""
+    d = Dialogue(type="dialogue", text="x")
+    with pytest.raises(ValueError):
+        d.set_stage_slot("top", {"character": "小明"})
