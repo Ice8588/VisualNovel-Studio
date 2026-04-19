@@ -11,7 +11,8 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-from src.core.models import Project
+from src.core.models import Project, StageSegment
+from src.core.scene_state import state_at
 
 logger = logging.getLogger(__name__)
 
@@ -317,29 +318,54 @@ class VideoExporter:
             bgm_start = current_time
             bgm_path = self._resolve_asset(scene.bgm) if scene.bgm else None
 
-            for dlg in scene.dialogues:
+            for dlg_idx, dlg in enumerate(scene.dialogues):
                 # 依字數計算停留時間
                 duration = _calc_duration(dlg.text)
 
                 # 合成幀
                 bg_path = self._resolve_asset(scene.background)
-                # Phase 1：Dialogue.sprite 已移除；Phase 3 改為查 scene_state.state_at(scene, idx)
-                # 取出該列 active 的 stage segment 的 sprite。暫時 None 讓影片仍可導出（無立繪）。
-                sprite_path = None
 
-                # 查找角色資訊
+                # Phase 3：v1 Pillow 只渲染單張立繪（ADR-003：多立繪請走 v2 webengine_capture）
+                # 挑選順序：speaker 對應的 stage 槽 > center > left > right > None
+                st = state_at(scene, dlg_idx)
+                sprite_seg: StageSegment | None = None
+                stage = st.get("stage", {}) if st else {}
+                if dlg.character:
+                    for pos in ("left", "center", "right"):
+                        s = stage.get(pos)
+                        if s and s.character == dlg.character:
+                            sprite_seg = s
+                            break
+                if sprite_seg is None:
+                    for pos in ("center", "left", "right"):
+                        s = stage.get(pos)
+                        if s:
+                            sprite_seg = s
+                            break
+
+                sprite_path = None
+                render_position = "center"
+                if sprite_seg is not None:
+                    sprite_filename = self._lookup_sprite_filename(sprite_seg)
+                    if sprite_filename:
+                        sprite_path = self._resolve_asset(sprite_filename)
+                    # position 取自 segment 所屬槽位（left/center/right）
+                    for pos_name, s in stage.items():
+                        if s is sprite_seg:
+                            render_position = pos_name
+                            break
+
+                # 查找角色名牌顏色
                 name_color = None
-                position = "center"
                 if dlg.character:
                     for c in self._project.characters:
                         if c.name == dlg.character:
                             name_color = c.name_color
-                            position = c.position
                             break
 
                 frame = self._renderer.render_frame(
                     bg_path, sprite_path, dlg.character, dlg.text, dlg.type,
-                    name_color=name_color, position=position,
+                    name_color=name_color, position=render_position,
                 )
 
                 frame_filename = f"frame_{frame_idx:05d}.png"
@@ -477,6 +503,35 @@ class VideoExporter:
             logger.warning("BGM 混合失敗，將導出無音訊影片：%s", result.stderr[-200:])
             return None
         return audio_out
+
+    def _lookup_sprite_filename(self, seg: StageSegment) -> str | None:
+        """從 StageSegment 的 character/costume/sprite 標籤反查 SpriteVariant.filename。
+
+        找不到對應 character / costume / sprite 時回傳 None（呼叫端會 fallback 成無立繪）。
+        """
+        if not seg or not seg.character:
+            return None
+        char = next(
+            (c for c in self._project.characters if c.name == seg.character),
+            None,
+        )
+        if char is None:
+            return None
+        # 沒指定 costume / sprite：挑第一個可用的差分
+        if not seg.costume and not seg.sprite:
+            for cos in char.costumes:
+                for expr in cos.expressions:
+                    if expr.filename:
+                        return expr.filename
+            return None
+        # 指定了 costume：在該 costume 裡找 sprite
+        for cos in char.costumes:
+            if seg.costume and cos.name != seg.costume:
+                continue
+            for expr in cos.expressions:
+                if seg.sprite is None or expr.label == seg.sprite:
+                    return expr.filename
+        return None
 
     def _resolve_asset(self, filename: str | None) -> Path | None:
         """將素材檔名解析為完整路徑。"""

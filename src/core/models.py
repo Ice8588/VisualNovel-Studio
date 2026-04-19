@@ -360,15 +360,55 @@ class Project:
     game_settings: GameSettings = field(default_factory=GameSettings)
 
     def to_script_json(self) -> dict:
-        """轉換為 engine.js 使用的 script.json 格式（保持扁平 sprites dict）。"""
+        """供 engine.js 消化的格式：每個 dialogue 的 stage / active_effects 已預計算。
+
+        Phase 3：engine.js 不再自行實作 stateAt，改讀 Python 端 `state_at` 攤平後的結果。
+        """
+        from src.core.scene_state import state_at  # lazy import 規避循環
+
+        def _seg_to_dict(seg):
+            return None if seg is None else {
+                "character": seg.character,
+                "costume": seg.costume,
+                "sprite": seg.sprite,
+            }
+
+        scenes_out = []
+        for scene in self.scenes:
+            dialogues_out = []
+            for idx, dlg in enumerate(scene.dialogues):
+                st = state_at(scene, idx)
+                dialogues_out.append({
+                    "type": dlg.type,
+                    "text": dlg.text,
+                    "character": dlg.character,
+                    "text_effects": list(dlg.text_effects),
+                    "stage": {
+                        "left":   _seg_to_dict(st["stage"]["left"]),
+                        "center": _seg_to_dict(st["stage"]["center"]),
+                        "right":  _seg_to_dict(st["stage"]["right"]),
+                    },
+                    "active_effects": [
+                        {"effect_type": e.effect_type, "params": dict(e.params)}
+                        for e in st["effects"]
+                    ],
+                })
+            scenes_out.append({
+                "id": scene.id,
+                "background": scene.background,
+                "bgm": scene.bgm,
+                "dialogues": dialogues_out,
+            })
+
         return {
             "title": self.title,
-            "scenes": [s.to_dict() for s in self.scenes],
+            "scenes": scenes_out,
             "characters": {
                 c.name: {
                     "name_color": c.name_color,
                     "position": c.position,
-                    "sprites": {e.label: e.filename for cos in c.costumes for e in cos.expressions},
+                    "sprites": {e.label: e.filename
+                                for cos in c.costumes for e in cos.expressions},
                 }
                 for c in self.characters
             },

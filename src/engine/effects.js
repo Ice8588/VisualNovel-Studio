@@ -1,12 +1,26 @@
-/* VisualNovel Studio — Canvas 視覺特效 */
+/* VisualNovel Studio — Canvas 視覺特效。
+
+   Phase 3 API：`VNEffects.setActive(activeList)`
+     activeList = [{effect_type, params}, ...]（由 Python `state_at` 預計算）
+
+   分類：
+   - canvas 型（rain / snow / crt）：同時至多 1 個，取 activeList 第一個出現的。
+   - body-class / filter 型（pixel_dark / screen_shake）：可與任何 canvas 型疊加。
+   - 未知 effect_type：console.warn，不崩。
+
+   向下相容：`VNEffects.setEffect(name)` 仍可用（內部轉成單條 active 呼叫 setActive）。
+*/
 
 var VNEffects = (function () {
   var canvas = null;
   var ctx = null;
   var container = null;
   var animId = null;
-  var currentEffect = null;
+  var currentCanvasEffect = null;   // "rain" / "snow" / "crt" / null
   var particles = [];
+
+  var CANVAS_EFFECTS = ["rain", "snow", "crt"];
+  var KNOWN_EFFECTS = ["rain", "snow", "crt", "pixel_dark", "screen_shake"];
 
   function init(containerEl) {
     container = containerEl || document.getElementById("game-container");
@@ -23,39 +37,76 @@ var VNEffects = (function () {
     canvas.height = container.clientHeight;
   }
 
-  function setEffect(name) {
-    stop();
-    if (!name || name === "" || name === "(無)") return;
-    currentEffect = name;
+  /**
+   * 切換 active effects。傳入 [] 代表全部停止。
+   * activeList 由 Python `state_at` 預先組裝，engine.js 只需消化。
+   */
+  function setActive(activeList) {
+    if (!Array.isArray(activeList)) activeList = [];
+    var types = activeList.map(function (e) { return e && e.effect_type; });
 
-    switch (name) {
-      case "rain":
-        _startRain();
+    // Canvas effect：至多 1 個（取 activeList 第一個 canvas 型）
+    var newCanvas = null;
+    for (var i = 0; i < types.length; i++) {
+      if (CANVAS_EFFECTS.indexOf(types[i]) >= 0) {
+        newCanvas = types[i];
         break;
-      case "snow":
-        _startSnow();
-        break;
-      case "crt":
-        _startCrt();
-        break;
-      case "pixel_dark":
-        _startPixelDark();
-        break;
+      }
+    }
+    _setCanvasEffect(newCanvas);
+
+    // pixel_dark：container filter
+    _setPixelDark(types.indexOf("pixel_dark") >= 0);
+
+    // screen_shake：body class（CSS keyframes；capture mode 下 animation disabled）
+    if (document && document.body) {
+      document.body.classList.toggle("fx-screen_shake", types.indexOf("screen_shake") >= 0);
+    }
+
+    // 未知 effect_type → warn 但不崩
+    types.forEach(function (t) {
+      if (t && KNOWN_EFFECTS.indexOf(t) < 0) {
+        console.warn("[VNEffects] unknown effect_type:", t);
+      }
+    });
+  }
+
+  /** 向下相容舊 API。傳 null/"" 代表停止所有特效。 */
+  function setEffect(name) {
+    if (!name || name === "" || name === "(無)") {
+      setActive([]);
+    } else {
+      setActive([{ effect_type: name, params: {} }]);
     }
   }
 
   function stop() {
+    setActive([]);
+  }
+
+  function _setCanvasEffect(name) {
+    if (name === currentCanvasEffect) return;
+    // 停掉現有 canvas 動畫
     if (animId) {
       cancelAnimationFrame(animId);
       animId = null;
     }
-    currentEffect = null;
     particles = [];
     if (ctx && canvas) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
-    // 移除 CSS 特效
-    if (container) {
+    currentCanvasEffect = name;
+    if (name === "rain") _startRain();
+    else if (name === "snow") _startSnow();
+    else if (name === "crt") _startCrt();
+  }
+
+  function _setPixelDark(on) {
+    if (!container) return;
+    if (on) {
+      container.style.filter = "brightness(0.6)";
+      container.style.imageRendering = "pixelated";
+    } else {
       container.style.filter = "";
       container.style.imageRendering = "";
     }
@@ -79,7 +130,7 @@ var VNEffects = (function () {
   }
 
   function _loopRain() {
-    if (currentEffect !== "rain") return;
+    if (currentCanvasEffect !== "rain") return;
     var w = canvas.width;
     var h = canvas.height;
     ctx.clearRect(0, 0, w, h);
@@ -123,7 +174,7 @@ var VNEffects = (function () {
   }
 
   function _loopSnow() {
-    if (currentEffect !== "snow") return;
+    if (currentCanvasEffect !== "snow") return;
     var w = canvas.width;
     var h = canvas.height;
     ctx.clearRect(0, 0, w, h);
@@ -157,7 +208,7 @@ var VNEffects = (function () {
   var crtFlicker = 0;
 
   function _loopCrt() {
-    if (currentEffect !== "crt") return;
+    if (currentCanvasEffect !== "crt") return;
     var w = canvas.width;
     var h = canvas.height;
     ctx.clearRect(0, 0, w, h);
@@ -178,19 +229,10 @@ var VNEffects = (function () {
     animId = requestAnimationFrame(_loopCrt);
   }
 
-  /* ── Pixel Dark ── */
-
-  function _startPixelDark() {
-    if (container) {
-      container.style.filter = "brightness(0.6)";
-      container.style.imageRendering = "pixelated";
-    }
-    // pixel_dark 不需要 animation loop
-  }
-
   return {
     init: init,
-    setEffect: setEffect,
-    stop: stop
+    setEffect: setEffect,     // 向下相容
+    setActive: setActive,     // Phase 3 新 API
+    stop: stop,
   };
 })();
