@@ -178,21 +178,29 @@ class EffectSegment:
 
 @dataclass
 class EffectTrack:
-    """命名特效軌道，內含多個 EffectSegment（同軌內目前以互斥為前提；多特效並存請開多條軌道）。"""
+    """命名特效軌道，內含多個 EffectSegment（同軌內目前以互斥為前提；多特效並存請開多條軌道）。
+
+    Phase 4.2：可選 `color`（hex 字串，如 `"#FF6600"`）覆寫時間軸顯示色；None → 走 `effect_type` 預設色。
+    """
 
     name: str
     segments: list[EffectSegment] = field(default_factory=list)
+    color: str | None = None  # Phase 4.2：使用者覆寫時間軸顯示色；None 走 effect_type 預設
 
     def to_dict(self) -> dict:
-        return {
+        d: dict = {
             "name": self.name,
             "segments": [s.to_dict() for s in self.segments],
         }
+        if self.color:
+            d["color"] = self.color
+        return d
 
     @classmethod
     def from_dict(cls, data: dict) -> EffectTrack:
         return cls(
             name=data["name"],
+            color=data.get("color"),
             segments=[EffectSegment.from_dict(s) for s in data.get("segments", [])],
         )
 

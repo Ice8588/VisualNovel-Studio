@@ -176,3 +176,80 @@ def test_remove_track_unknown_returns_false(qapp):
     scene = _make_scene_with_track(n_dialogues=4)
     widget = EffectTimelineWidget(scene)
     assert widget.remove_track("不存在") is False
+
+
+# ── Phase 4.2 track color override ──
+
+def test_set_track_color_writes_and_emits_committed(qapp):
+    scene = _make_scene_with_track(n_dialogues=4)
+    widget = EffectTimelineWidget(scene)
+    committed: list = []
+    widget.segment_committed.connect(lambda: committed.append(True))
+
+    ok = widget.set_track_color("環境", "#FF6600")
+    assert ok
+    assert scene.effect_tracks[0].color == "#FF6600"
+    assert committed == [True]
+
+
+def test_set_track_color_unknown_returns_false(qapp):
+    scene = _make_scene_with_track(n_dialogues=4)
+    widget = EffectTimelineWidget(scene)
+    committed: list = []
+    widget.segment_committed.connect(lambda: committed.append(True))
+
+    assert widget.set_track_color("不存在", "#FF6600") is False
+    assert committed == []
+
+
+def test_set_track_color_noop_returns_false(qapp):
+    scene = _make_scene_with_track(n_dialogues=4)
+    scene.effect_tracks[0].color = "#FF6600"
+    widget = EffectTimelineWidget(scene)
+    committed: list = []
+    widget.segment_committed.connect(lambda: committed.append(True))
+
+    assert widget.set_track_color("環境", "#FF6600") is False
+    assert committed == []
+
+
+def test_set_track_color_none_clears_override(qapp):
+    scene = _make_scene_with_track(n_dialogues=4)
+    scene.effect_tracks[0].color = "#FF6600"
+    widget = EffectTimelineWidget(scene)
+
+    assert widget.set_track_color("環境", None) is True
+    assert scene.effect_tracks[0].color is None
+
+
+def test_paint_segment_with_none_color_uses_effect_default(qapp):
+    """color=None 時 paint 走 effect_type fallback，不崩。"""
+    scene = _make_scene_with_track(n_dialogues=4)
+    scene.effect_tracks[0].segments.append(EffectSegment(0, 2, "rain"))
+    assert scene.effect_tracks[0].color is None
+    lane = EffectLaneWidget(scene, scene.effect_tracks[0])
+    lane.resize(shared.LANE_WIDTH, shared.ROW_HEIGHT * 4)
+    lane.show()
+    qapp.processEvents()
+    lane.repaint()
+    qapp.processEvents()
+    lane.hide()
+
+
+def test_effect_track_color_roundtrip_with_value():
+    """to_dict / from_dict 包含 color。"""
+    t = EffectTrack(name="測試", segments=[EffectSegment(0, 1, "rain")], color="#FF6600")
+    t2 = EffectTrack.from_dict(t.to_dict())
+    assert t2.color == "#FF6600"
+    assert t2.name == "測試"
+    assert len(t2.segments) == 1
+
+
+def test_effect_track_color_roundtrip_without_value():
+    """color=None 時 to_dict 不輸出，from_dict 仍 None。"""
+    t = EffectTrack(name="測試", segments=[])
+    assert t.color is None
+    data = t.to_dict()
+    assert "color" not in data
+    t2 = EffectTrack.from_dict(data)
+    assert t2.color is None

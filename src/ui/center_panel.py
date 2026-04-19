@@ -214,6 +214,8 @@ class CenterPanel(QWidget):
             # Phase 4 lane mgmt：rename / delete 軌道
             effect_header.track_rename_requested.connect(self._on_rename_effect_track)
             effect_header.track_delete_requested.connect(self._on_delete_effect_track)
+            # Phase 4.2：軌道顏色覆寫
+            effect_header.track_color_changed.connect(self._on_effect_track_color_changed)
 
             col_dialogue = _Column(dialogue_header, self.dialogue_list)
             col_stage = _Column(stage_header, self.stage_panel)
@@ -497,6 +499,21 @@ class CenterPanel(QWidget):
             self._effect_header.remove_track_label(name)
         # 寬度可能縮，rebuild 簡單一致
         self._rebuild_workspace()
+        self.project_changed.emit()
+
+    def _on_effect_track_color_changed(self, name: str, hex_color: str) -> None:
+        """Phase 4.2：Header 用 QColorDialog 選好 color → 寫入 track 並同步 label 左豎條。
+
+        空字串 hex 代表清除 override。segment_committed 由 set_track_color 內部 emit。
+        """
+        scene = self._get_current_scene()
+        if scene is None:
+            return
+        normalized = hex_color or None
+        if not self.effect_timeline.set_track_color(name, normalized):
+            return
+        if hasattr(self, "_effect_header"):
+            self._effect_header.update_track_color(name, normalized)
         self.project_changed.emit()
 
     def _on_preview_dialogue_advanced(self, scene_idx: int, dlg_idx: int) -> None:
