@@ -124,3 +124,55 @@ def test_delete_key_removes_selected(qapp):
 
     assert scene.effect_tracks[0].segments == []
     assert committed == [True]
+
+
+# ── Phase 4 lane mgmt ──
+
+def test_rename_track_succeeds_when_unique(qapp):
+    scene = _make_scene_with_track(n_dialogues=4)
+    widget = EffectTimelineWidget(scene)
+    committed: list = []
+    widget.segment_committed.connect(lambda: committed.append(True))
+
+    ok = widget.rename_track("環境", "天氣")
+    assert ok
+    assert "環境" not in widget.lanes
+    assert "天氣" in widget.lanes
+    assert scene.effect_tracks[0].name == "天氣"
+    assert committed == [True]
+
+
+def test_rename_track_rejects_duplicate(qapp):
+    scene = _make_scene_with_track(n_dialogues=4)
+    scene.effect_tracks.append(EffectTrack(name="畫面", segments=[]))
+    widget = EffectTimelineWidget(scene)
+    assert widget.rename_track("環境", "畫面") is False
+    assert scene.effect_tracks[0].name == "環境"  # 未動
+
+
+def test_rename_track_rejects_empty_or_same(qapp):
+    scene = _make_scene_with_track(n_dialogues=4)
+    widget = EffectTimelineWidget(scene)
+    assert widget.rename_track("環境", "") is False
+    assert widget.rename_track("環境", "環境") is False
+    assert widget.rename_track("不存在", "新名") is False
+
+
+def test_remove_track_pops_lane_and_segments(qapp):
+    scene = _make_scene_with_track(n_dialogues=4)
+    scene.effect_tracks[0].segments.append(EffectSegment(0, 2, "rain"))
+    widget = EffectTimelineWidget(scene)
+    committed: list = []
+    widget.segment_committed.connect(lambda: committed.append(True))
+
+    ok = widget.remove_track("環境")
+    assert ok
+    assert scene.effect_tracks == []
+    assert "環境" not in widget.lanes
+    assert committed == [True]
+
+
+def test_remove_track_unknown_returns_false(qapp):
+    scene = _make_scene_with_track(n_dialogues=4)
+    widget = EffectTimelineWidget(scene)
+    assert widget.remove_track("不存在") is False

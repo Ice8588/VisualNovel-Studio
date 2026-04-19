@@ -211,6 +211,9 @@ class CenterPanel(QWidget):
             stage_header = StageHeader()
             effect_header = EffectTimelineHeader(scene, on_add_track=self._on_add_effect_track)
             self._effect_header = effect_header
+            # Phase 4 lane mgmt：rename / delete 軌道
+            effect_header.track_rename_requested.connect(self._on_rename_effect_track)
+            effect_header.track_delete_requested.connect(self._on_delete_effect_track)
 
             col_dialogue = _Column(dialogue_header, self.dialogue_list)
             col_stage = _Column(stage_header, self.stage_panel)
@@ -464,6 +467,35 @@ class CenterPanel(QWidget):
         effect_lanes = max(1, len(scene.effect_tracks))
         # col_effect 物件沒存 ref，但可從 _workspace_root 抓。為簡單起見，
         # 讓 rebuild_workspace 完全重建。
+        self._rebuild_workspace()
+        self.project_changed.emit()
+
+    def _on_rename_effect_track(self, old_name: str, new_name: str) -> None:
+        """Phase 4 lane mgmt：rename 軌道。EffectTimelineHeader 已先彈過 input dialog。"""
+        scene = self._get_current_scene()
+        if scene is None:
+            return
+        if any(t.name == new_name for t in scene.effect_tracks):
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "重新命名失敗",
+                                f"已有同名軌道「{new_name}」，請換一個名稱。")
+            return
+        if not self.effect_timeline.rename_track(old_name, new_name):
+            return
+        if hasattr(self, "_effect_header"):
+            self._effect_header.update_track_name(old_name, new_name)
+        self.project_changed.emit()
+
+    def _on_delete_effect_track(self, name: str) -> None:
+        """Phase 4 lane mgmt：刪除整條 EffectTrack。confirm 已由 header 彈過。"""
+        scene = self._get_current_scene()
+        if scene is None:
+            return
+        if not self.effect_timeline.remove_track(name):
+            return
+        if hasattr(self, "_effect_header"):
+            self._effect_header.remove_track_label(name)
+        # 寬度可能縮，rebuild 簡單一致
         self._rebuild_workspace()
         self.project_changed.emit()
 
