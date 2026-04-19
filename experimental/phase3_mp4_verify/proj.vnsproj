@@ -1,0 +1,133 @@
+{
+  "title": "Phase3 MP4 Verify",
+  "scenes": [
+    {
+      "id": "場景1",
+      "background": "bg_room.png",
+      "bgm": null,
+      "dialogues": [
+        {
+          "type": "dialogue",
+          "text": "A：嗨，我們在左邊。",
+          "character": "A"
+        },
+        {
+          "type": "dialogue",
+          "text": "B：我在右邊，雨從第 1 句下到結束。",
+          "character": "B"
+        },
+        {
+          "type": "dialogue",
+          "text": "A：第 3 句畫面會震動！",
+          "character": "A",
+          "text_effects": [
+            "bold",
+            "shake"
+          ]
+        },
+        {
+          "type": "narration",
+          "text": "（雨繼續下、震動結束。）",
+          "character": null
+        },
+        {
+          "type": "dialogue",
+          "text": "B：兩個立繪、雨效、文字效果都通過。",
+          "character": "B"
+        }
+      ],
+      "stage_left": [
+        {
+          "start": 0,
+          "end": 4,
+          "character": "A",
+          "costume": "default",
+          "sprite": "n"
+        }
+      ],
+      "stage_center": [],
+      "stage_right": [
+        {
+          "start": 0,
+          "end": 4,
+          "character": "B",
+          "costume": "default",
+          "sprite": "n"
+        }
+      ],
+      "effect_tracks": [
+        {
+          "name": "env",
+          "segments": [
+            {
+              "start": 0,
+              "end": 4,
+              "effect_type": "rain",
+              "params": {
+                "intensity": 0.5
+              }
+            }
+          ]
+        },
+        {
+          "name": "cam",
+          "segments": [
+            {
+              "start": 2,
+              "end": 2,
+              "effect_type": "screen_shake"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "characters": [
+    {
+      "name": "A",
+      "name_color": "#E04C4C",
+      "costumes": [
+        {
+          "name": "default",
+          "expressions": [
+            {
+              "label": "n",
+              "filename": "char_a.png"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "B",
+      "name_color": "#4C8AE0",
+      "costumes": [
+        {
+          "name": "default",
+          "expressions": [
+            {
+              "label": "n",
+              "filename": "char_b.png"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "assets": {
+    "backgrounds": [
+      "bg_room.png"
+    ],
+    "sprites": [
+      "char_a.png",
+      "char_b.png"
+    ],
+    "music": []
+  },
+  "project_path": "/home/ice/VisualNovel-Studio/experimental/phase3_mp4_verify/proj.vnsproj",
+  "game_settings": {
+    "dialogue_font_size": 18,
+    "name_font_size": 16,
+    "dialogue_box_opacity": 0.85
+  }
+}
