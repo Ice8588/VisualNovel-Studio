@@ -91,11 +91,8 @@ class DialogueColumn(QWidget):
             else:
                 self._paint_card(p, rect, display_idx, dlg)
 
-        # 游標線（拖拉時隱藏，減少雜訊）
-        if not self._is_dragging and self._cursor_idx is not None:
-            y = shared.idx_to_y(self._cursor_idx) + shared.ROW_HEIGHT // 2
-            p.setPen(QPen(shared.CURSOR_LINE, 1, Qt.PenStyle.DashLine))
-            p.drawLine(0, y, self.width(), y)
+        # Phase 4：原本的橫向虛線游標移除；現在用「左豎條 + 卡片暖色 tint」標示當前對話。
+        # 舞台 / 特效 lane 的虛線游標保留作為 Y 軸對齊輔助。
 
         p.end()
 
@@ -105,15 +102,32 @@ class DialogueColumn(QWidget):
         # 卡片底色
         is_narration = dlg.type == "narration"
         is_selected = idx == self._selected_idx
+        is_current = idx == self._cursor_idx  # Phase 4：當前預覽位置
         bg = QColor("#2D2D30") if is_narration else QColor("#2E3440")
-        if is_selected:
+        if is_current:
+            # 當前對話：套暖色 tint（CURSOR_LINE 的低透明覆蓋）
+            tint = QColor(shared.CURSOR_LINE.red(), shared.CURSOR_LINE.green(),
+                          shared.CURSOR_LINE.blue(), 38)
+            # 在原底色上疊一層暖色 → 用 lighter + 黃調近似
+            bg = QColor(min(255, bg.red() + 30),
+                        min(255, bg.green() + 22),
+                        min(255, bg.blue()),
+                        255)
+        elif is_selected:
             bg = bg.lighter(130)
         p.setBrush(bg)
         p.setPen(QPen(QColor(255, 255, 255, 30), 1))
         p.drawRoundedRect(inner, 6, 6)
 
-        # 選中邊框
-        if is_selected:
+        # 當前對話：左側 4px 豎條（最顯眼的「正在這裡」標示）
+        if is_current:
+            bar_rect = QRect(inner.x(), inner.y() + 2, 4, inner.height() - 4)
+            p.setBrush(shared.CURSOR_LINE)
+            p.setPen(Qt.PenStyle.NoPen)
+            p.drawRoundedRect(bar_rect, 2, 2)
+
+        # 選中邊框（次要：和 current 不同視覺；只在「不是當前」時加邊框）
+        if is_selected and not is_current:
             p.setBrush(Qt.BrushStyle.NoBrush)
             p.setPen(QPen(shared.CURSOR_LINE, 2))
             p.drawRoundedRect(inner.adjusted(1, 1, -1, -1), 6, 6)
