@@ -16,31 +16,26 @@
 - 設計資產搬入 `assets/design/`（27 個 SVG：logo / icons / textures）
 - PyInstaller spec 啟用 `PyQt6.QtSvg` + 打包 `assets/`
 - 主選單 SVG icon（檔案 / 導出 / 說明）
+- `_design_icon` 抽出到共用模組 `src/ui/icons.py`
+- 左側面板「新增場景 / 新增角色」加 `add.svg`
+- 場景 / 角色 hover 刪除按鈕（`hoverDeleteButton`）改為 `close.svg`
+- SegmentEditor 浮動視窗關閉按鈕改為 `close.svg`
+- EffectTimeline track 右鍵選單加 `edit.svg` / `brush.svg` / `delete.svg`
+- About dialog 改寫為自訂 `QDialog`（`logo-wordmark.svg` + 版本 + 描述）
 
 ---
 
 ## 🔴 高優先（小改動，下次可做）
 
-### 補完 button-level icon
+### 餘下未補的 button-level icon
 
-目前只接到「主選單」layer。以下元件還沒有 icon：
-
-| 元件 | 建議 icon | 位置 |
-|---|---|---|
-| 左側面板「新增場景」按鈕 | `add.svg` | `src/ui/left_panel.py` |
-| 左側面板「刪除場景」按鈕 | `delete.svg` | `src/ui/left_panel.py` |
-| 角色 / 場景 hover 刪除 (`hoverDeleteButton`) | `close.svg` | 多處 |
-| Preview 區的 play / pause / stop | `play.svg` / `pause.svg` / `stop.svg` | `src/ui/preview_widget.py` |
-| Segment editor 的「編輯」/「刪除」 | `edit.svg` / `delete.svg` | `src/ui/segment_editor.py` |
-| Scene tree 展開箭頭 | `chevron-right.svg` / `chevron-down.svg` | QSS `QTreeView::branch` |
+| 元件 | 建議 icon | 位置 | 備註 |
+|---|---|---|---|
+| Preview 區的 play / pause / stop | `play.svg` / `pause.svg` / `stop.svg` | `src/ui/preview_widget.py` | **目前 UI 沒有播放控制按鈕**，需先實作播放控件再加 icon |
+| Segment editor 的「編輯」/「刪除」 | `edit.svg` / `delete.svg` | `src/ui/segment_editor.py` | 目前 SegmentEditor 為 inline 編輯，沒有獨立編輯/刪除按鈕；待設計確認是否需新增 |
+| Scene tree 展開箭頭 | `chevron-right.svg` / `chevron-down.svg` | QSS `QTreeView::branch` | 目前場景 / 角色用 `ListWidget`（無分支），待出現 `QTreeView` 時再補 QSS |
 
 完整 21 個 icon 清單見 `assets/design/icons/`。
-
-### About dialog 加 logo wordmark
-
-`assets/design/logo-wordmark.svg` 已就位，但 `_on_show_about` 目前是純 `QMessageBox`。建議改寫成自訂 `QDialog` 顯示：
-- 上方放 `logo-wordmark.svg`（QSvgWidget）
-- 下方放版本號 + 描述文字
 
 ---
 

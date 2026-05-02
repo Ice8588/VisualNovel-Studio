@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 from PyQt6.QtCore import QThread, QTimer, pyqtSignal, Qt
-from PyQt6.QtGui import QIcon, QKeySequence
+from PyQt6.QtGui import QKeySequence
 from PyQt6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -22,22 +22,11 @@ from src.core.models import Project, Scene
 from src.core.project_io import load_project, save_project
 from src.core.text_parser import parse_file, _classify_lines
 from src.ui import dialogs
+from src.ui.about_dialog import AboutDialog
 from src.ui.center_panel import CenterPanel
+from src.ui.icons import design_icon as _design_icon
 from src.ui.left_panel import LeftPanel
 from src.ui.theme import apply_theme, save_preference, load_preference
-
-
-def _resource_root() -> Path:
-    """支援 dev 與 PyInstaller 兩種模式的資源根目錄。"""
-    if getattr(sys, "frozen", False):
-        return Path(sys._MEIPASS)
-    return Path(__file__).resolve().parents[2]
-
-
-def _design_icon(name: str) -> QIcon:
-    """從 assets/design/icons/ 載入 SVG icon；缺檔回空 QIcon（不致命）。"""
-    path = _resource_root() / "assets" / "design" / "icons" / f"{name}.svg"
-    return QIcon(str(path)) if path.is_file() else QIcon()
 
 
 class MainWindow(QMainWindow):
@@ -364,12 +353,7 @@ class MainWindow(QMainWindow):
         )
 
     def _on_show_about(self) -> None:
-        QMessageBox.about(
-            self, "關於",
-            "VisualNovel Studio v1.0.0\n\n"
-            "簡易視覺小說製作工具\n"
-            "支援 MP4 影片導出、HTML5 網頁導出"
-        )
+        AboutDialog(self).exec()
 
     def _on_game_setting_changed(self) -> None:
         from src.core.models import GameSettings
