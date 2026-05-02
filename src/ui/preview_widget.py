@@ -88,13 +88,17 @@ class PreviewWidget(QWidget):
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
         self._temp_dir: tempfile.TemporaryDirectory | None = None
-        self._theme_name: str = "dark"  # 影響 body class（preview-dark / preview-light）
+        self._theme_name: str = "dark"  # 影響 body class（preview-{theme_name}）
         self._last_project: Project | None = None
         self._setup_ui()
 
+    # 已知主題 key；engine.css 目前只實作 preview-dark / preview-light，
+    # 其他 key 會注入對應 body class 但 css 沒對應規則時 no-op（待設計補完）
+    _KNOWN_THEMES = ("dark", "light", "parchment", "midnight", "figma-dark", "ivory")
+
     def set_theme(self, theme_name: str) -> None:
-        """設定預覽主題（dark / light），若已載入 project 會觸發重繪。"""
-        if theme_name not in ("dark", "light"):
+        """設定預覽主題，若已載入 project 會觸發重繪。"""
+        if theme_name not in self._KNOWN_THEMES:
             theme_name = "dark"
         if theme_name == self._theme_name:
             return

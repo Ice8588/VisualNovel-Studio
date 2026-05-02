@@ -465,3 +465,115 @@ body.preview-light .slot-control .btn-add {
   background: rgba(255, 255, 255, 0.4);
   color: #333;
 }
+
+/* ── 羊皮紙詩歌（僅作用於 preview；匯出時 body 無此 class） ── */
+
+body.preview-parchment #game-container {
+  background: #F5ECD7;
+}
+body.preview-parchment #dialogue-box {
+  background: rgba(245, 236, 215, 0.92);
+  border-top: 2px solid rgba(193, 95, 60, 0.5);
+}
+body.preview-parchment #dialogue-text { color: #2B2416; }
+body.preview-parchment #dialogue-text strong { color: #C15F3C; }
+body.preview-parchment #quick-menu { background: rgba(234, 223, 191, 0.85); }
+body.preview-parchment #quick-menu button { color: rgba(43, 36, 22, 0.85); }
+body.preview-parchment #quick-menu button:hover { color: #C15F3C; }
+body.preview-parchment #history-panel { background: rgba(245, 236, 215, 0.97); }
+body.preview-parchment #history-panel .history-text { color: #2B2416; }
+body.preview-parchment #history-panel .history-narration { color: #8A7B5C; }
+body.preview-parchment #btn-close-history {
+  background: rgba(43, 36, 22, 0.06);
+  color: #2B2416;
+  border: 1px solid rgba(201, 185, 142, 0.8);
+}
+body.preview-parchment .slot-control .btn-add {
+  border-color: #C9B98E;
+  background: rgba(245, 236, 215, 0.6);
+  color: #5A4E36;
+}
+
+/* ── Midnight Ink ── */
+
+body.preview-midnight #game-container {
+  background: #141414;
+}
+body.preview-midnight #dialogue-box {
+  background: rgba(20, 20, 20, 0.92);
+  border-top: 2px solid rgba(112, 144, 160, 0.45);
+}
+body.preview-midnight #dialogue-text { color: #E0E0E0; }
+body.preview-midnight #dialogue-text strong { color: #F0F0F0; }
+body.preview-midnight #quick-menu { background: rgba(26, 26, 26, 0.8); }
+body.preview-midnight #quick-menu button { color: rgba(192, 192, 192, 0.85); }
+body.preview-midnight #quick-menu button:hover { color: #7090A0; }
+body.preview-midnight #history-panel { background: rgba(20, 20, 20, 0.97); }
+body.preview-midnight #history-panel .history-text { color: #D0D0D0; }
+body.preview-midnight #history-panel .history-narration { color: #7A7A7A; }
+body.preview-midnight #btn-close-history {
+  background: rgba(255, 255, 255, 0.05);
+  color: #C0C0C0;
+  border: 1px solid rgba(48, 48, 48, 0.9);
+}
+body.preview-midnight .slot-control .btn-add {
+  border-color: #303030;
+  background: rgba(20, 20, 20, 0.5);
+  color: #B0B0B0;
+}
+
+/* ── Figma Dark ── */
+
+body.preview-figma-dark #game-container {
+  background: #16151E;
+}
+body.preview-figma-dark #dialogue-box {
+  background: rgba(28, 27, 38, 0.92);
+  border-top: 2px solid rgba(176, 110, 247, 0.45);
+}
+body.preview-figma-dark #dialogue-text { color: #B0AACE; }
+body.preview-figma-dark #dialogue-text strong { color: #EEE8FF; }
+body.preview-figma-dark #quick-menu { background: rgba(28, 27, 38, 0.85); }
+body.preview-figma-dark #quick-menu button { color: rgba(144, 144, 184, 0.85); }
+body.preview-figma-dark #quick-menu button:hover { color: #B06EF7; }
+body.preview-figma-dark #history-panel { background: rgba(22, 21, 30, 0.97); }
+body.preview-figma-dark #history-panel .history-text { color: #B0AACE; }
+body.preview-figma-dark #history-panel .history-narration { color: #4A4868; }
+body.preview-figma-dark #btn-close-history {
+  background: rgba(255, 255, 255, 0.04);
+  color: #9090B8;
+  border: 1px solid rgba(48, 48, 74, 0.9);
+}
+body.preview-figma-dark .slot-control .btn-add {
+  border-color: #30304A;
+  background: rgba(28, 27, 38, 0.5);
+  color: #9090B8;
+}
+
+/* ── Ivory Titanium 象牙白鈦 ── */
+
+body.preview-ivory #game-container {
+  background: #FDFDFC;
+}
+body.preview-ivory #dialogue-box {
+  background: rgba(253, 253, 252, 0.92);
+  border-top: 2px solid rgba(58, 117, 217, 0.4);
+}
+body.preview-ivory #dialogue-text { color: #1C1B19; }
+body.preview-ivory #dialogue-text strong { color: #000; }
+body.preview-ivory #quick-menu { background: rgba(244, 243, 239, 0.85); }
+body.preview-ivory #quick-menu button { color: rgba(28, 27, 25, 0.85); }
+body.preview-ivory #quick-menu button:hover { color: #3A75D9; }
+body.preview-ivory #history-panel { background: rgba(248, 247, 244, 0.97); }
+body.preview-ivory #history-panel .history-text { color: #1C1B19; }
+body.preview-ivory #history-panel .history-narration { color: #8A8880; }
+body.preview-ivory #btn-close-history {
+  background: rgba(0, 0, 0, 0.04);
+  color: #1C1B19;
+  border: 1px solid rgba(220, 218, 211, 0.9);
+}
+body.preview-ivory .slot-control .btn-add {
+  border-color: #DCDAD3;
+  background: rgba(253, 253, 252, 0.6);
+  color: #5C5A53;
+}
