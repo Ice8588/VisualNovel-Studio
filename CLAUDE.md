@@ -7,6 +7,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
+# 虛擬環境（首次；跨平台一律裝在 .venv 內）
+python3 -m venv .venv
+source .venv/bin/activate                   # Linux / macOS
+# .venv\Scripts\Activate.ps1                # Windows PowerShell
+pip install -r requirements.txt
+
 # 執行
 python main.py
 
@@ -19,9 +25,6 @@ QT_QPA_PLATFORM=offscreen python -m pytest tests/
 # 單一測試檔 / 函式
 pytest tests/test_text_parser.py
 pytest tests/test_text_parser.py::test_dialogue_detection -v
-
-# 安裝依賴
-pip install -r requirements.txt
 
 # 打包 Windows exe
 pip install pyinstaller
