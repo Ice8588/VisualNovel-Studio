@@ -112,61 +112,69 @@ _PALETTES: dict[str, Palette] = {
         input_bg=QColor("#FFFFFF"), accent_text=QColor("#FFFFFF"),
         title_bar=QColor("#F5F5F5"),
     ),
+    # 羊皮紙詩歌：對齊 Design preview/colors-paper.html + accents.html
+    # paper #F5ECD7 / paper-2 #EADFBF / ink #2B2416 / vermilion #C15F3C / indigo #3A4A6B
     "parchment": Palette(
         name="parchment", is_dark=False,
-        bg=QColor("#F5ECD7"), surface=QColor("#EADFBF"), surface_alt=QColor("#DDD0A8"),
-        text_primary=QColor("#2B2416"), text_secondary=QColor("#6B5B3F"), text_disabled=QColor("#A39477"),
-        accent=QColor("#8B6F47"), accent_hover=QColor("#A0825A"),
-        warning=QColor("#C77E2C"), danger=QColor("#B14C2A"), info=QColor("#5C7A8B"),
-        border=QColor("#C9B98E"), border_focus=QColor("#8B6F47"),
+        bg=QColor("#F5ECD7"), surface=QColor("#EADFBF"), surface_alt=QColor("#DBCBA0"),
+        text_primary=QColor("#2B2416"), text_secondary=QColor("#5A4E36"), text_disabled=QColor("#8A7B5C"),
+        accent=QColor("#3A4A6B"), accent_hover=QColor("#4A5A7B"),  # indigo (selected/focus/link)
+        warning=QColor("#C15F3C"), danger=QColor("#C15F3C"), info=QColor("#3A4A6B"),
+        border=QColor("#C9B98E"), border_focus=QColor("#3A4A6B"),
         grid_line=QColor(120, 90, 40, 60), row_alt=QColor(120, 90, 40, 14),
         cursor=_CURSOR, drop_indicator=_DROP,
         card_dialogue_bg=QColor("#FCF6E3"), card_narration_bg=QColor("#EADFBF"),
-        button_bg=QColor("#EADFBF"), button_hover=QColor("#DDD0A8"),
-        input_bg=QColor("#FCF6E3"), accent_text=QColor("#FCF6E3"),
+        button_bg=QColor("#EADFBF"), button_hover=QColor("#DBCBA0"),
+        input_bg=QColor("#FCF6E3"), accent_text=QColor("#F5ECD7"),  # paper-on-indigo
         title_bar=QColor("#EADFBF"),
     ),
+    # Ivory Titanium：對齊 Design preview/theme-ivory-titanium.html
+    # bg #E8E7E2 / surface #EEECE6 / surface_alt #D6D3CB / accent #3A75D9 / text #1C1B19
     "ivory": Palette(
         name="ivory", is_dark=False,
-        bg=QColor("#FDFDFC"), surface=QColor("#F4F3EF"), surface_alt=QColor("#E8E7E2"),
-        text_primary=QColor("#1C1B19"), text_secondary=QColor("#6F6E69"), text_disabled=QColor("#A0A09B"),
-        accent=QColor("#3A75D9"), accent_hover=QColor("#5A8FE5"),
-        warning=QColor("#D17B0A"), danger=QColor("#C43434"), info=QColor("#3A75D9"),
+        bg=QColor("#E8E7E2"), surface=QColor("#EEECE6"), surface_alt=QColor("#D6D3CB"),
+        text_primary=QColor("#1C1B19"), text_secondary=QColor("#6E6C67"), text_disabled=QColor("#A39F92"),
+        accent=QColor("#3A75D9"), accent_hover=QColor("#2E63C2"),
+        warning=QColor("#C85C3C"), danger=QColor("#C85C3C"), info=QColor("#3A75D9"),
         border=QColor("#DCDAD3"), border_focus=QColor("#3A75D9"),
         grid_line=QColor(0, 0, 0, 28), row_alt=QColor(0, 0, 0, 8),
         cursor=_CURSOR, drop_indicator=_DROP,
-        card_dialogue_bg=QColor("#EAF1FA"), card_narration_bg=QColor("#F4F3EF"),
-        button_bg=QColor("#F4F3EF"), button_hover=QColor("#E8E7E2"),
-        input_bg=QColor("#FDFDFC"), accent_text=QColor("#FDFDFC"),
-        title_bar=QColor("#F4F3EF"),
+        card_dialogue_bg=QColor("#EAF1FA"), card_narration_bg=QColor("#EEECE6"),
+        button_bg=QColor("#EEECE6"), button_hover=QColor("#E1DFD8"),
+        input_bg=QColor("#FFFFFF"), accent_text=QColor("#F5F3EE"),
+        title_bar=QColor("#D6D3CB"),
     ),
+    # Midnight Ink：對齊 Design preview/theme-midnight-ink.html
+    # bg #0A0A0A / surface #141414 / accent #7090A0（霧霾藍灰，跟設計一致）
     "midnight": Palette(
         name="midnight", is_dark=True,
-        bg=QColor("#141414"), surface=QColor("#1A1A1A"), surface_alt=QColor("#222222"),
-        text_primary=QColor("#E0E0E0"), text_secondary=QColor("#888888"), text_disabled=QColor("#555555"),
-        accent=QColor("#5A9BD6"), accent_hover=QColor("#7AB5E5"),
-        warning=QColor("#E0A020"), danger=QColor("#E05555"), info=QColor("#5A9BD6"),
-        border=QColor("#2A2A2A"), border_focus=QColor("#5A9BD6"),
+        bg=QColor("#0A0A0A"), surface=QColor("#141414"), surface_alt=QColor("#1A1A1A"),
+        text_primary=QColor("#F0F0F0"), text_secondary=QColor("#B0B0B0"), text_disabled=QColor("#606060"),
+        accent=QColor("#7090A0"), accent_hover=QColor("#8AAAB8"),  # 設計用的霧霾藍灰
+        warning=QColor("#E0A020"), danger=QColor("#C85555"), info=QColor("#7090A0"),
+        border=QColor("#2A2A2A"), border_focus=QColor("#7090A0"),
         grid_line=QColor(255, 255, 255, 16), row_alt=QColor(255, 255, 255, 5),
         cursor=_CURSOR, drop_indicator=_DROP,
-        card_dialogue_bg=QColor("#1F2533"), card_narration_bg=QColor("#1A1A1A"),
-        button_bg=QColor("#222222"), button_hover=QColor("#2E2E2E"),
-        input_bg=QColor("#141414"), accent_text=QColor("#FFFFFF"),
-        title_bar=QColor("#1A1A1A"),
+        card_dialogue_bg=QColor("#1A1C22"), card_narration_bg=QColor("#161616"),
+        button_bg=QColor("#1E1E1E"), button_hover=QColor("#252525"),
+        input_bg=QColor("#141414"), accent_text=QColor("#F8F3EE"),  # 設計裡的奶白
+        title_bar=QColor("#161616"),
     ),
+    # Figma Dark：對齊 Design preview/theme-figma-dark.html
+    # 高對比 IDE 感、深紫底調、signature accent #B06EF7（vibrant purple）
     "figma-dark": Palette(
         name="figma-dark", is_dark=True,
-        bg=QColor("#1E1E1E"), surface=QColor("#2C2C2C"), surface_alt=QColor("#383838"),
-        text_primary=QColor("#E5E5E5"), text_secondary=QColor("#A0A0A0"), text_disabled=QColor("#666666"),
-        accent=QColor("#0D99FF"), accent_hover=QColor("#3DB3FF"),
-        warning=QColor("#E0A020"), danger=QColor("#E05555"), info=QColor("#0D99FF"),
-        border=QColor("#383838"), border_focus=QColor("#0D99FF"),
-        grid_line=QColor(255, 255, 255, 20), row_alt=QColor(255, 255, 255, 6),
+        bg=QColor("#0D0D12"), surface=QColor("#16151E"), surface_alt=QColor("#1C1B26"),
+        text_primary=QColor("#FFFFFF"), text_secondary=QColor("#9090B8"), text_disabled=QColor("#5A5878"),
+        accent=QColor("#B06EF7"), accent_hover=QColor("#7C4FD4"),  # signature vibrant purple
+        warning=QColor("#FFA940"), danger=QColor("#FF5C7C"), info=QColor("#B06EF7"),
+        border=QColor("#2A2738"), border_focus=QColor("#B06EF7"),
+        grid_line=QColor(176, 110, 247, 28), row_alt=QColor(255, 255, 255, 5),
         cursor=_CURSOR, drop_indicator=_DROP,
-        card_dialogue_bg=QColor("#2E3440"), card_narration_bg=QColor("#2C2C2C"),
-        button_bg=QColor("#383838"), button_hover=QColor("#454545"),
-        input_bg=QColor("#1E1E1E"), accent_text=QColor("#FFFFFF"),
-        title_bar=QColor("#2C2C2C"),
+        card_dialogue_bg=QColor("#1E1D2C"), card_narration_bg=QColor("#1C1B26"),
+        button_bg=QColor("#1E1D2A"), button_hover=QColor("#252338"),
+        input_bg=QColor("#1C1B28"), accent_text=QColor("#F8F0FF"),
+        title_bar=QColor("#1A1928"),
     ),
 }
 

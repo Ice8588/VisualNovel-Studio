@@ -102,7 +102,7 @@ class PreviewWidget(QWidget):
     _KNOWN_THEMES = ("dark", "light", "parchment", "midnight", "figma-dark", "ivory")
 
     def set_theme(self, theme_name: str) -> None:
-        """設定預覽主題，若已載入 project 會觸發重繪。"""
+        """設定預覽主題，若已載入 project 會觸發重繪；無專案時也重畫 placeholder 跟主題。"""
         if theme_name not in self._KNOWN_THEMES:
             theme_name = "dark"
         if theme_name == self._theme_name:
@@ -110,6 +110,8 @@ class PreviewWidget(QWidget):
         self._theme_name = theme_name
         if self._last_project is not None:
             self.reload_preview(self._last_project)
+        else:
+            self.web_view.setHtml(self._placeholder_html())
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout()
@@ -220,17 +222,20 @@ class PreviewWidget(QWidget):
             return unsaved_dir
         return None
 
-    @staticmethod
-    def _placeholder_html() -> str:
-        return """
+    def _placeholder_html(self) -> str:
+        pal = palette.current()
+        bg = pal.bg.name()
+        fg = pal.text_secondary.name()
+        title_fg = pal.text_primary.name()
+        return f"""
         <!DOCTYPE html>
         <html>
         <head><meta charset="utf-8"></head>
         <body style="display:flex;align-items:center;justify-content:center;
-                     height:100vh;margin:0;background:#2a2a3e;color:#aaa;
+                     height:100vh;margin:0;background:{bg};color:{fg};
                      font-family:sans-serif;">
             <div style="text-align:center;">
-                <p style="font-size:24px;">VisualNovel Studio</p>
+                <p style="font-size:24px;color:{title_fg};">VisualNovel Studio</p>
                 <p>匯入文字並新增場景後，預覽將在此顯示</p>
             </div>
         </body>
