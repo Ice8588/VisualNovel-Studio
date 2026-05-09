@@ -330,12 +330,14 @@ class GameSettings:
     dialogue_font_size: int = 18
     name_font_size: int = 16
     dialogue_box_opacity: float = 0.85
+    dialogue_box_color: str = "#141428"  # 對話框底色（hex），與 opacity 合成 rgba
 
     def to_dict(self) -> dict:
         return {
             "dialogue_font_size": self.dialogue_font_size,
             "name_font_size": self.name_font_size,
             "dialogue_box_opacity": self.dialogue_box_opacity,
+            "dialogue_box_color": self.dialogue_box_color,
         }
 
     @classmethod
@@ -347,6 +349,7 @@ class GameSettings:
             dialogue_font_size=dlg,
             name_font_size=name,
             dialogue_box_opacity=float(data.get("dialogue_box_opacity", 0.85)),
+            dialogue_box_color=str(data.get("dialogue_box_color", "#141428")),
         )
 
 

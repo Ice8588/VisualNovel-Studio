@@ -170,10 +170,22 @@
       var nameSize = Math.max(14, Math.min(28, gs.name_font_size));
       els.namePlate.style.fontSize = nameSize + "px";
     }
-    if (gs.dialogue_box_opacity != null && els.dialogueBox) {
-      els.dialogueBox.style.backgroundColor =
-        "rgba(20,20,40," + gs.dialogue_box_opacity + ")";
+    if (els.dialogueBox) {
+      var hex = gs.dialogue_box_color || "#141428";
+      var op = gs.dialogue_box_opacity != null ? gs.dialogue_box_opacity : 0.85;
+      els.dialogueBox.style.backgroundColor = _hexToRgba(hex, op);
     }
+  }
+
+  function _hexToRgba(hex, alpha) {
+    // 接受 #RGB / #RRGGBB；非合法 fallback 深藍黑
+    var h = (hex || "").replace("#", "");
+    if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+    if (h.length !== 6) h = "141428";
+    var r = parseInt(h.substr(0,2), 16);
+    var g = parseInt(h.substr(2,2), 16);
+    var b = parseInt(h.substr(4,2), 16);
+    return "rgba(" + r + "," + g + "," + b + "," + alpha + ")";
   }
 
   function buildCharactersMap() {

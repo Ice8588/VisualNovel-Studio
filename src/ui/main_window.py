@@ -192,10 +192,13 @@ class MainWindow(QMainWindow):
 
         # 預覽工具列按鈕
         self.center_panel.btn_refresh_preview.clicked.connect(self._on_refresh_preview)
-        # 遊戲設定 SpinBox 即時同步
+        # 遊戲設定 SpinBox + 色塊即時同步
         self.center_panel.spin_dlg_font.valueChanged.connect(self._on_game_setting_changed)
         self.center_panel.spin_name_font.valueChanged.connect(self._on_game_setting_changed)
         self.center_panel.spin_opacity.valueChanged.connect(self._on_game_setting_changed)
+        self.center_panel.dialogue_box_color_changed.connect(
+            lambda _hex: self._on_game_setting_changed()
+        )
 
     # ── 場景切換 ──
 
@@ -377,6 +380,7 @@ class MainWindow(QMainWindow):
             dialogue_font_size=self.center_panel.spin_dlg_font.value(),
             name_font_size=self.center_panel.spin_name_font.value(),
             dialogue_box_opacity=self.center_panel.spin_opacity.value(),
+            dialogue_box_color=self.center_panel.get_dialogue_box_color(),
         )
         self._on_project_changed()
 
@@ -706,6 +710,8 @@ class MainWindow(QMainWindow):
         self.center_panel.spin_dlg_font.blockSignals(False)
         self.center_panel.spin_name_font.blockSignals(False)
         self.center_panel.spin_opacity.blockSignals(False)
+        # 對話框底色（QPushButton 不會 emit 訊號 → 不需 block）
+        self.center_panel.set_dialogue_box_color(gs.dialogue_box_color)
 
     def _update_title(self) -> None:
         title = self._BASE_TITLE
