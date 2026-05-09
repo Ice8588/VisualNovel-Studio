@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import QPoint, QRect, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QPoint, Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
     QDoubleSpinBox,
     QHBoxLayout,
@@ -155,9 +155,9 @@ class CenterPanel(QWidget):
         )
         toolbar.addWidget(self.btn_dlg_color)
 
-        # 兩個色色組之間拉開：bg 標題 → text 標題距離須 ≥ panel 寬度（300px）
-        # 中間有 bg button(28) + 兩側 spacing；保險起見直接用 spacer 推到 300+ 距離
-        toolbar.addSpacing(300)
+        # 兩個色色組緊鄰：標題視覺靠近，避免大塊空白。
+        # 同時開兩塊面板會重疊 → _toggle_color_panel 改為「打開一塊就關掉另一塊」（互斥）
+        toolbar.addSpacing(16)
 
         # 對話框文字色：標題 + 色塊按鈕 → 另一塊浮動色板
         self._lbl_text_color = QLabel("文字顏色:")
@@ -236,24 +236,19 @@ class CenterPanel(QWidget):
         if panel.isVisible():
             panel.hide()
             return
-        parent = panel.parent()
-
-        # 對齊 anchor_label 左下角
-        anchor_bl = anchor_label.mapTo(parent, anchor_label.rect().bottomLeft())
-        desired_x = anchor_bl.x()
-        # y 取 anchor 所在 toolbar 列的底部（用 anchor 同列 button 的 bottom 比較準）
-        y = anchor_bl.y() + 8
-
-        # clamp 到 parent 邊界（先做，避免後續 intersect 計算用到溢出座標）
-        desired_x = max(4, min(desired_x, parent.width() - panel.width() - 4))
-
-        # 安全網：clamp 後若仍與另一塊 visible 色板重疊（極窄視窗 / 同時兩塊都展開），
-        # 把另一塊收起來——確保使用者看到的色板永遠單一、可讀。
+        # 互斥：toolbar spacing 已縮短到 16px，兩塊面板不可能並排不重疊；
+        # 統一邏輯為「永遠只開一塊」——打開一塊前先關掉另一塊。
         other = self.text_panel if panel is self.color_panel else self.color_panel
         if other.isVisible():
-            cand = QRect(desired_x, y, panel.width(), panel.height())
-            if other.geometry().intersects(cand):
-                other.hide()
+            other.hide()
+
+        parent = panel.parent()
+        anchor_bl = anchor_label.mapTo(parent, anchor_label.rect().bottomLeft())
+        desired_x = anchor_bl.x()
+        y = anchor_bl.y() + 8
+
+        # clamp 到 parent 邊界
+        desired_x = max(4, min(desired_x, parent.width() - panel.width() - 4))
         panel.move(desired_x, y)
         panel.show()
         panel.raise_()

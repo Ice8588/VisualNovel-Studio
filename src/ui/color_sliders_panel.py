@@ -50,7 +50,7 @@ class ColorSlidersPanel(QWidget):
         from PyQt6.QtWidgets import QHBoxLayout, QVBoxLayout
         outer = QVBoxLayout(self)
         outer.setContentsMargins(12, 12, 12, 12)
-        outer.setSpacing(10)
+        outer.setSpacing(16)  # 上方 hex 區與下方滑桿區的距離
 
         # 上方：色塊預覽 + hex
         head = QHBoxLayout()
@@ -64,10 +64,10 @@ class ColorSlidersPanel(QWidget):
         head.addWidget(self._lbl_hex, 1)
         outer.addLayout(head)
 
-        # 三軸滑桿 grid
+        # 三軸滑桿 grid — 垂直間距拉開填滿剩餘高度（移除底部 stretch）
         grid = QGridLayout()
         grid.setHorizontalSpacing(8)
-        grid.setVerticalSpacing(6)
+        grid.setVerticalSpacing(20)  # 三條滑桿之間的距離拉開
 
         self._sliders: dict[str, QSlider] = {}
         self._labels: dict[str, QLabel] = {}
@@ -75,24 +75,23 @@ class ColorSlidersPanel(QWidget):
         for key, hi, row, name in rows:
             tag = QLabel(name)
             tag.setFixedWidth(36)
-            tag.setStyleSheet("font-size:12px;")
+            tag.setStyleSheet("font-size:13px;")
             sl = QSlider(Qt.Orientation.Horizontal)
             sl.setRange(0, hi)
             sl.setSingleStep(1)
             sl.setMinimumWidth(170)
-            sl.setFixedHeight(22)
+            sl.setFixedHeight(24)
             lbl = QLabel("0")
-            lbl.setFixedWidth(34)
+            lbl.setFixedWidth(36)
             lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            lbl.setStyleSheet("font-family:monospace; font-size:12px;")
+            lbl.setStyleSheet("font-family:monospace; font-size:13px;")
             grid.addWidget(tag, row, 0)
             grid.addWidget(sl, row, 1)
             grid.addWidget(lbl, row, 2)
             self._sliders[key] = sl
             self._labels[key] = lbl
             sl.valueChanged.connect(lambda _v, k=key: self._on_slider_changed(k))
-        outer.addLayout(grid)
-        outer.addStretch(1)
+        outer.addLayout(grid, 1)  # grid 佔剩餘垂直空間
 
         self._sync_sliders_from_color()
         self._refresh_display()
