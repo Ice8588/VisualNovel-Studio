@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
 from qfluentwidgets import ComboBox, LineEdit, ListWidget, PushButton, SegmentedWidget
 
 from src.core.models import Character, Project, Scene
+from src.ui.icons import design_icon
 
 # 預設名牌顏色（淺/深色模式下皆清晰可辨）
 PRESET_COLORS = [
@@ -69,9 +70,13 @@ class _HoverDeleteItemWidget(QWidget):
         self._text_label.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self._text_label, 1)
 
-        self._btn_del = QPushButton("×")
+        self._btn_del = QPushButton()
         self._btn_del.setObjectName("hoverDeleteButton")
-        self._btn_del.setFixedSize(18, 18)
+        self._btn_del.setIcon(design_icon("close"))
+        self._btn_del.setIconSize(QSize(14, 14))
+        self._btn_del.setFixedSize(20, 20)
+        self._btn_del.setToolTip("移除")
+        self._btn_del.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_del.hide()
         self._btn_del.clicked.connect(self.delete_clicked)
         layout.addWidget(self._btn_del)
@@ -158,8 +163,10 @@ class LeftPanel(QWidget):
         self.scene_list = ListWidget()
         self.scene_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
         scene_layout.addWidget(self.scene_list)
-        self.btn_add_scene = QPushButton("+ 新增場景")
+        self.btn_add_scene = QPushButton(" 新增場景")
         self.btn_add_scene.setObjectName("dashedButton")
+        self.btn_add_scene.setIcon(design_icon("add"))
+        self.btn_add_scene.setIconSize(QSize(16, 16))
         scene_layout.addWidget(self.btn_add_scene)
         scene_section.setLayout(scene_layout)
         self._list_stack.addWidget(scene_section)
@@ -172,8 +179,10 @@ class LeftPanel(QWidget):
         self.character_list = ListWidget()
         self.character_list.setIconSize(QSize(32, 32))
         char_layout.addWidget(self.character_list)
-        self.btn_add_char = QPushButton("+ 新增角色")
+        self.btn_add_char = QPushButton(" 新增角色")
         self.btn_add_char.setObjectName("dashedButton")
+        self.btn_add_char.setIcon(design_icon("add"))
+        self.btn_add_char.setIconSize(QSize(16, 16))
         char_layout.addWidget(self.btn_add_char)
         char_section.setLayout(char_layout)
         self._list_stack.addWidget(char_section)

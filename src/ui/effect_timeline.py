@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
 
 from src.core.models import EffectSegment, EffectTrack, Scene
 from src.ui import _timeline_shared as shared
+from src.ui.icons import design_icon
 
 
 @dataclass
@@ -424,9 +425,12 @@ class _TrackLabel(QLabel):
     def mousePressEvent(self, ev):
         if ev.button() == Qt.MouseButton.RightButton:
             menu = QMenu(self)
-            menu.addAction("重新命名…", lambda: self.rename_requested.emit(self.track_name))
-            menu.addAction("設定顏色…", lambda: self.color_requested.emit(self.track_name))
-            menu.addAction("刪除軌道…", lambda: self.delete_requested.emit(self.track_name))
+            menu.addAction(design_icon("edit"), "重新命名…",
+                           lambda: self.rename_requested.emit(self.track_name))
+            menu.addAction(design_icon("brush"), "設定顏色…",
+                           lambda: self.color_requested.emit(self.track_name))
+            menu.addAction(design_icon("delete"), "刪除軌道…",
+                           lambda: self.delete_requested.emit(self.track_name))
             menu.exec(ev.globalPosition().toPoint())
             return
         super().mousePressEvent(ev)

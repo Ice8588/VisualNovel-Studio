@@ -15,8 +15,11 @@ a = Analysis(
         # 播放引擎檔案
         (str(root / 'src' / 'engine' / 'index.html'), 'src/engine'),
         (str(root / 'src' / 'engine' / 'engine.js'), 'src/engine'),
+        (str(root / 'src' / 'engine' / 'effects.js'), 'src/engine'),
         (str(root / 'src' / 'engine' / 'style.css'), 'src/engine'),
         (str(root / 'src' / 'engine' / 'script.json'), 'src/engine'),
+        # 內嵌字型（Noto Sans TC）與設計資產
+        (str(root / 'assets'), 'assets'),
     ],
     hiddenimports=[
         'PyQt6.QtWebEngineWidgets',
@@ -44,7 +47,6 @@ a = Analysis(
         'PyQt6.QtSensors',
         'PyQt6.QtSerialPort',
         'PyQt6.QtSql',
-        'PyQt6.QtSvg',
         'PyQt6.QtTest',
         'PyQt6.QtXml',
         'PyQt6.Qt3DCore',

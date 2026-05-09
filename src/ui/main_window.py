@@ -22,7 +22,9 @@ from src.core.models import Project, Scene
 from src.core.project_io import load_project, save_project
 from src.core.text_parser import parse_file, _classify_lines
 from src.ui import dialogs
+from src.ui.about_dialog import AboutDialog
 from src.ui.center_panel import CenterPanel
+from src.ui.icons import design_icon as _design_icon
 from src.ui.left_panel import LeftPanel
 from src.ui.theme import apply_theme, save_preference, load_preference
 
@@ -72,30 +74,31 @@ class MainWindow(QMainWindow):
 
     def _setup_menu(self) -> None:
         menu_bar = QMenuBar()
+        ico = _design_icon  # local alias
 
         # 檔案選單
         file_menu = menu_bar.addMenu("檔案")
-        act_new = file_menu.addAction("新增專案", self._on_new_project)
+        act_new = file_menu.addAction(ico("new"), "新增專案", self._on_new_project)
         act_new.setShortcut(QKeySequence.StandardKey.New)
-        act_open = file_menu.addAction("開啟專案", self._on_open_project)
+        act_open = file_menu.addAction(ico("open"), "開啟專案", self._on_open_project)
         act_open.setShortcut(QKeySequence.StandardKey.Open)
         file_menu.addSeparator()
-        act_save = file_menu.addAction("儲存專案", self._on_save_project)
+        act_save = file_menu.addAction(ico("save"), "儲存專案", self._on_save_project)
         act_save.setShortcut(QKeySequence.StandardKey.Save)
-        file_menu.addAction("另存專案", self._on_save_project_as)
+        file_menu.addAction(ico("save"), "另存專案", self._on_save_project_as)
         file_menu.addSeparator()
-        file_menu.addAction("匯入文字", self._on_import_text)
+        file_menu.addAction(ico("import"), "匯入文字", self._on_import_text)
         file_menu.addSeparator()
-        act_refresh = file_menu.addAction("重新整理預覽", self._on_refresh_preview)
+        act_refresh = file_menu.addAction(ico("refresh"), "重新整理預覽", self._on_refresh_preview)
         act_refresh.setShortcut(QKeySequence("F5"))
         file_menu.addSeparator()
-        file_menu.addAction("結束", self.close)
+        file_menu.addAction(ico("close"), "結束", self.close)
 
         # 導出選單
         export_menu = menu_bar.addMenu("導出")
-        export_menu.addAction("導出網頁 (ZIP)", self._on_export_zip)
-        export_menu.addAction("導出單一 HTML", self._on_export_html)
-        export_menu.addAction("導出影片 (MP4)", self._on_export_video)
+        export_menu.addAction(ico("export"), "導出網頁 (ZIP)", self._on_export_zip)
+        export_menu.addAction(ico("export"), "導出單一 HTML", self._on_export_html)
+        export_menu.addAction(ico("export"), "導出影片 (MP4)", self._on_export_video)
 
         # 外觀選單（獨立，即時套用）
         view_menu = menu_bar.addMenu("外觀")
@@ -108,6 +111,28 @@ class MainWindow(QMainWindow):
         self._act_light.setCheckable(True)
         self._act_light.setChecked(self._theme_name == "light")
         self._act_light.triggered.connect(lambda: self._apply_theme_immediate("light"))
+
+        theme_menu.addSeparator()
+        self._act_parchment = theme_menu.addAction("羊皮紙詩歌")
+        self._act_parchment.setCheckable(True)
+        self._act_parchment.setChecked(self._theme_name == "parchment")
+        self._act_parchment.triggered.connect(
+            lambda: self._apply_theme_immediate("parchment"))
+        self._act_midnight = theme_menu.addAction("Midnight Ink")
+        self._act_midnight.setCheckable(True)
+        self._act_midnight.setChecked(self._theme_name == "midnight")
+        self._act_midnight.triggered.connect(
+            lambda: self._apply_theme_immediate("midnight"))
+        self._act_figma_dark = theme_menu.addAction("Figma Dark")
+        self._act_figma_dark.setCheckable(True)
+        self._act_figma_dark.setChecked(self._theme_name == "figma-dark")
+        self._act_figma_dark.triggered.connect(
+            lambda: self._apply_theme_immediate("figma-dark"))
+        self._act_ivory = theme_menu.addAction("Ivory Titanium")
+        self._act_ivory.setCheckable(True)
+        self._act_ivory.setChecked(self._theme_name == "ivory")
+        self._act_ivory.triggered.connect(
+            lambda: self._apply_theme_immediate("ivory"))
 
         font_menu = view_menu.addMenu("UI 字體大小")
         for size in [14, 16, 18, 20, 22, 24, 26, 28]:
@@ -122,10 +147,10 @@ class MainWindow(QMainWindow):
 
         # 說明選單
         help_menu = menu_bar.addMenu("說明")
-        help_menu.addAction("使用教學", self._on_show_tutorial)
-        help_menu.addAction("關於", self._on_show_about)
+        help_menu.addAction(ico("help"), "使用教學", self._on_show_tutorial)
+        help_menu.addAction(ico("seal"), "關於", self._on_show_about)
         help_menu.addSeparator()
-        help_menu.addAction("開啟 Log 資料夾", self._on_open_log_dir)
+        help_menu.addAction(ico("open"), "開啟 Log 資料夾", self._on_open_log_dir)
 
         self.setMenuBar(menu_bar)
 
@@ -282,8 +307,15 @@ class MainWindow(QMainWindow):
 
     def _apply_theme_immediate(self, theme: str) -> None:
         self._theme_name = theme
-        self._act_dark.setChecked(theme == "dark")
-        self._act_light.setChecked(theme == "light")
+        for act, key in (
+            (self._act_dark, "dark"),
+            (self._act_light, "light"),
+            (self._act_parchment, "parchment"),
+            (self._act_midnight, "midnight"),
+            (self._act_figma_dark, "figma-dark"),
+            (self._act_ivory, "ivory"),
+        ):
+            act.setChecked(theme == key)
         app = QApplication.instance()
         apply_theme(app, self._theme_name, self._font_size)
         save_preference(self._theme_name, self._font_size)
@@ -299,8 +331,8 @@ class MainWindow(QMainWindow):
         save_preference(self._theme_name, self._font_size)
 
     def _on_restore_default_appearance(self) -> None:
-        self._apply_theme_immediate("dark")
-        self._apply_font_size_immediate(14)
+        self._apply_theme_immediate("ivory")
+        self._apply_font_size_immediate(18)
 
     def _on_show_tutorial(self) -> None:
         QMessageBox.information(
@@ -321,12 +353,7 @@ class MainWindow(QMainWindow):
         )
 
     def _on_show_about(self) -> None:
-        QMessageBox.about(
-            self, "關於",
-            "VisualNovel Studio v1.0.0\n\n"
-            "簡易視覺小說製作工具\n"
-            "支援 MP4 影片導出、HTML5 網頁導出"
-        )
+        AboutDialog(self).exec()
 
     def _on_game_setting_changed(self) -> None:
         from src.core.models import GameSettings

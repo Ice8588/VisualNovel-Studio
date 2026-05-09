@@ -31,6 +31,9 @@ task.md
 CLAUDE.md
 image.png
 
+# 設計師原始檔（fonts 過大；必要資產已搬到 assets/design/）
+VisualNovel Studio _ Design/
+
 # Claude Code IDE 設定
 .claude/
 

@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QKeyEvent
 from PyQt6.QtWidgets import (
     QFormLayout,
@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import (
 from qfluentwidgets import BodyLabel, ComboBox
 
 from src.core.models import EffectSegment, StageSegment
+from src.ui.icons import design_icon_tinted
 
 if TYPE_CHECKING:
     from src.core.models import Project
@@ -99,12 +100,15 @@ class SegmentEditor(QWidget):
         self._title = BodyLabel("Segment 編輯器")
         self._title.setFont(QFont("sans", 10, QFont.Weight.Bold))
         header.addWidget(self._title, 1)
+        # 浮動視窗背景固定為深色 (#2D2D30)，icon 用淺色才看得到
         self._btn_close = QToolButton()
-        self._btn_close.setText("✕")
+        self._btn_close.setIcon(design_icon_tinted("close", "#9AA0A6"))
+        self._btn_close.setIconSize(QSize(14, 14))
+        self._btn_close.setToolTip("關閉")
         self._btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_close.setStyleSheet(
-            "QToolButton { color:#9AA0A6; border:none; padding:0 6px; font-size:14px; }"
-            "QToolButton:hover { color:#FFFFFF; }"
+            "QToolButton { border:none; padding:2px 6px; }"
+            "QToolButton:hover { background:rgba(255,255,255,0.08); border-radius:3px; }"
         )
         self._btn_close.clicked.connect(self.closed.emit)
         header.addWidget(self._btn_close, 0)

@@ -20,14 +20,27 @@
 
 ### 從原始碼執行
 
-```bash
-# 1. 安裝 Python 3.12+
-# 2. 安裝依賴
-pip install -r requirements.txt
+需 Python 3.12+。建議使用虛擬環境隔離依賴。
 
-# 3. 啟動
+**Linux / macOS：**
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 python main.py
 ```
+
+**Windows（PowerShell）：**
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python main.py
+```
+
+> Windows 若 PowerShell 拒絕執行腳本，先跑 `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`；或改用 `cmd` 並執行 `.venv\Scripts\activate.bat`。
+
+下次進專案只要重新 activate venv 即可（不必重裝依賴）。
 
 ### 從執行檔啟動（Windows）
 
