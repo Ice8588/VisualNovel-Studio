@@ -1664,9 +1664,9 @@ def apply_theme(app: QApplication, theme_name: str, font_size: int) -> None:
     font.setPixelSize(font_size)
     app.setFont(font)
     apply_custom_overrides(app, theme_name, font_size)
-    # 同步 timeline 模組的主題感知色票（先 setTheme 再 refresh，順序重要）
+    # 同步 timeline 模組的主題感知色票（傳入完整 theme_name 以區分 parchment / ivory 等淺色變體）
     from src.ui import _timeline_shared as _shared
-    _shared.refresh_palette()
+    _shared.refresh_palette(theme_name)
 
 
 def apply_custom_overrides(app: QApplication, theme_name: str, font_size: int) -> None:

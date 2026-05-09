@@ -123,6 +123,7 @@ class VideoExportDialog(QDialog):
     def __init__(self, project, parent: QWidget | None = None):
         super().__init__(parent)
         self._project = project
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setWindowTitle("導出影片 (MP4)")
         self.setMinimumWidth(420)
         self._setup_ui()
@@ -218,6 +219,7 @@ class PasteTextDialog(QDialog):
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setWindowTitle("貼上文字")
         self.setMinimumSize(500, 400)
         self._setup_ui()
@@ -300,6 +302,8 @@ class CharacterEditorDialog(QDialog):
         self._extra_costumes: list[Costume] = []
         self._loaded_from_card: bool = False
         self.setAcceptDrops(True)
+        # 確保 app-level QSS 中 QDialog 的背景色能套到本 dialog（部份 Qt 樣式下需顯式啟用）
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setWindowTitle("編輯角色" if character else "新增角色")
         self.setMinimumWidth(420)
         self._setup_ui()
@@ -573,6 +577,7 @@ class CostumeEditorDialog(QDialog):
         import copy
         self._project_dir = Path(project_dir)
         self._costumes: list[Costume] = copy.deepcopy(character.costumes)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setWindowTitle(f"編輯服裝 — {character.name}")
         self.setMinimumSize(580, 380)
         self._setup_ui()
@@ -785,6 +790,7 @@ class AppearanceSettingsDialog(QDialog):
 
     def __init__(self, current_theme: str, current_font_size: int, parent: QWidget | None = None):
         super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setWindowTitle("外觀設定")
         self.setMinimumWidth(300)
         self._theme = current_theme
@@ -840,6 +846,7 @@ class GameSettingsDialog(QDialog):
 
     def __init__(self, game_settings, parent: QWidget | None = None):
         super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setWindowTitle("遊戲設定")
         self.setMinimumWidth(320)
         self._gs = game_settings

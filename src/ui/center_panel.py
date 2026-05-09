@@ -229,6 +229,7 @@ class CenterPanel(QWidget):
             col_effect.setMinimumWidth(shared.LANE_WIDTH * effect_lanes + 48)
 
             workspace = QWidget()
+            workspace.setObjectName("timelineWorkspace")
             workspace_layout = QHBoxLayout(workspace)
             workspace_layout.setContentsMargins(0, 0, 0, 0)
             workspace_layout.setSpacing(2)
@@ -238,6 +239,7 @@ class CenterPanel(QWidget):
 
             self._workspace_scroll.setWidget(workspace)
             self._workspace_root = workspace
+            self._apply_workspace_bg()
 
             self._connect_workspace_signals()
 
@@ -385,9 +387,22 @@ class CenterPanel(QWidget):
             f"color:{fg}; background:{bg}; padding:6px 0; font-weight:bold;"
         )
 
+    def _apply_workspace_bg(self) -> None:
+        """workspace 容器 + ScrollArea viewport 背景跟主題；避免欄位間隙與右緣黑邊。"""
+        bg = shared.BG_DARK.name()
+        if getattr(self, "_workspace_root", None):
+            self._workspace_root.setStyleSheet(
+                f"QWidget#timelineWorkspace {{ background-color: {bg}; }}"
+            )
+        if getattr(self, "_workspace_scroll", None):
+            vp = self._workspace_scroll.viewport()
+            if vp:
+                vp.setStyleSheet(f"background-color: {bg};")
+
     def refresh_theme(self) -> None:
         """主題切換後外部呼叫：重套 timeline header stylesheet 並重畫所有 paint widget。"""
         self._apply_dialogue_header_style()
+        self._apply_workspace_bg()
         if hasattr(self, "stage_panel"):
             self.stage_panel.refresh_theme()
         if hasattr(self, "effect_timeline"):
