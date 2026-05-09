@@ -192,13 +192,13 @@ class MainWindow(QMainWindow):
 
         # 預覽工具列按鈕
         self.center_panel.btn_refresh_preview.clicked.connect(self._on_refresh_preview)
-        # 遊戲設定 SpinBox + 色塊即時同步
+        # 遊戲設定 SpinBox 即時同步（會觸發 reload）
         self.center_panel.spin_dlg_font.valueChanged.connect(self._on_game_setting_changed)
         self.center_panel.spin_name_font.valueChanged.connect(self._on_game_setting_changed)
-        self.center_panel.spin_opacity.valueChanged.connect(self._on_game_setting_changed)
-        self.center_panel.dialogue_box_color_changed.connect(
-            lambda _hex: self._on_game_setting_changed()
-        )
+        self.center_panel.spin_opacity.valueChanged.connect(self._on_game_setting_opacity_changed)
+        # 對話框背景 / 文字色：live update 不 reload，避免拉桿時整個 iframe 閃爍
+        self.center_panel.dialogue_box_color_changed.connect(self._on_dialogue_box_color_live)
+        self.center_panel.dialogue_text_color_changed.connect(self._on_dialogue_text_color_live)
 
     # ── 場景切換 ──
 
@@ -374,15 +374,49 @@ class MainWindow(QMainWindow):
     def _on_show_about(self) -> None:
         AboutDialog(self).exec()
 
-    def _on_game_setting_changed(self) -> None:
+    def _build_game_settings(self):
         from src.core.models import GameSettings
-        self._project.game_settings = GameSettings(
+        return GameSettings(
             dialogue_font_size=self.center_panel.spin_dlg_font.value(),
             name_font_size=self.center_panel.spin_name_font.value(),
             dialogue_box_opacity=self.center_panel.spin_opacity.value(),
             dialogue_box_color=self.center_panel.get_dialogue_box_color(),
+            dialogue_text_color=self.center_panel.get_dialogue_text_color(),
         )
+
+    def _on_game_setting_changed(self) -> None:
+        """字體大小變更 → 必須整個 reload（CSS 經 applyGameSettings 注入）。"""
+        self._project.game_settings = self._build_game_settings()
         self._on_project_changed()
+
+    def _on_game_setting_opacity_changed(self) -> None:
+        """透明度變更 → live patch 對話框 alpha，不 reload。"""
+        self._project.game_settings = self._build_game_settings()
+        self._mark_dirty_no_reload()
+        self.center_panel.preview.apply_dialogue_box_color_live(
+            self.center_panel.get_dialogue_box_color(),
+            self.center_panel.spin_opacity.value(),
+        )
+
+    def _on_dialogue_box_color_live(self, hex_color: str) -> None:
+        """背景色板拉桿 → 直接 patch iframe，不 reload。"""
+        self._project.game_settings = self._build_game_settings()
+        self._mark_dirty_no_reload()
+        self.center_panel.preview.apply_dialogue_box_color_live(
+            hex_color, self.center_panel.spin_opacity.value()
+        )
+
+    def _on_dialogue_text_color_live(self, hex_color: str) -> None:
+        """文字色板拉桿 → 直接 patch iframe，不 reload。"""
+        self._project.game_settings = self._build_game_settings()
+        self._mark_dirty_no_reload()
+        self.center_panel.preview.apply_dialogue_text_color_live(hex_color)
+
+    def _mark_dirty_no_reload(self) -> None:
+        """標記需存檔但跳過 preview reload；給 live patch 用。"""
+        self._dirty = True
+        self._update_title()
+        self._update_status()
 
     def _on_open_log_dir(self) -> None:
         import subprocess
@@ -710,8 +744,9 @@ class MainWindow(QMainWindow):
         self.center_panel.spin_dlg_font.blockSignals(False)
         self.center_panel.spin_name_font.blockSignals(False)
         self.center_panel.spin_opacity.blockSignals(False)
-        # 對話框底色（QPushButton 不會 emit 訊號 → 不需 block）
+        # 對話框底色 / 文字色（色塊按鈕不會 emit 訊號 → 不需 block）
         self.center_panel.set_dialogue_box_color(gs.dialogue_box_color)
+        self.center_panel.set_dialogue_text_color(gs.dialogue_text_color)
 
     def _update_title(self) -> None:
         title = self._BASE_TITLE

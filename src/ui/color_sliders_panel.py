@@ -34,7 +34,7 @@ class ColorSlidersPanel(QWidget):
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setObjectName("colorSlidersPanel")
-        self.setFixedSize(220, 110)
+        self.setFixedSize(300, 200)
         self._suppress = False
         self._color = QColor(20, 20, 40)
         self._setup_ui()
@@ -47,33 +47,52 @@ class ColorSlidersPanel(QWidget):
         )
 
     def _setup_ui(self) -> None:
-        grid = QGridLayout(self)
-        grid.setContentsMargins(8, 8, 8, 8)
-        grid.setHorizontalSpacing(6)
-        grid.setVerticalSpacing(4)
+        from PyQt6.QtWidgets import QHBoxLayout, QVBoxLayout
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(12, 12, 12, 12)
+        outer.setSpacing(10)
+
+        # 上方：色塊預覽 + hex
+        head = QHBoxLayout()
+        head.setSpacing(10)
+        self._swatch = QLabel()
+        self._swatch.setFixedSize(60, 32)
+        self._swatch.setStyleSheet("background:#141428; border:1px solid #888; border-radius:4px;")
+        head.addWidget(self._swatch)
+        self._lbl_hex = QLabel("#141428")
+        self._lbl_hex.setStyleSheet("font-family:monospace; font-size:14px;")
+        head.addWidget(self._lbl_hex, 1)
+        outer.addLayout(head)
+
+        # 三軸滑桿 grid
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(8)
+        grid.setVerticalSpacing(6)
 
         self._sliders: dict[str, QSlider] = {}
         self._labels: dict[str, QLabel] = {}
         rows = [("H", 360, 0, "色相"), ("S", 100, 1, "飽和"), ("L", 100, 2, "亮度")]
         for key, hi, row, name in rows:
             tag = QLabel(name)
-            tag.setFixedWidth(28)
-            tag.setStyleSheet("font-size:11px;")
+            tag.setFixedWidth(36)
+            tag.setStyleSheet("font-size:12px;")
             sl = QSlider(Qt.Orientation.Horizontal)
             sl.setRange(0, hi)
             sl.setSingleStep(1)
-            sl.setMinimumWidth(120)
-            sl.setFixedHeight(20)
+            sl.setMinimumWidth(170)
+            sl.setFixedHeight(22)
             lbl = QLabel("0")
-            lbl.setFixedWidth(28)
+            lbl.setFixedWidth(34)
             lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            lbl.setStyleSheet("font-family:monospace; font-size:11px;")
+            lbl.setStyleSheet("font-family:monospace; font-size:12px;")
             grid.addWidget(tag, row, 0)
             grid.addWidget(sl, row, 1)
             grid.addWidget(lbl, row, 2)
             self._sliders[key] = sl
             self._labels[key] = lbl
             sl.valueChanged.connect(lambda _v, k=key: self._on_slider_changed(k))
+        outer.addLayout(grid)
+        outer.addStretch(1)
 
         self._sync_sliders_from_color()
         self._refresh_display()
@@ -121,6 +140,12 @@ class ColorSlidersPanel(QWidget):
         self._labels["H"].setText(str(h))
         self._labels["S"].setText(str(s_pct))
         self._labels["L"].setText(str(l_pct))
+        # 上方色塊 + hex 文字
+        cur_hex = self._color.name()
+        self._swatch.setStyleSheet(
+            f"background:{cur_hex}; border:1px solid #888; border-radius:4px;"
+        )
+        self._lbl_hex.setText(cur_hex.upper())
         s_255 = int(s_pct * 255 / 100)
         l_255 = int(l_pct * 255 / 100)
 

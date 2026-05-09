@@ -175,6 +175,9 @@
       var op = gs.dialogue_box_opacity != null ? gs.dialogue_box_opacity : 0.85;
       els.dialogueBox.style.backgroundColor = _hexToRgba(hex, op);
     }
+    if (els.dialogueText && gs.dialogue_text_color) {
+      els.dialogueText.style.color = gs.dialogue_text_color;
+    }
   }
 
   function _hexToRgba(hex, alpha) {
@@ -874,6 +877,16 @@
         if (!scene || dIdx < 0 || dIdx >= scene.dialogues.length) return;
         dialogueIndex = dIdx;
         showDialogue();
+      },
+      // Live preview：拉色板滑桿時用，避免每次刷新重載整個 iframe 而閃爍
+      setDialogueBoxColor: function (hex, opacity) {
+        if (!els.dialogueBox) return;
+        var op = opacity != null ? opacity : 0.85;
+        els.dialogueBox.style.backgroundColor = _hexToRgba(hex || "#141428", op);
+      },
+      setDialogueTextColor: function (hex) {
+        if (!els.dialogueText || !hex) return;
+        els.dialogueText.style.color = hex;
       }
     };
 

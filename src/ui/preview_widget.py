@@ -252,6 +252,22 @@ class PreviewWidget(QWidget):
         )
         self.web_view.page().runJavaScript(js)
 
+    def apply_dialogue_box_color_live(self, hex_color: str, opacity: float) -> None:
+        """拉色板滑桿時用：直接 patch 對話框背景，不重載 iframe（避免閃爍）。"""
+        js = (
+            f'if(window.VNPreviewAPI&&VNPreviewAPI.setDialogueBoxColor){{'
+            f'VNPreviewAPI.setDialogueBoxColor("{hex_color}",{opacity});}}'
+        )
+        self.web_view.page().runJavaScript(js)
+
+    def apply_dialogue_text_color_live(self, hex_color: str) -> None:
+        """拉色板滑桿時用：直接 patch 對話文字色。"""
+        js = (
+            f'if(window.VNPreviewAPI&&VNPreviewAPI.setDialogueTextColor){{'
+            f'VNPreviewAPI.setDialogueTextColor("{hex_color}");}}'
+        )
+        self.web_view.page().runJavaScript(js)
+
     def cleanup(self) -> None:
         """清理暫存目錄。"""
         if self._temp_dir:

@@ -68,7 +68,9 @@ class CenterPanel(QWidget):
     project_changed = pyqtSignal()
     empty_state_import_text = pyqtSignal()
     empty_state_add_scene = pyqtSignal()
-    dialogue_box_color_changed = pyqtSignal(str)  # hex; main_window 用來寫進 game_settings
+    # 對話框背景 / 文字色變更（live；main_window 寫進 game_settings 並 markDirty 但不 reload）
+    dialogue_box_color_changed = pyqtSignal(str)
+    dialogue_text_color_changed = pyqtSignal(str)
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -140,24 +142,44 @@ class CenterPanel(QWidget):
         self.spin_opacity.setMinimumWidth(100)
         toolbar.addWidget(self.spin_opacity)
         toolbar.addSpacing(10)
-        # 對話框顏色：色塊按鈕，點擊切換下方 inline 滑桿面板
-        toolbar.addWidget(QLabel("顏色:"))
+        # 對話框背景色：色塊按鈕 → 浮動色板
+        toolbar.addWidget(QLabel("背景顏色:"))
         self.btn_dlg_color = QPushButton()
         self.btn_dlg_color.setFixedSize(28, 24)
-        self.btn_dlg_color.setToolTip("點擊展開色板（HSL 滑桿）")
+        self.btn_dlg_color.setToolTip("點擊展開色板（HSL 滑桿）— 對話框背景")
         self._dlg_color_hex = "#141428"
         self._apply_dlg_color_swatch()
-        self.btn_dlg_color.clicked.connect(self._toggle_color_panel)
+        self.btn_dlg_color.clicked.connect(
+            lambda: self._toggle_color_panel(self.color_panel, self.btn_dlg_color)
+        )
         toolbar.addWidget(self.btn_dlg_color)
+
+        # 對話框文字色：色塊按鈕 → 另一塊浮動色板（與背景色板互不重疊）
+        toolbar.addSpacing(10)
+        toolbar.addWidget(QLabel("文字顏色:"))
+        self.btn_text_color = QPushButton()
+        self.btn_text_color.setFixedSize(28, 24)
+        self.btn_text_color.setToolTip("點擊展開色板（HSL 滑桿）— 對話文字色")
+        self._text_color_hex = "#EEEEEE"
+        self._apply_text_color_swatch()
+        self.btn_text_color.clicked.connect(
+            lambda: self._toggle_color_panel(self.text_panel, self.btn_text_color)
+        )
+        toolbar.addWidget(self.btn_text_color)
+
         toolbar.addStretch()
         layout.addLayout(toolbar)
 
-        # 色板做浮動子 widget：不入 layout，不擠掉預覽
-        # parent = container（preview 容器），由 _toggle_color_panel 計算位置
+        # 兩塊浮動色板：parent = container，不入 layout 不擠預覽
         self.color_panel = ColorSlidersPanel(container)
         self.color_panel.set_color(self._dlg_color_hex)
         self.color_panel.color_changed.connect(self._on_color_panel_changed)
         self.color_panel.hide()
+
+        self.text_panel = ColorSlidersPanel(container)
+        self.text_panel.set_color(self._text_color_hex)
+        self.text_panel.color_changed.connect(self._on_text_panel_changed)
+        self.text_panel.hide()
 
         # EmptyState / Preview stacked
         self._preview_stack = QStackedWidget()
@@ -173,9 +195,13 @@ class CenterPanel(QWidget):
         return container
 
     def _apply_dlg_color_swatch(self) -> None:
-        """更新色塊按鈕背景以反映目前 _dlg_color_hex。"""
         self.btn_dlg_color.setStyleSheet(
             f"background-color:{self._dlg_color_hex}; border:1px solid #888; border-radius:3px;"
+        )
+
+    def _apply_text_color_swatch(self) -> None:
+        self.btn_text_color.setStyleSheet(
+            f"background-color:{self._text_color_hex}; border:1px solid #888; border-radius:3px;"
         )
 
     def set_dialogue_box_color(self, hex_color: str) -> None:
@@ -188,31 +214,72 @@ class CenterPanel(QWidget):
     def get_dialogue_box_color(self) -> str:
         return self._dlg_color_hex
 
-    def _toggle_color_panel(self) -> None:
-        """色塊按鈕點擊：展開 / 收起浮動色板。
+    def set_dialogue_text_color(self, hex_color: str) -> None:
+        self._text_color_hex = hex_color
+        self._apply_text_color_swatch()
+        if hasattr(self, "text_panel"):
+            self.text_panel.set_color(hex_color)
 
-        色板是 preview 容器的子 widget（不入 layout），透過 move 對齊 btn_dlg_color
-        正下方；不擠掉預覽，覆蓋在原本內容上方。
+    def get_dialogue_text_color(self) -> str:
+        return self._text_color_hex
+
+    def _toggle_color_panel(self, panel, anchor_btn) -> None:
+        """通用展開 / 收起浮動色板，自動避開另一塊已展開的色板（不重疊）。
+
+        - 嘗試 anchor_btn 正下方置中
+        - 若會與另一塊 visible 的色板重疊：先試擺到「對方右側 8px」；放不下則擺左側
+        - 都放不下就 clamp 到 parent 邊界（極端視窗才會發生）
         """
-        if self.color_panel.isVisible():
-            self.color_panel.hide()
+        if panel.isVisible():
+            panel.hide()
             return
-        # 計算 button 在 color_panel.parent (= preview container) 座標系下的位置
-        parent = self.color_panel.parent()
-        btn_top_left = self.btn_dlg_color.mapTo(parent, self.btn_dlg_color.rect().bottomLeft())
-        # 向左推一些，避免色板太偏右，超出 parent 寬度時往左貼齊
-        x = btn_top_left.x() - (self.color_panel.width() // 2) + (self.btn_dlg_color.width() // 2)
-        x = max(4, min(x, parent.width() - self.color_panel.width() - 4))
-        y = btn_top_left.y() + 4
-        self.color_panel.move(x, y)
-        self.color_panel.show()
-        self.color_panel.raise_()
+        parent = panel.parent()
+        gap = 8
+
+        # 期望位置（置中於 anchor_btn 下方）
+        btn_bl = anchor_btn.mapTo(parent, anchor_btn.rect().bottomLeft())
+        desired_x = btn_bl.x() + (anchor_btn.width() // 2) - (panel.width() // 2)
+        y = btn_bl.y() + 4
+
+        # 與另一塊 visible 色板的衝突檢查
+        other = self.text_panel if panel is self.color_panel else self.color_panel
+        if other.isVisible():
+            other_geo = other.geometry()
+            cand_rect = self._panel_rect_at(panel.width(), panel.height(), desired_x, y)
+            if other_geo.intersects(cand_rect):
+                # 試擺右側
+                right_x = other_geo.right() + gap
+                if right_x + panel.width() <= parent.width() - 4:
+                    desired_x = right_x
+                else:
+                    # 試擺左側
+                    left_x = other_geo.left() - panel.width() - gap
+                    if left_x >= 4:
+                        desired_x = left_x
+                    # else: 放棄避讓，下面 clamp 處理（會與 other 重疊）
+
+        # clamp 到 parent 邊界
+        desired_x = max(4, min(desired_x, parent.width() - panel.width() - 4))
+        panel.move(desired_x, y)
+        panel.show()
+        panel.raise_()
+
+    @staticmethod
+    def _panel_rect_at(w: int, h: int, x: int, y: int):
+        from PyQt6.QtCore import QRect
+        return QRect(x, y, w, h)
 
     def _on_color_panel_changed(self, hex_color: str) -> None:
-        """色板滑桿移動 → 更新色塊按鈕 + 廣播。"""
+        """背景色板滑桿移動：更新色塊 + 廣播。main_window 接訊號做 live update（不 reload）。"""
         self._dlg_color_hex = hex_color
         self._apply_dlg_color_swatch()
         self.dialogue_box_color_changed.emit(hex_color)
+
+    def _on_text_panel_changed(self, hex_color: str) -> None:
+        """文字色板滑桿移動：更新色塊 + 廣播。"""
+        self._text_color_hex = hex_color
+        self._apply_text_color_swatch()
+        self.dialogue_text_color_changed.emit(hex_color)
 
     def _build_editing_container(self) -> QWidget:
         container = QWidget()
