@@ -21,9 +21,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import QPoint, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
-    QColorDialog,
     QDoubleSpinBox,
     QHBoxLayout,
     QLabel,
@@ -35,6 +33,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from src.ui.color_sliders_panel import ColorSlidersPanel
 from qfluentwidgets import PushButton
 
 from src.core.models import Dialogue, Project, Scene
@@ -140,17 +140,24 @@ class CenterPanel(QWidget):
         self.spin_opacity.setMinimumWidth(100)
         toolbar.addWidget(self.spin_opacity)
         toolbar.addSpacing(10)
-        # 對話框顏色：色塊按鈕，點擊開 QColorDialog
+        # 對話框顏色：色塊按鈕，點擊切換下方 inline 滑桿面板
         toolbar.addWidget(QLabel("顏色:"))
         self.btn_dlg_color = QPushButton()
         self.btn_dlg_color.setFixedSize(28, 24)
-        self.btn_dlg_color.setToolTip("點擊更改對話框底色")
+        self.btn_dlg_color.setToolTip("點擊展開色板（HSL 滑桿）")
         self._dlg_color_hex = "#141428"
         self._apply_dlg_color_swatch()
-        self.btn_dlg_color.clicked.connect(self._on_pick_dlg_color)
+        self.btn_dlg_color.clicked.connect(self._toggle_color_panel)
         toolbar.addWidget(self.btn_dlg_color)
         toolbar.addStretch()
         layout.addLayout(toolbar)
+
+        # toolbar 下方：可摺疊色板（預設隱藏）
+        self.color_panel = ColorSlidersPanel()
+        self.color_panel.set_color(self._dlg_color_hex)
+        self.color_panel.color_changed.connect(self._on_color_panel_changed)
+        self.color_panel.hide()
+        layout.addWidget(self.color_panel)
 
         # EmptyState / Preview stacked
         self._preview_stack = QStackedWidget()
@@ -175,19 +182,21 @@ class CenterPanel(QWidget):
         """外部呼叫（main_window 從 game_settings 同步）。"""
         self._dlg_color_hex = hex_color
         self._apply_dlg_color_swatch()
+        if hasattr(self, "color_panel"):
+            self.color_panel.set_color(hex_color)
 
     def get_dialogue_box_color(self) -> str:
         return self._dlg_color_hex
 
-    def _on_pick_dlg_color(self) -> None:
-        chosen = QColorDialog.getColor(
-            QColor(self._dlg_color_hex), self, "選擇對話框底色"
-        )
-        if chosen.isValid():
-            self._dlg_color_hex = chosen.name()
-            self._apply_dlg_color_swatch()
-            # main_window 透過 valueChanged 等 signal 收口；這裡用獨立 signal
-            self.dialogue_box_color_changed.emit(self._dlg_color_hex)
+    def _toggle_color_panel(self) -> None:
+        """色塊按鈕點擊：展開 / 收起 inline 色板。"""
+        self.color_panel.setVisible(not self.color_panel.isVisible())
+
+    def _on_color_panel_changed(self, hex_color: str) -> None:
+        """色板滑桿移動 → 更新色塊按鈕 + 廣播。"""
+        self._dlg_color_hex = hex_color
+        self._apply_dlg_color_swatch()
+        self.dialogue_box_color_changed.emit(hex_color)
 
     def _build_editing_container(self) -> QWidget:
         container = QWidget()
