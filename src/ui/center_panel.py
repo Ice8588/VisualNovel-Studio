@@ -266,17 +266,36 @@ class CenterPanel(QWidget):
         self._signals_connected = True
 
     def _disconnect_workspace_signals(self) -> None:
+        # 用 wildcard `obj.disconnect()` 在 Qt6 會吐 "destroyed signal of X::unnamed"
+        # 警告，且在某些情境下會導致 segfault（theme 切換時 setStyleSheet 連鎖
+        # restyle 觸發 UAF）。逐 signal-slot 明確 disconnect 才安全。
         if not getattr(self, "_signals_connected", False):
             return
-        for obj in (getattr(self, "dialogue_list", None),
-                    getattr(self, "stage_panel", None),
-                    getattr(self, "effect_timeline", None)):
+        bindings = (
+            (getattr(self, "dialogue_list", None), (
+                ("dialogue_moved", self._on_dialogue_moved),
+                ("cursor_changed", self._on_cursor_from_widget),
+                ("selection_changed", self._on_cursor_from_widget),
+            )),
+            (getattr(self, "stage_panel", None), (
+                ("cursor_changed", self._on_cursor_from_widget),
+                ("segment_committed", self._on_segment_committed),
+                ("segment_selected", self._on_stage_segment_selected),
+            )),
+            (getattr(self, "effect_timeline", None), (
+                ("cursor_changed", self._on_cursor_from_widget),
+                ("segment_committed", self._on_segment_committed),
+                ("segment_selected", self._on_effect_segment_selected),
+            )),
+        )
+        for obj, sigs in bindings:
             if obj is None:
                 continue
-            try:
-                obj.disconnect()
-            except (TypeError, RuntimeError):
-                pass
+            for sig_name, slot in sigs:
+                try:
+                    getattr(obj, sig_name).disconnect(slot)
+                except (TypeError, RuntimeError):
+                    pass
         self._signals_connected = False
 
     # ── Project / Scene 綁定 ───────────────────────────────
