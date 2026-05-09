@@ -266,6 +266,14 @@ QPushButton#hoverDeleteButton:hover {{
 QSplitter::handle:hover {{
     background-color: #4682B4;
 }}
+QDialog {{
+    background-color: #2b2b2b;
+}}
+QLabel#spritePreview {{
+    border: 1px solid #555;
+    background-color: #1e1e1e;
+    color: #888;
+}}
 """
 
 _LIGHT_OVERRIDES = """
@@ -528,6 +536,14 @@ QPushButton#hoverDeleteButton:hover {{
 QSplitter::handle:hover {{
     background-color: #4682B4;
 }}
+QDialog {{
+    background-color: #f5f5f5;
+}}
+QLabel#spritePreview {{
+    border: 1px solid #ccc;
+    background-color: #f0f0f0;
+    color: #666;
+}}
 """
 
 # ---------------------------------------------------------------------------
@@ -789,6 +805,14 @@ QPushButton#hoverDeleteButton:hover {{
 }}
 QSplitter::handle:hover {{
     background-color: #3A4A6B;
+}}
+QDialog {{
+    background-color: #F5ECD7;
+}}
+QLabel#spritePreview {{
+    border: 1px solid #C9B98E;
+    background-color: #EADFBF;
+    color: #8A7B5C;
 }}
 """
 
@@ -1054,6 +1078,14 @@ QPushButton#hoverDeleteButton:hover {{
 QSplitter::handle:hover {{
     background-color: #7090A0;
 }}
+QDialog {{
+    background-color: #1A1A1A;
+}}
+QLabel#spritePreview {{
+    border: 1px solid #2A2A2A;
+    background-color: #141414;
+    color: #505050;
+}}
 """
 
 # ---------------------------------------------------------------------------
@@ -1317,6 +1349,14 @@ QPushButton#hoverDeleteButton:hover {{
 }}
 QSplitter::handle:hover {{
     background-color: #B06EF7;
+}}
+QDialog {{
+    background-color: #1C1B26;
+}}
+QLabel#spritePreview {{
+    border: 1px solid #30304A;
+    background-color: #1A1928;
+    color: #4A4868;
 }}
 """
 
@@ -1583,6 +1623,14 @@ QPushButton#hoverDeleteButton:hover {{
 }}
 QSplitter::handle:hover {{
     background-color: #3A75D9;
+}}
+QDialog {{
+    background-color: #FDFDFC;
+}}
+QLabel#spritePreview {{
+    border: 1px solid #DCDAD3;
+    background-color: #F4F3EF;
+    color: #8A8880;
 }}
 """
 

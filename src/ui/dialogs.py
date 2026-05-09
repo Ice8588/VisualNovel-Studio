@@ -341,11 +341,9 @@ class CharacterEditorDialog(QDialog):
         sprite_group = QGroupBox("預設立繪")
         sprite_layout = QHBoxLayout()
         self._sprite_preview = QLabel("尚未選擇圖片")
+        self._sprite_preview.setObjectName("spritePreview")
         self._sprite_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._sprite_preview.setFixedSize(120, 140)
-        self._sprite_preview.setStyleSheet(
-            "border:1px solid #555; background:#1e1e1e; color:#888;"
-        )
         sprite_layout.addWidget(self._sprite_preview)
         btn_side = QVBoxLayout()
         self.btn_browse_sprite = PushButton("選擇圖片…")
