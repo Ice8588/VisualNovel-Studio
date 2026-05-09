@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import QPoint, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QPoint, QRect, Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
     QDoubleSpinBox,
     QHBoxLayout,
@@ -142,28 +142,33 @@ class CenterPanel(QWidget):
         self.spin_opacity.setMinimumWidth(100)
         toolbar.addWidget(self.spin_opacity)
         toolbar.addSpacing(10)
-        # 對話框背景色：色塊按鈕 → 浮動色板
-        toolbar.addWidget(QLabel("背景顏色:"))
+        # 對話框背景色：標題 + 色塊按鈕 → 浮動色板（panel 左緣對齊「背景顏色」標題左緣）
+        self._lbl_bg_color = QLabel("背景顏色:")
+        toolbar.addWidget(self._lbl_bg_color)
         self.btn_dlg_color = QPushButton()
         self.btn_dlg_color.setFixedSize(28, 24)
         self.btn_dlg_color.setToolTip("點擊展開色板（HSL 滑桿）— 對話框背景")
         self._dlg_color_hex = "#141428"
         self._apply_dlg_color_swatch()
         self.btn_dlg_color.clicked.connect(
-            lambda: self._toggle_color_panel(self.color_panel, self.btn_dlg_color)
+            lambda: self._toggle_color_panel(self.color_panel, self._lbl_bg_color)
         )
         toolbar.addWidget(self.btn_dlg_color)
 
-        # 對話框文字色：色塊按鈕 → 另一塊浮動色板（與背景色板互不重疊）
-        toolbar.addSpacing(10)
-        toolbar.addWidget(QLabel("文字顏色:"))
+        # 兩個色色組之間拉開：bg 標題 → text 標題距離須 ≥ panel 寬度（300px）
+        # 中間有 bg button(28) + 兩側 spacing；保險起見直接用 spacer 推到 300+ 距離
+        toolbar.addSpacing(300)
+
+        # 對話框文字色：標題 + 色塊按鈕 → 另一塊浮動色板
+        self._lbl_text_color = QLabel("文字顏色:")
+        toolbar.addWidget(self._lbl_text_color)
         self.btn_text_color = QPushButton()
         self.btn_text_color.setFixedSize(28, 24)
         self.btn_text_color.setToolTip("點擊展開色板（HSL 滑桿）— 對話文字色")
         self._text_color_hex = "#EEEEEE"
         self._apply_text_color_swatch()
         self.btn_text_color.clicked.connect(
-            lambda: self._toggle_color_panel(self.text_panel, self.btn_text_color)
+            lambda: self._toggle_color_panel(self.text_panel, self._lbl_text_color)
         )
         toolbar.addWidget(self.btn_text_color)
 
@@ -223,51 +228,35 @@ class CenterPanel(QWidget):
     def get_dialogue_text_color(self) -> str:
         return self._text_color_hex
 
-    def _toggle_color_panel(self, panel, anchor_btn) -> None:
-        """通用展開 / 收起浮動色板，自動避開另一塊已展開的色板（不重疊）。
-
-        - 嘗試 anchor_btn 正下方置中
-        - 若會與另一塊 visible 的色板重疊：先試擺到「對方右側 8px」；放不下則擺左側
-        - 都放不下就 clamp 到 parent 邊界（極端視窗才會發生）
+    def _toggle_color_panel(self, panel, anchor_label) -> None:
+        """通用展開 / 收起浮動色板。panel 左緣對齊 anchor_label（標題）左緣，
+        垂直放在 anchor 下方。toolbar 已預留標題間距 ≥ panel 寬度，
+        兩塊面板同時展開仍不重疊；極端視窗才會被 clamp 邏輯避讓。
         """
         if panel.isVisible():
             panel.hide()
             return
         parent = panel.parent()
-        gap = 8
 
-        # 期望位置（置中於 anchor_btn 下方）
-        btn_bl = anchor_btn.mapTo(parent, anchor_btn.rect().bottomLeft())
-        desired_x = btn_bl.x() + (anchor_btn.width() // 2) - (panel.width() // 2)
-        y = btn_bl.y() + 4
+        # 對齊 anchor_label 左下角
+        anchor_bl = anchor_label.mapTo(parent, anchor_label.rect().bottomLeft())
+        desired_x = anchor_bl.x()
+        # y 取 anchor 所在 toolbar 列的底部（用 anchor 同列 button 的 bottom 比較準）
+        y = anchor_bl.y() + 8
 
-        # 與另一塊 visible 色板的衝突檢查
+        # clamp 到 parent 邊界（先做，避免後續 intersect 計算用到溢出座標）
+        desired_x = max(4, min(desired_x, parent.width() - panel.width() - 4))
+
+        # 安全網：clamp 後若仍與另一塊 visible 色板重疊（極窄視窗 / 同時兩塊都展開），
+        # 把另一塊收起來——確保使用者看到的色板永遠單一、可讀。
         other = self.text_panel if panel is self.color_panel else self.color_panel
         if other.isVisible():
-            other_geo = other.geometry()
-            cand_rect = self._panel_rect_at(panel.width(), panel.height(), desired_x, y)
-            if other_geo.intersects(cand_rect):
-                # 試擺右側
-                right_x = other_geo.right() + gap
-                if right_x + panel.width() <= parent.width() - 4:
-                    desired_x = right_x
-                else:
-                    # 試擺左側
-                    left_x = other_geo.left() - panel.width() - gap
-                    if left_x >= 4:
-                        desired_x = left_x
-                    # else: 放棄避讓，下面 clamp 處理（會與 other 重疊）
-
-        # clamp 到 parent 邊界
-        desired_x = max(4, min(desired_x, parent.width() - panel.width() - 4))
+            cand = QRect(desired_x, y, panel.width(), panel.height())
+            if other.geometry().intersects(cand):
+                other.hide()
         panel.move(desired_x, y)
         panel.show()
         panel.raise_()
-
-    @staticmethod
-    def _panel_rect_at(w: int, h: int, x: int, y: int):
-        from PyQt6.QtCore import QRect
-        return QRect(x, y, w, h)
 
     def _on_color_panel_changed(self, hex_color: str) -> None:
         """背景色板滑桿移動：更新色塊 + 廣播。main_window 接訊號做 live update（不 reload）。"""
