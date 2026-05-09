@@ -1,11 +1,11 @@
-"""ColorSlidersPanel：RGB 三軸色板 + 即時漸層滑桿，浮動 200×100 小面板。
+"""ColorSlidersPanel：HSL 三條漸層滑桿（色相 / 飽和 / 亮度），浮動小面板。
 
-設計：
-- 三條 RGB 滑桿水平排列（R / G / B 各一橫排）
-- 每條 slider 的 groove 用 qlineargradient 顯示「該軸 0→255 變化時的顏色」
-  例：R 滑桿在當前 G、B 不變下，由 (0,G,B) 漸變到 (255,G,B)
-  使用者拖任一軸時，其他兩軸的漸層即時更新
-- 浮動：caller 把它當子 widget show()，不進 layout，靠 move() 定位
+標準 HSL color picker 模式：
+- H（色相 0-360）：彩虹漸層 紅→黃→綠→青→藍→紫→紅
+- S（飽和 0-100）：灰 → 當前色相滿飽和
+- L（亮度 0-100）：黑 → 當前色相滿色 → 白
+
+任一軸動 → 其他兩軸的 groove 即時重算（呈現「拉這軸會跑到什麼顏色」）。
 """
 
 from __future__ import annotations
@@ -18,9 +18,17 @@ from src.ui import palette
 
 
 class ColorSlidersPanel(QWidget):
-    """RGB 三滑桿色板（200×100）。emit `color_changed(hex)` 滑桿移動時。"""
+    """HSL 三滑桿色板。emit `color_changed(hex)` 任一滑桿移動時。"""
 
     color_changed = pyqtSignal(str)
+
+    # H 軸彩虹固定 7 stop（由 R 360° 回到 R）
+    _HUE_GRADIENT = (
+        "qlineargradient(x1:0, y1:0, x2:1, y2:0,"
+        " stop:0 #FF0000, stop:0.167 #FFFF00, stop:0.333 #00FF00,"
+        " stop:0.500 #00FFFF, stop:0.667 #0000FF, stop:0.833 #FF00FF,"
+        " stop:1 #FF0000)"
+    )
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -28,9 +36,8 @@ class ColorSlidersPanel(QWidget):
         self.setObjectName("colorSlidersPanel")
         self.setFixedSize(220, 110)
         self._suppress = False
-        self._r, self._g, self._b = 20, 20, 40  # 預設 #141428
+        self._color = QColor(20, 20, 40)
         self._setup_ui()
-        # 主題感知：外框 / 內距 / 陰影感
         palette.register_themed(
             self,
             lambda p: (
@@ -43,47 +50,33 @@ class ColorSlidersPanel(QWidget):
         grid = QGridLayout(self)
         grid.setContentsMargins(8, 8, 8, 8)
         grid.setHorizontalSpacing(6)
-        grid.setVerticalSpacing(2)
+        grid.setVerticalSpacing(4)
 
-        self._sl_r = self._make_slider()
-        self._sl_g = self._make_slider()
-        self._sl_b = self._make_slider()
-        self._lbl_r = QLabel("0"); self._lbl_g = QLabel("0"); self._lbl_b = QLabel("0")
-
-        for c, lbl, sl, name in (
-            (0, self._lbl_r, self._sl_r, "R"),
-            (1, self._lbl_g, self._sl_g, "G"),
-            (2, self._lbl_b, self._sl_b, "B"),
-        ):
+        self._sliders: dict[str, QSlider] = {}
+        self._labels: dict[str, QLabel] = {}
+        rows = [("H", 360, 0, "色相"), ("S", 100, 1, "飽和"), ("L", 100, 2, "亮度")]
+        for key, hi, row, name in rows:
             tag = QLabel(name)
-            tag.setFixedWidth(12)
-            tag.setStyleSheet("font-family:monospace; font-weight:bold;")
+            tag.setFixedWidth(28)
+            tag.setStyleSheet("font-size:11px;")
+            sl = QSlider(Qt.Orientation.Horizontal)
+            sl.setRange(0, hi)
+            sl.setSingleStep(1)
+            sl.setMinimumWidth(120)
+            sl.setFixedHeight(20)
+            lbl = QLabel("0")
             lbl.setFixedWidth(28)
             lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            lbl.setStyleSheet("font-family:monospace;")
-            grid.addWidget(tag, c, 0)
-            grid.addWidget(sl, c, 1)
-            grid.addWidget(lbl, c, 2)
+            lbl.setStyleSheet("font-family:monospace; font-size:11px;")
+            grid.addWidget(tag, row, 0)
+            grid.addWidget(sl, row, 1)
+            grid.addWidget(lbl, row, 2)
+            self._sliders[key] = sl
+            self._labels[key] = lbl
+            sl.valueChanged.connect(lambda _v, k=key: self._on_slider_changed(k))
 
-        for sl in (self._sl_r, self._sl_g, self._sl_b):
-            sl.valueChanged.connect(self._on_slider_changed)
-
-        # 一次刷新 stylesheet + label
-        self._suppress = True
-        self._sl_r.setValue(self._r)
-        self._sl_g.setValue(self._g)
-        self._sl_b.setValue(self._b)
-        self._suppress = False
-        self._refresh()
-
-    @staticmethod
-    def _make_slider() -> QSlider:
-        sl = QSlider(Qt.Orientation.Horizontal)
-        sl.setRange(0, 255)
-        sl.setSingleStep(1)
-        sl.setMinimumWidth(120)
-        sl.setFixedHeight(20)
-        return sl
+        self._sync_sliders_from_color()
+        self._refresh_display()
 
     # ── 對外 API ──
 
@@ -91,50 +84,77 @@ class ColorSlidersPanel(QWidget):
         c = QColor(hex_color)
         if not c.isValid():
             return
+        self._color = c
         self._suppress = True
         try:
-            self._r, self._g, self._b = c.red(), c.green(), c.blue()
-            self._sl_r.setValue(self._r)
-            self._sl_g.setValue(self._g)
-            self._sl_b.setValue(self._b)
+            self._sync_sliders_from_color()
         finally:
             self._suppress = False
-        self._refresh()
+        self._refresh_display()
 
     def color(self) -> str:
-        return QColor(self._r, self._g, self._b).name()
+        return self._color.name()
 
     # ── Internal ──
 
-    def _on_slider_changed(self, _v: int) -> None:
+    def _sync_sliders_from_color(self) -> None:
+        c = self._color
+        h = c.hslHue() if c.hslHue() >= 0 else 0  # 灰階時 hue=-1 → 0
+        self._sliders["H"].setValue(h)
+        self._sliders["S"].setValue(int(c.hslSaturation() * 100 / 255))
+        self._sliders["L"].setValue(int(c.lightness() * 100 / 255))
+
+    def _on_slider_changed(self, _key: str) -> None:
         if self._suppress:
             return
-        self._r = self._sl_r.value()
-        self._g = self._sl_g.value()
-        self._b = self._sl_b.value()
-        self._refresh()
-        self.color_changed.emit(self.color())
+        h = self._sliders["H"].value()
+        s = int(self._sliders["S"].value() * 255 / 100)
+        l = int(self._sliders["L"].value() * 255 / 100)
+        self._color = QColor.fromHsl(h, s, l)
+        self._refresh_display()
+        self.color_changed.emit(self._color.name())
 
-    def _refresh(self) -> None:
-        self._lbl_r.setText(str(self._r))
-        self._lbl_g.setText(str(self._g))
-        self._lbl_b.setText(str(self._b))
-        # 三條 slider groove 用 qlineargradient 顯示「該軸 0→255 對顏色的影響」
-        self._sl_r.setStyleSheet(self._slider_qss(
-            f"rgb(0,{self._g},{self._b})", f"rgb(255,{self._g},{self._b})"))
-        self._sl_g.setStyleSheet(self._slider_qss(
-            f"rgb({self._r},0,{self._b})", f"rgb({self._r},255,{self._b})"))
-        self._sl_b.setStyleSheet(self._slider_qss(
-            f"rgb({self._r},{self._g},0)", f"rgb({self._r},{self._g},255)"))
+    def _refresh_display(self) -> None:
+        h = self._sliders["H"].value()
+        s_pct = self._sliders["S"].value()
+        l_pct = self._sliders["L"].value()
+        self._labels["H"].setText(str(h))
+        self._labels["S"].setText(str(s_pct))
+        self._labels["L"].setText(str(l_pct))
+        s_255 = int(s_pct * 255 / 100)
+        l_255 = int(l_pct * 255 / 100)
+
+        # H 彩虹漸層恆定
+        self._sliders["H"].setStyleSheet(self._slider_qss_raw(self._HUE_GRADIENT))
+        # S：同 H 同 L 下，灰 → 滿飽和
+        gray = QColor.fromHsl(h, 0,    l_255).name()
+        full = QColor.fromHsl(h, 255,  l_255).name()
+        self._sliders["S"].setStyleSheet(self._slider_qss(gray, full))
+        # L：黑 → 當前 H/S 滿色 → 白
+        mid  = QColor.fromHsl(h, s_255, 128).name()
+        self._sliders["L"].setStyleSheet(self._slider_qss(
+            "#000000", "#FFFFFF", mid_stop=mid))
 
     @staticmethod
-    def _slider_qss(start: str, end: str) -> str:
-        # groove 用線性漸層（左→右）；handle 簡化成白色細邊圓角
+    def _slider_qss(start: str, end: str, mid_stop: str | None = None) -> str:
+        if mid_stop:
+            grad = (
+                f"qlineargradient(x1:0, y1:0, x2:1, y2:0,"
+                f" stop:0 {start}, stop:0.5 {mid_stop}, stop:1 {end})"
+            )
+        else:
+            grad = (
+                f"qlineargradient(x1:0, y1:0, x2:1, y2:0,"
+                f" stop:0 {start}, stop:1 {end})"
+            )
+        return ColorSlidersPanel._slider_qss_raw(grad)
+
+    @staticmethod
+    def _slider_qss_raw(grad: str) -> str:
         return (
             "QSlider::groove:horizontal {"
             "  height: 8px; border-radius: 4px;"
-            f"  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,"
-            f"    stop:0 {start}, stop:1 {end});"
+            f"  background: {grad};"
             "}"
             "QSlider::handle:horizontal {"
             "  background: #FFFFFF; border: 1px solid #444;"
