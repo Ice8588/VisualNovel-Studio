@@ -6,6 +6,8 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
 from qfluentwidgets import PrimaryPushButton, PushButton
 
+from src.ui import palette
+
 
 class EmptyStateWidget(QWidget):
     """空專案時在預覽區域顯示的引導畫面。
@@ -27,12 +29,18 @@ class EmptyStateWidget(QWidget):
 
         title = QLabel("開始你的第一個故事")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet("font-size: 20px; font-weight: bold;")
+        palette.register_themed(
+            title,
+            lambda p: f"color:{p.text_primary.name()}; font-size:20px; font-weight:bold;",
+        )
         layout.addWidget(title)
 
         hint = QLabel("匯入 .txt / .docx 文字檔，或手動新增場景")
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        hint.setStyleSheet("color: #888;")
+        palette.register_themed(
+            hint,
+            lambda p: f"color:{p.text_secondary.name()};",
+        )
         layout.addWidget(hint)
 
         layout.addSpacing(8)

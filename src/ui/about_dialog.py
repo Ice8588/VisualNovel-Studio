@@ -6,6 +6,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtSvgWidgets import QSvgWidget
 from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout, QWidget
 
+from src.ui import palette
 from src.ui.icons import design_asset
 
 
@@ -21,6 +22,7 @@ class AboutDialog(QDialog):
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setWindowTitle("關於 VisualNovel Studio")
         self.setModal(True)
 
@@ -38,12 +40,18 @@ class AboutDialog(QDialog):
             # 缺檔 fallback：純文字標題
             fallback = QLabel("VisualNovel Studio")
             fallback.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-            fallback.setStyleSheet("font-size: 22px; font-weight: 700;")
+            palette.register_themed(
+                fallback,
+                lambda p: f"color:{p.text_primary.name()}; font-size:22px; font-weight:700;",
+            )
             layout.addWidget(fallback)
 
         version_label = QLabel(_VERSION)
         version_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        version_label.setStyleSheet("color: palette(mid); font-size: 13px;")
+        palette.register_themed(
+            version_label,
+            lambda p: f"color:{p.text_secondary.name()}; font-size:13px;",
+        )
         layout.addWidget(version_label)
 
         desc_label = QLabel(_DESCRIPTION)

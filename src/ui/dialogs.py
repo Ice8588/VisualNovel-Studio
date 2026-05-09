@@ -338,9 +338,6 @@ class CharacterEditorDialog(QDialog):
             btn = QPushButton()
             btn.setFixedSize(24, 24)
             btn.setToolTip(label)
-            btn.setStyleSheet(
-                f"background-color:{hex_color}; border:2px solid #888; border-radius:3px;"
-            )
             btn.clicked.connect(lambda _, c=hex_color: self._on_color_clicked(c))
             color_layout.addWidget(btn)
             self._color_btns.append(btn)
@@ -410,11 +407,16 @@ class CharacterEditorDialog(QDialog):
                 self._sprite_preview.setPixmap(pm)
 
     def _apply_color(self, hex_color: str) -> None:
+        from src.ui import palette as _pal
         self._selected_color = hex_color
+        pal = _pal.current()
+        sel_border = pal.border_focus.name()
+        unsel_border = pal.border.name()
         for btn, (c, _) in zip(self._color_btns, _PRESET_COLORS):
             selected = c.upper() == hex_color.upper()
+            border = f"3px solid {sel_border}" if selected else f"2px solid {unsel_border}"
             btn.setStyleSheet(
-                f"background-color:{c}; border:{('3px solid #fff' if selected else '2px solid #888')}; border-radius:3px;"
+                f"background-color:{c}; border:{border}; border-radius:3px;"
             )
 
     def _on_color_clicked(self, hex_color: str) -> None:

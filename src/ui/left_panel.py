@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
 from qfluentwidgets import ComboBox, LineEdit, ListWidget, PushButton, SegmentedWidget, StrongBodyLabel
 
 from src.core.models import Character, Project, Scene
+from src.ui import palette
 from src.ui.icons import design_icon, themed_icon
 
 # 預設名牌顏色（淺/深色模式下皆清晰可辨）
@@ -250,9 +251,6 @@ class LeftPanel(QWidget):
             btn = QPushButton()
             btn.setFixedSize(24, 24)
             btn.setToolTip(label)
-            btn.setStyleSheet(
-                f"background-color:{hex_color}; border:2px solid #888; border-radius:3px;"
-            )
             btn.clicked.connect(lambda _, c=hex_color: self._on_preset_color_clicked(c))
             color_grid.addWidget(btn)
             self._color_btns.append(btn)
@@ -322,11 +320,15 @@ class LeftPanel(QWidget):
         self._refresh_character_list()
 
     def refresh_theme(self) -> None:
-        """主題切換後重新染色 icon。"""
+        """主題切換後重新染色 icon + 重套預設色按鈕邊框。"""
         if hasattr(self, "btn_add_scene"):
             self.btn_add_scene.setIcon(themed_icon("add"))
         if hasattr(self, "btn_add_char"):
             self.btn_add_char.setIcon(themed_icon("add"))
+        # 重套色塊按鈕邊框（依當前選取色）
+        if hasattr(self, "_color_btns") and self._color_btns:
+            current = getattr(self, "_current_color_hex", PRESET_COLORS[0][0])
+            self._update_color_display(current)
 
     def set_asset_lists(self, backgrounds: list[str], music: list[str]) -> None:
         """更新背景和 BGM 的 ComboBox 選項。"""
@@ -608,10 +610,15 @@ class LeftPanel(QWidget):
 
     def _update_color_display(self, hex_color: str) -> None:
         """標示目前選取的預設色（無獨立預覽方塊；以選取邊框呈現）。"""
+        pal = palette.current()
+        sel_border = pal.border_focus.name()
+        unsel_border = pal.border.name()
+        self._current_color_hex = hex_color
         for btn, (c, _) in zip(self._color_btns, PRESET_COLORS):
             selected = c.upper() == hex_color.upper()
+            border = f"3px solid {sel_border}" if selected else f"2px solid {unsel_border}"
             btn.setStyleSheet(
-                f"background-color:{c}; border:{('3px solid #fff' if selected else '2px solid #888')}; border-radius:3px;"
+                f"background-color:{c}; border:{border}; border-radius:3px;"
             )
 
     def _get_current_char(self) -> Character | None:

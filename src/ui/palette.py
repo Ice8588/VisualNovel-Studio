@@ -71,6 +71,13 @@ class Palette:
     card_dialogue_bg: QColor
     card_narration_bg: QColor
 
+    # QSS 額外的 widget 專用色（從 theme.py 提煉）
+    button_bg: QColor       # QPushButton 預設背景（比 surface 略淺/略深）
+    button_hover: QColor    # QPushButton hover
+    input_bg: QColor        # QLineEdit / QPlainTextEdit / QSpinBox bg
+    accent_text: QColor     # accent 上對比的文字（通常白）
+    title_bar: QColor       # menu / toolbar 條的背景（通常 == surface 但可不同）
+
 
 _CURSOR = QColor("#FFB300")
 _DROP   = QColor("#00B7C3")
@@ -79,25 +86,31 @@ _DROP   = QColor("#00B7C3")
 _PALETTES: dict[str, Palette] = {
     "dark": Palette(
         name="dark", is_dark=True,
-        bg=QColor("#1E1E1E"), surface=QColor("#252526"), surface_alt=QColor("#2D2D30"),
-        text_primary=QColor("#E8E8E8"), text_secondary=QColor("#9AA0A6"), text_disabled=QColor("#666666"),
+        bg=QColor("#1E1E1E"), surface=QColor("#2B2B2B"), surface_alt=QColor("#2D2D30"),
+        text_primary=QColor("#DDDDDD"), text_secondary=QColor("#9AA0A6"), text_disabled=QColor("#666666"),
         accent=QColor("#4682B4"), accent_hover=QColor("#5A9BD6"),
         warning=QColor("#E0A020"), danger=QColor("#E05555"), info=QColor("#4682B4"),
         border=QColor("#3C3C3C"), border_focus=QColor("#4682B4"),
         grid_line=QColor(255, 255, 255, 18), row_alt=QColor(255, 255, 255, 6),
         cursor=_CURSOR, drop_indicator=_DROP,
         card_dialogue_bg=QColor("#2E3440"), card_narration_bg=QColor("#2D2D30"),
+        button_bg=QColor("#3C3C3C"), button_hover=QColor("#4A4A4A"),
+        input_bg=QColor("#1E1E1E"), accent_text=QColor("#FFFFFF"),
+        title_bar=QColor("#2B2B2B"),
     ),
     "light": Palette(
         name="light", is_dark=False,
         bg=QColor("#EEEEEE"), surface=QColor("#F5F5F5"), surface_alt=QColor("#E8E8E8"),
-        text_primary=QColor("#1E1E1E"), text_secondary=QColor("#6E6E73"), text_disabled=QColor("#A0A0A0"),
+        text_primary=QColor("#333333"), text_secondary=QColor("#6E6E73"), text_disabled=QColor("#A0A0A0"),
         accent=QColor("#4682B4"), accent_hover=QColor("#3A75D9"),
         warning=QColor("#D17B0A"), danger=QColor("#C43434"), info=QColor("#4682B4"),
         border=QColor("#CCCCCC"), border_focus=QColor("#4682B4"),
         grid_line=QColor(0, 0, 0, 32), row_alt=QColor(0, 0, 0, 8),
         cursor=_CURSOR, drop_indicator=_DROP,
         card_dialogue_bg=QColor("#E5EFFA"), card_narration_bg=QColor("#F5F5F5"),
+        button_bg=QColor("#E8E8E8"), button_hover=QColor("#DDDDDD"),
+        input_bg=QColor("#FFFFFF"), accent_text=QColor("#FFFFFF"),
+        title_bar=QColor("#F5F5F5"),
     ),
     "parchment": Palette(
         name="parchment", is_dark=False,
@@ -109,6 +122,9 @@ _PALETTES: dict[str, Palette] = {
         grid_line=QColor(120, 90, 40, 60), row_alt=QColor(120, 90, 40, 14),
         cursor=_CURSOR, drop_indicator=_DROP,
         card_dialogue_bg=QColor("#FCF6E3"), card_narration_bg=QColor("#EADFBF"),
+        button_bg=QColor("#EADFBF"), button_hover=QColor("#DDD0A8"),
+        input_bg=QColor("#FCF6E3"), accent_text=QColor("#FCF6E3"),
+        title_bar=QColor("#EADFBF"),
     ),
     "ivory": Palette(
         name="ivory", is_dark=False,
@@ -120,6 +136,9 @@ _PALETTES: dict[str, Palette] = {
         grid_line=QColor(0, 0, 0, 28), row_alt=QColor(0, 0, 0, 8),
         cursor=_CURSOR, drop_indicator=_DROP,
         card_dialogue_bg=QColor("#EAF1FA"), card_narration_bg=QColor("#F4F3EF"),
+        button_bg=QColor("#F4F3EF"), button_hover=QColor("#E8E7E2"),
+        input_bg=QColor("#FDFDFC"), accent_text=QColor("#FDFDFC"),
+        title_bar=QColor("#F4F3EF"),
     ),
     "midnight": Palette(
         name="midnight", is_dark=True,
@@ -131,6 +150,9 @@ _PALETTES: dict[str, Palette] = {
         grid_line=QColor(255, 255, 255, 16), row_alt=QColor(255, 255, 255, 5),
         cursor=_CURSOR, drop_indicator=_DROP,
         card_dialogue_bg=QColor("#1F2533"), card_narration_bg=QColor("#1A1A1A"),
+        button_bg=QColor("#222222"), button_hover=QColor("#2E2E2E"),
+        input_bg=QColor("#141414"), accent_text=QColor("#FFFFFF"),
+        title_bar=QColor("#1A1A1A"),
     ),
     "figma-dark": Palette(
         name="figma-dark", is_dark=True,
@@ -142,6 +164,9 @@ _PALETTES: dict[str, Palette] = {
         grid_line=QColor(255, 255, 255, 20), row_alt=QColor(255, 255, 255, 6),
         cursor=_CURSOR, drop_indicator=_DROP,
         card_dialogue_bg=QColor("#2E3440"), card_narration_bg=QColor("#2C2C2C"),
+        button_bg=QColor("#383838"), button_hover=QColor("#454545"),
+        input_bg=QColor("#1E1E1E"), accent_text=QColor("#FFFFFF"),
+        title_bar=QColor("#2C2C2C"),
     ),
 }
 
@@ -211,6 +236,35 @@ def set_theme(theme_name: str) -> None:
         _apply_one(widget, builder, pal)
         alive.append((ref, builder))
     _registry[:] = alive
+
+
+def qss_substitutions(pal: Palette | None = None) -> dict:
+    """把 Palette 轉成 QSS template format() 用的字串 dict。
+
+    給 theme.apply_custom_overrides 用：把 _QSS_TEMPLATE 的 {accent}、{bg} 等
+    占位符填進當前主題的 hex 字串。
+    """
+    p = pal or current()
+    return {
+        "bg":             p.bg.name(),
+        "surface":        p.surface.name(),
+        "surface_alt":    p.surface_alt.name(),
+        "title_bar":      p.title_bar.name(),
+        "button_bg":      p.button_bg.name(),
+        "button_hover":   p.button_hover.name(),
+        "input_bg":       p.input_bg.name(),
+        "text_primary":   p.text_primary.name(),
+        "text_secondary": p.text_secondary.name(),
+        "text_disabled":  p.text_disabled.name(),
+        "accent":         p.accent.name(),
+        "accent_hover":   p.accent_hover.name(),
+        "accent_text":    p.accent_text.name(),
+        "warning":        p.warning.name(),
+        "danger":         p.danger.name(),
+        "info":           p.info.name(),
+        "border":         p.border.name(),
+        "border_focus":   p.border_focus.name(),
+    }
 
 
 def contrast_text(bg: QColor) -> QColor:
