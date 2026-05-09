@@ -209,9 +209,8 @@ class CenterPanel(QWidget):
             # header 們
             dialogue_header = QLabel("對話")
             dialogue_header.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            dialogue_header.setStyleSheet(
-                "color:#E8E8E8; background:#252526; padding:6px 0; font-weight:bold;"
-            )
+            self._dialogue_header = dialogue_header
+            self._apply_dialogue_header_style()
             stage_header = StageHeader()
             effect_header = EffectTimelineHeader(scene, on_add_track=self._on_add_effect_track)
             self._effect_header = effect_header
@@ -376,6 +375,31 @@ class CenterPanel(QWidget):
         # segment editor 的候選也可能變（角色 / 服裝被編輯）
         if self._project:
             self.segment_editor.set_project(self._project)
+
+    def _apply_dialogue_header_style(self) -> None:
+        if not getattr(self, "_dialogue_header", None):
+            return
+        bg = shared.BG_PANEL.name()
+        fg = shared.TEXT_PRIMARY.name()
+        self._dialogue_header.setStyleSheet(
+            f"color:{fg}; background:{bg}; padding:6px 0; font-weight:bold;"
+        )
+
+    def refresh_theme(self) -> None:
+        """主題切換後外部呼叫：重套 timeline header stylesheet 並重畫所有 paint widget。"""
+        self._apply_dialogue_header_style()
+        if hasattr(self, "stage_panel"):
+            self.stage_panel.refresh_theme()
+        if hasattr(self, "effect_timeline"):
+            self.effect_timeline.refresh_theme()
+        if hasattr(self, "_effect_header") and self._effect_header is not None:
+            self._effect_header.refresh_theme()
+        if hasattr(self, "dialogue_list"):
+            self.dialogue_list.update()
+        # StageHeader 在 _Column 內由 layout 持有；用 findChildren 抓出來重套
+        from src.ui.stage_panel import StageHeader
+        for sh in self.findChildren(StageHeader):
+            sh.refresh_theme()
 
     # ── Signal handlers ────────────────────────────────────
 

@@ -24,7 +24,7 @@ from PyQt6.QtWidgets import (
 from qfluentwidgets import ComboBox, LineEdit, ListWidget, PushButton, SegmentedWidget, StrongBodyLabel
 
 from src.core.models import Character, Project, Scene
-from src.ui.icons import design_icon
+from src.ui.icons import design_icon, themed_icon
 
 # 預設名牌顏色（淺/深色模式下皆清晰可辨）
 PRESET_COLORS = [
@@ -165,7 +165,7 @@ class LeftPanel(QWidget):
         scene_layout.addWidget(self.scene_list)
         self.btn_add_scene = QPushButton(" 新增場景")
         self.btn_add_scene.setObjectName("dashedButton")
-        self.btn_add_scene.setIcon(design_icon("add"))
+        self.btn_add_scene.setIcon(themed_icon("add"))
         self.btn_add_scene.setIconSize(QSize(16, 16))
         scene_layout.addWidget(self.btn_add_scene)
         scene_section.setLayout(scene_layout)
@@ -181,7 +181,7 @@ class LeftPanel(QWidget):
         char_layout.addWidget(self.character_list)
         self.btn_add_char = QPushButton(" 新增角色")
         self.btn_add_char.setObjectName("dashedButton")
-        self.btn_add_char.setIcon(design_icon("add"))
+        self.btn_add_char.setIcon(themed_icon("add"))
         self.btn_add_char.setIconSize(QSize(16, 16))
         char_layout.addWidget(self.btn_add_char)
         char_section.setLayout(char_layout)
@@ -320,6 +320,13 @@ class LeftPanel(QWidget):
         self._project = project
         self._refresh_scene_list()
         self._refresh_character_list()
+
+    def refresh_theme(self) -> None:
+        """主題切換後重新染色 icon。"""
+        if hasattr(self, "btn_add_scene"):
+            self.btn_add_scene.setIcon(themed_icon("add"))
+        if hasattr(self, "btn_add_char"):
+            self.btn_add_char.setIcon(themed_icon("add"))
 
     def set_asset_lists(self, backgrounds: list[str], music: list[str]) -> None:
         """更新背景和 BGM 的 ComboBox 選項。"""

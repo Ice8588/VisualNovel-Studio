@@ -99,24 +99,25 @@ class DialogueColumn(QWidget):
     def _paint_card(self, p: QPainter, rect: QRect, idx: int, dlg):
         inner = rect.adjusted(6, 4, -6, -4)
 
-        # 卡片底色
+        # 卡片底色（主題感知）
         is_narration = dlg.type == "narration"
         is_selected = idx == self._selected_idx
         is_current = idx == self._cursor_idx  # Phase 4：當前預覽位置
-        bg = QColor("#2D2D30") if is_narration else QColor("#2E3440")
+        bg = shared.CARD_NARRATION_BG if is_narration else shared.CARD_DIALOGUE_BG
         if is_current:
-            # 當前對話：套暖色 tint（CURSOR_LINE 的低透明覆蓋）
-            tint = QColor(shared.CURSOR_LINE.red(), shared.CURSOR_LINE.green(),
-                          shared.CURSOR_LINE.blue(), 38)
-            # 在原底色上疊一層暖色 → 用 lighter + 黃調近似
-            bg = QColor(min(255, bg.red() + 30),
-                        min(255, bg.green() + 22),
-                        min(255, bg.blue()),
-                        255)
+            # 當前對話：朝 CURSOR_LINE (#FFB300 暖橘) 混合 25% 取得 tint，
+            # 同時適用深淺色——深色底會變亮、淺色底會變暖黃。
+            cl = shared.CURSOR_LINE
+            t = 0.25
+            bg = QColor(
+                round(bg.red()   * (1 - t) + cl.red()   * t),
+                round(bg.green() * (1 - t) + cl.green() * t),
+                round(bg.blue()  * (1 - t) + cl.blue()  * t),
+            )
         elif is_selected:
-            bg = bg.lighter(130)
+            bg = bg.lighter(115) if shared.is_light() else bg.lighter(130)
         p.setBrush(bg)
-        p.setPen(QPen(QColor(255, 255, 255, 30), 1))
+        p.setPen(QPen(shared.GRID_LINE, 1))
         p.drawRoundedRect(inner, 6, 6)
 
         # 當前對話：左側 4px 豎條（最顯眼的「正在這裡」標示）
@@ -176,7 +177,8 @@ class DialogueColumn(QWidget):
             metrics = QFontMetrics(QFont("sans", 8))
             chip_w = metrics.horizontalAdvance(label) + 10
             chip_rect = QRect(text_right - chip_w, inner.y() + 6, chip_w, 16)
-            p.setBrush(QColor(255, 255, 255, 30))
+            chip_bg = QColor(0, 0, 0, 30) if shared.is_light() else QColor(255, 255, 255, 30)
+            p.setBrush(chip_bg)
             p.setPen(Qt.PenStyle.NoPen)
             p.drawRoundedRect(chip_rect, 8, 8)
             p.setFont(QFont("sans", 8))

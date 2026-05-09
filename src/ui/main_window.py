@@ -24,7 +24,7 @@ from src.core.text_parser import parse_file, _classify_lines
 from src.ui import dialogs
 from src.ui.about_dialog import AboutDialog
 from src.ui.center_panel import CenterPanel
-from src.ui.icons import design_icon as _design_icon
+from src.ui.icons import design_icon as _design_icon, themed_icon as _themed_icon
 from src.ui.left_panel import LeftPanel
 from src.ui.theme import apply_theme, save_preference, load_preference
 
@@ -74,31 +74,38 @@ class MainWindow(QMainWindow):
 
     def _setup_menu(self) -> None:
         menu_bar = QMenuBar()
-        ico = _design_icon  # local alias
+        ico = _themed_icon  # 主題感知：深色填白、淺色填黑
+        # 記下 (action, icon_name) 配對，主題切換時要重新染色
+        self._themed_actions: list[tuple] = []
+
+        def add_action(menu, name, text, slot):
+            act = menu.addAction(ico(name), text, slot)
+            self._themed_actions.append((act, name))
+            return act
 
         # 檔案選單
         file_menu = menu_bar.addMenu("檔案")
-        act_new = file_menu.addAction(ico("new"), "新增專案", self._on_new_project)
+        act_new = add_action(file_menu, "new", "新增專案", self._on_new_project)
         act_new.setShortcut(QKeySequence.StandardKey.New)
-        act_open = file_menu.addAction(ico("open"), "開啟專案", self._on_open_project)
+        act_open = add_action(file_menu, "open", "開啟專案", self._on_open_project)
         act_open.setShortcut(QKeySequence.StandardKey.Open)
         file_menu.addSeparator()
-        act_save = file_menu.addAction(ico("save"), "儲存專案", self._on_save_project)
+        act_save = add_action(file_menu, "save", "儲存專案", self._on_save_project)
         act_save.setShortcut(QKeySequence.StandardKey.Save)
-        file_menu.addAction(ico("save"), "另存專案", self._on_save_project_as)
+        add_action(file_menu, "save", "另存專案", self._on_save_project_as)
         file_menu.addSeparator()
-        file_menu.addAction(ico("import"), "匯入文字", self._on_import_text)
+        add_action(file_menu, "import", "匯入文字", self._on_import_text)
         file_menu.addSeparator()
-        act_refresh = file_menu.addAction(ico("refresh"), "重新整理預覽", self._on_refresh_preview)
+        act_refresh = add_action(file_menu, "refresh", "重新整理預覽", self._on_refresh_preview)
         act_refresh.setShortcut(QKeySequence("F5"))
         file_menu.addSeparator()
-        file_menu.addAction(ico("close"), "結束", self.close)
+        add_action(file_menu, "close", "結束", self.close)
 
         # 導出選單
         export_menu = menu_bar.addMenu("導出")
-        export_menu.addAction(ico("export"), "導出網頁 (ZIP)", self._on_export_zip)
-        export_menu.addAction(ico("export"), "導出單一 HTML", self._on_export_html)
-        export_menu.addAction(ico("export"), "導出影片 (MP4)", self._on_export_video)
+        add_action(export_menu, "export", "導出網頁 (ZIP)", self._on_export_zip)
+        add_action(export_menu, "export", "導出單一 HTML", self._on_export_html)
+        add_action(export_menu, "export", "導出影片 (MP4)", self._on_export_video)
 
         # 外觀選單（獨立，即時套用）
         view_menu = menu_bar.addMenu("外觀")
@@ -147,10 +154,10 @@ class MainWindow(QMainWindow):
 
         # 說明選單
         help_menu = menu_bar.addMenu("說明")
-        help_menu.addAction(ico("help"), "使用教學", self._on_show_tutorial)
-        help_menu.addAction(ico("seal"), "關於", self._on_show_about)
+        add_action(help_menu, "help", "使用教學", self._on_show_tutorial)
+        add_action(help_menu, "seal", "關於", self._on_show_about)
         help_menu.addSeparator()
-        help_menu.addAction(ico("open"), "開啟 Log 資料夾", self._on_open_log_dir)
+        add_action(help_menu, "open", "開啟 Log 資料夾", self._on_open_log_dir)
 
         self.setMenuBar(menu_bar)
 
@@ -321,6 +328,15 @@ class MainWindow(QMainWindow):
         save_preference(self._theme_name, self._font_size)
         # B4：同步預覽主題並觸發重載
         self.center_panel.preview.set_theme(self._theme_name)
+        # B 群修正：cascade 重套主題色 + 重染 icon
+        self._refresh_themed_icons()
+        self.left_panel.refresh_theme()
+        self.center_panel.refresh_theme()
+
+    def _refresh_themed_icons(self) -> None:
+        """主題切換後重新染色所有記下的 menu actions。"""
+        for act, name in getattr(self, "_themed_actions", []):
+            act.setIcon(_themed_icon(name))
 
     def _apply_font_size_immediate(self, size: int) -> None:
         self._font_size = size

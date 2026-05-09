@@ -370,6 +370,10 @@ class EffectTimelineWidget(QWidget):
         for lane in self.lanes.values():
             lane.refresh()
 
+    def refresh_theme(self) -> None:
+        for lane in self.lanes.values():
+            lane.update()
+
     def global_rect_of_segment(self, seg: EffectSegment):
         """回傳 seg 在螢幕全域座標的 QRect；找不到回 None。Phase 4 給 SegmentEditor 浮動定位用。"""
         from PyQt6.QtCore import QRect, QPoint
@@ -418,8 +422,10 @@ class _TrackLabel(QLabel):
         else:
             border = ""
             padding = "padding: 6px 0;"
+        bg = shared.BG_PANEL.name()
+        fg = shared.TEXT_MUTED.name()
         self.setStyleSheet(
-            f"color:#9AA0A6; background:#252526; {padding} {border} font-weight:bold;"
+            f"color:{fg}; background:{bg}; {padding} {border} font-weight:bold;"
         )
 
     def mousePressEvent(self, ev):
@@ -456,9 +462,21 @@ class EffectTimelineHeader(QWidget):
         self._add_btn = QPushButton("+")
         self._add_btn.setFixedSize(32, 28)
         self._add_btn.clicked.connect(self._handle_add)
-        self._add_btn.setStyleSheet("background:#3D3D40; color:#E8E8E8; border:none; border-radius:4px;")
         self._layout.addWidget(self._add_btn)
         self._layout.addStretch(1)
+        self._apply_add_btn_style()
+
+    def _apply_add_btn_style(self) -> None:
+        if shared.is_light():
+            bg, fg = "#E8E8EA", "#1E1E1E"
+        else:
+            bg, fg = "#3D3D40", "#E8E8E8"
+        self._add_btn.setStyleSheet(f"background:{bg}; color:{fg}; border:none; border-radius:4px;")
+
+    def refresh_theme(self) -> None:
+        for lbl in self._labels.values():
+            lbl._apply_stylesheet()
+        self._apply_add_btn_style()
 
     def _make_label(self, name: str, color: str | None = None) -> _TrackLabel:
         lbl = _TrackLabel(name, self)

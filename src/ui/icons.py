@@ -45,3 +45,18 @@ def design_icon_tinted(name: str, color: str, size: int = 24) -> QIcon:
 def design_asset(*relative: str) -> Path:
     """取得 assets/design/ 下的資源完整路徑（不檢查存在）。"""
     return resource_root() / "assets" / "design" / Path(*relative)
+
+
+def themed_icon(name: str, size: int = 24) -> QIcon:
+    """依當前主題（深 / 淺）回傳染色 SVG icon。
+
+    深色主題 → 接近白；淺色主題 → 接近黑。
+    主題切換後呼叫端需重新呼叫此函式以取得正確顏色。
+    """
+    try:
+        from qfluentwidgets import isDarkTheme
+        is_dark = isDarkTheme()
+    except ImportError:
+        is_dark = True
+    color = "#E8E8E8" if is_dark else "#1E1E1E"
+    return design_icon_tinted(name, color, size)

@@ -445,6 +445,10 @@ class StagePanel(QWidget):
         for lane in self.lanes.values():
             lane.refresh()
 
+    def refresh_theme(self) -> None:
+        for lane in self.lanes.values():
+            lane.update()
+
     def global_rect_of_segment(self, seg: StageSegment):
         """回傳 seg 在螢幕全域座標的 QRect；找不到回 None。Phase 4 給 SegmentEditor 浮動定位用。"""
         from PyQt6.QtCore import QRect, QPoint
@@ -465,10 +469,19 @@ class StageHeader(QWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(2)
+        self._labels: list[QLabel] = []
         for label in ("左", "中", "右"):
             l = QLabel(label)
             l.setFixedWidth(shared.LANE_WIDTH)
             l.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            l.setStyleSheet("color:#9AA0A6; background:#252526; padding:6px 0; font-weight:bold;")
+            self._labels.append(l)
             layout.addWidget(l)
         layout.addStretch(1)
+        self.refresh_theme()
+
+    def refresh_theme(self) -> None:
+        bg = shared.BG_PANEL.name()
+        fg = shared.TEXT_MUTED.name()
+        css = f"color:{fg}; background:{bg}; padding:6px 0; font-weight:bold;"
+        for l in self._labels:
+            l.setStyleSheet(css)
