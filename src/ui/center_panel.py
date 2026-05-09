@@ -152,12 +152,12 @@ class CenterPanel(QWidget):
         toolbar.addStretch()
         layout.addLayout(toolbar)
 
-        # toolbar 下方：可摺疊色板（預設隱藏）
-        self.color_panel = ColorSlidersPanel()
+        # 色板做浮動子 widget：不入 layout，不擠掉預覽
+        # parent = container（preview 容器），由 _toggle_color_panel 計算位置
+        self.color_panel = ColorSlidersPanel(container)
         self.color_panel.set_color(self._dlg_color_hex)
         self.color_panel.color_changed.connect(self._on_color_panel_changed)
         self.color_panel.hide()
-        layout.addWidget(self.color_panel)
 
         # EmptyState / Preview stacked
         self._preview_stack = QStackedWidget()
@@ -189,8 +189,24 @@ class CenterPanel(QWidget):
         return self._dlg_color_hex
 
     def _toggle_color_panel(self) -> None:
-        """色塊按鈕點擊：展開 / 收起 inline 色板。"""
-        self.color_panel.setVisible(not self.color_panel.isVisible())
+        """色塊按鈕點擊：展開 / 收起浮動色板。
+
+        色板是 preview 容器的子 widget（不入 layout），透過 move 對齊 btn_dlg_color
+        正下方；不擠掉預覽，覆蓋在原本內容上方。
+        """
+        if self.color_panel.isVisible():
+            self.color_panel.hide()
+            return
+        # 計算 button 在 color_panel.parent (= preview container) 座標系下的位置
+        parent = self.color_panel.parent()
+        btn_top_left = self.btn_dlg_color.mapTo(parent, self.btn_dlg_color.rect().bottomLeft())
+        # 向左推一些，避免色板太偏右，超出 parent 寬度時往左貼齊
+        x = btn_top_left.x() - (self.color_panel.width() // 2) + (self.btn_dlg_color.width() // 2)
+        x = max(4, min(x, parent.width() - self.color_panel.width() - 4))
+        y = btn_top_left.y() + 4
+        self.color_panel.move(x, y)
+        self.color_panel.show()
+        self.color_panel.raise_()
 
     def _on_color_panel_changed(self, hex_color: str) -> None:
         """色板滑桿移動 → 更新色塊按鈕 + 廣播。"""
