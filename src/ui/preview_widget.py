@@ -24,15 +24,10 @@ class PreviewBridge(QObject):
     """Python←JS 橋接：Preview 推進文字時通知 Python 端。"""
 
     dialogue_advanced = pyqtSignal(int, int)  # (scene_index, dialogue_index)
-    stage_slot_clicked = pyqtSignal(int, int, str, str)  # (scene_idx, dlg_idx, position, action)
 
     @pyqtSlot(int, int)
     def on_dialogue_shown(self, scene_index: int, dialogue_index: int) -> None:
         self.dialogue_advanced.emit(scene_index, dialogue_index)
-
-    @pyqtSlot(int, int, str, str)
-    def on_stage_slot_clicked(self, scene_idx: int, dlg_idx: int, position: str, action: str) -> None:
-        self.stage_slot_clicked.emit(scene_idx, dlg_idx, position, action)
 
 
 class _LoggingPage(QWebEnginePage):

@@ -86,77 +86,6 @@
 #sprite-center { left: 50%; }
 #sprite-right  { left: 75%; }
 
-/* ── 舞台槽位 overlay（Preview 編輯，匯出時隱藏） ── */
-
-#stage-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 10;
-  pointer-events: none;
-}
-
-/* B6：槽位按鈕垂直置中於預覽畫面，永遠可見（填滿槽位時自動顯示 ▼） */
-.slot-control {
-  position: absolute;
-  top: 50%;
-  width: 80px;
-  height: 80px;
-  transform: translate(-50%, -50%);
-  pointer-events: auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-}
-
-.slot-control[data-position="left"]   { left: 25%; }
-.slot-control[data-position="center"] { left: 50%; }
-.slot-control[data-position="right"]  { left: 75%; }
-
-.slot-control .btn-add {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  border: 2px dashed #888;
-  background: rgba(0, 0, 0, 0.3);
-  color: #ccc;
-  font-size: 32px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.slot-control .btn-add:hover {
-  border-color: #fff;
-  color: #fff;
-}
-
-.slot-control .btn-clear,
-.slot-control .btn-swap {
-  display: none;
-  background: rgba(0, 0, 0, 0.55);
-  border: 1px solid #aaa;
-  border-radius: 4px;
-  color: #eee;
-  font-size: 18px;
-  cursor: pointer;
-  padding: 4px 8px;
-  margin: 2px;
-}
-
-/* B6：槽位已填時 ▼ 永遠顯示（非 hover 也顯示），✕ 維持 hover 才顯示 */
-.slot-control.filled .btn-swap {
-  display: inline-block;
-}
-
-.slot-control.filled:hover .btn-clear {
-  display: inline-block;
-}
-
-/* 匯出雙重保護：CAPTURE_MODE 下整個 overlay 消失 */
-body.capture-mode #stage-overlay { display: none !important; }
-
 /* ── 特效覆蓋層 ── */
 
 #effect-canvas {
@@ -312,10 +241,10 @@ body.fx-screen_shake #game-container {
 
 /* ── 狀態指示器 ── */
 
+#skip-indicator,
 #auto-indicator {
   position: absolute;
   top: 12px;
-  right: 12px;
   z-index: 20;
   display: none;
   padding: 4px 14px;
@@ -323,7 +252,73 @@ body.fx-screen_shake #game-container {
   font-size: 13px;
   letter-spacing: 2px;
   pointer-events: none;
+}
+
+#skip-indicator {
+  right: 12px;
+  background: rgba(220, 60, 60, 0.7);
+  color: #fff;
+}
+
+#auto-indicator {
+  right: 12px;
   background: rgba(70, 130, 180, 0.7);
+  color: #fff;
+}
+
+/* ── 歷史面板 ── */
+
+#history-panel {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  background: rgba(10, 10, 25, 0.95);
+  display: none;
+  overflow-y: auto;
+  padding: 40px 60px;
+}
+
+#history-panel .history-entry {
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+#history-panel .history-character {
+  color: rgba(70, 130, 180, 1);
+  font-weight: bold;
+  margin-right: 8px;
+}
+
+#history-panel .history-narration {
+  color: #999;
+  font-style: italic;
+}
+
+#history-panel .history-text {
+  color: #ddd;
+  line-height: 1.5;
+}
+
+#btn-close-history {
+  position: fixed;
+  top: 15px;
+  right: 15px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ccc;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 6px 14px;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+  font-family: inherit;
+  z-index: 31;
+}
+
+#btn-close-history:hover {
+  background: rgba(255, 255, 255, 0.2);
   color: #fff;
 }
 
@@ -376,10 +371,22 @@ body.preview-light #quick-menu button:hover {
   color: #000;
 }
 
-body.preview-light .slot-control .btn-add {
-  border-color: #555;
-  background: rgba(255, 255, 255, 0.4);
+body.preview-light #history-panel {
+  background: rgba(245, 245, 248, 0.97);
+}
+
+body.preview-light #history-panel .history-text {
   color: #333;
+}
+
+body.preview-light #history-panel .history-narration {
+  color: #888;
+}
+
+body.preview-light #btn-close-history {
+  background: rgba(0, 0, 0, 0.05);
+  color: #333;
+  border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 /* ── 羊皮紙詩歌（僅作用於 preview；匯出時 body 無此 class） ── */
@@ -396,12 +403,14 @@ body.preview-parchment #dialogue-text strong { color: #C15F3C; }
 body.preview-parchment #quick-menu { background: rgba(234, 223, 191, 0.85); }
 body.preview-parchment #quick-menu button { color: rgba(43, 36, 22, 0.85); }
 body.preview-parchment #quick-menu button:hover { color: #C15F3C; }
-body.preview-parchment .slot-control .btn-add {
-  border-color: #C9B98E;
-  background: rgba(245, 236, 215, 0.6);
-  color: #5A4E36;
+body.preview-parchment #history-panel { background: rgba(245, 236, 215, 0.97); }
+body.preview-parchment #history-panel .history-text { color: #2B2416; }
+body.preview-parchment #history-panel .history-narration { color: #8A7B5C; }
+body.preview-parchment #btn-close-history {
+  background: rgba(43, 36, 22, 0.06);
+  color: #2B2416;
+  border: 1px solid rgba(201, 185, 142, 0.8);
 }
-
 /* ── Midnight Ink ── */
 
 body.preview-midnight #game-container {
@@ -416,12 +425,14 @@ body.preview-midnight #dialogue-text strong { color: #F0F0F0; }
 body.preview-midnight #quick-menu { background: rgba(26, 26, 26, 0.8); }
 body.preview-midnight #quick-menu button { color: rgba(192, 192, 192, 0.85); }
 body.preview-midnight #quick-menu button:hover { color: #7090A0; }
-body.preview-midnight .slot-control .btn-add {
-  border-color: #303030;
-  background: rgba(20, 20, 20, 0.5);
-  color: #B0B0B0;
+body.preview-midnight #history-panel { background: rgba(20, 20, 20, 0.97); }
+body.preview-midnight #history-panel .history-text { color: #D0D0D0; }
+body.preview-midnight #history-panel .history-narration { color: #7A7A7A; }
+body.preview-midnight #btn-close-history {
+  background: rgba(255, 255, 255, 0.05);
+  color: #C0C0C0;
+  border: 1px solid rgba(48, 48, 48, 0.9);
 }
-
 /* ── Figma Dark ── */
 
 body.preview-figma-dark #game-container {
@@ -436,12 +447,14 @@ body.preview-figma-dark #dialogue-text strong { color: #EEE8FF; }
 body.preview-figma-dark #quick-menu { background: rgba(28, 27, 38, 0.85); }
 body.preview-figma-dark #quick-menu button { color: rgba(144, 144, 184, 0.85); }
 body.preview-figma-dark #quick-menu button:hover { color: #B06EF7; }
-body.preview-figma-dark .slot-control .btn-add {
-  border-color: #30304A;
-  background: rgba(28, 27, 38, 0.5);
+body.preview-figma-dark #history-panel { background: rgba(22, 21, 30, 0.97); }
+body.preview-figma-dark #history-panel .history-text { color: #B0AACE; }
+body.preview-figma-dark #history-panel .history-narration { color: #4A4868; }
+body.preview-figma-dark #btn-close-history {
+  background: rgba(255, 255, 255, 0.04);
   color: #9090B8;
+  border: 1px solid rgba(48, 48, 74, 0.9);
 }
-
 /* ── Ivory Titanium 象牙白鈦 ── */
 
 body.preview-ivory #game-container {
@@ -456,8 +469,11 @@ body.preview-ivory #dialogue-text strong { color: #000; }
 body.preview-ivory #quick-menu { background: rgba(244, 243, 239, 0.85); }
 body.preview-ivory #quick-menu button { color: rgba(28, 27, 25, 0.85); }
 body.preview-ivory #quick-menu button:hover { color: #3A75D9; }
-body.preview-ivory .slot-control .btn-add {
-  border-color: #DCDAD3;
-  background: rgba(253, 253, 252, 0.6);
-  color: #5C5A53;
+body.preview-ivory #history-panel { background: rgba(248, 247, 244, 0.97); }
+body.preview-ivory #history-panel .history-text { color: #1C1B19; }
+body.preview-ivory #history-panel .history-narration { color: #8A8880; }
+body.preview-ivory #btn-close-history {
+  background: rgba(0, 0, 0, 0.04);
+  color: #1C1B19;
+  border: 1px solid rgba(220, 218, 211, 0.9);
 }

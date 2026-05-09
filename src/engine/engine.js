@@ -9,6 +9,7 @@
 
   // ── 常數 ──
   var TYPEWRITER_SPEED = 30;
+  var SKIP_INTERVAL = 100;
   var FADE_DURATION = 500;
 
   // 文字效果鍵集合 — 必須與 src/core/effects.py::TEXT_EFFECTS 一致
@@ -37,14 +38,19 @@
   var charactersMap = {};
   var sceneIndex = 0;
   var dialogueIndex = 0;
+  var historyEntries = [];
   var isAutoPlay = false;
   var autoPlayTimer = null;
   var currentBgm = null;
   var currentBgmFile = null;
+  var isHistoryOpen = false;
   var isTransitioning = false;
   var isTyping = false;
   var typewriterTimer = null;
   var audioUnlocked = false;
+  var isSkipping = false;
+  var skipTimer = null;
+  var isUiHidden = false;
   var _jumpedFromPython = false;  // QWebChannel：Python 主動跳轉時設為 true，避免回呼迴圈
 
   // ── DOM 快取 ──
@@ -75,18 +81,43 @@
     els.dialogueText = document.getElementById("dialogue-text");
     els.quickMenu = document.getElementById("quick-menu");
     els.btnAuto = document.getElementById("btn-auto");
+    els.btnSkip = document.getElementById("btn-skip");
+    els.btnLog = document.getElementById("btn-log");
+    els.btnHide = document.getElementById("btn-hide");
+    els.historyPanel = document.getElementById("history-panel");
+    els.historyContent = document.getElementById("history-content");
+    els.btnCloseHistory = document.getElementById("btn-close-history");
     els.endScreen = document.getElementById("end-screen");
+    els.skipIndicator = document.getElementById("skip-indicator");
     els.autoIndicator = document.getElementById("auto-indicator");
 
     // 事件綁定
     els.container.addEventListener("click", onContainerClick);
     els.container.addEventListener("contextmenu", onRightClick);
     document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("keyup", onKeyUp);
+    document.addEventListener("wheel", onWheel, { passive: false });
 
-    // Quick Menu：保留 AUTO 按鈕，SKIP / LOG / HIDE 已移除
+    // Quick Menu 按鈕
     els.btnAuto.addEventListener("click", function (e) {
       e.stopPropagation();
       toggleAutoPlay();
+    });
+    els.btnSkip.addEventListener("click", function (e) {
+      e.stopPropagation();
+      toggleSkip();
+    });
+    els.btnLog.addEventListener("click", function (e) {
+      e.stopPropagation();
+      toggleHistory();
+    });
+    els.btnHide.addEventListener("click", function (e) {
+      e.stopPropagation();
+      toggleUiHide();
+    });
+    els.btnCloseHistory.addEventListener("click", function (e) {
+      e.stopPropagation();
+      closeHistory();
     });
 
     // 初始化特效引擎
@@ -94,12 +125,12 @@
       VNEffects.init(els.container);
     }
 
-    // 舞台 overlay：匯出時加 capture-mode class 隱藏；預覽時啟用 overlay
+    // 匯出模式加 capture-mode body class（保留：CSS 仍用此 class 做雙重保險）
     if (CAPTURE_MODE) {
       document.body.classList.add("capture-mode");
-    } else {
-      setupStageOverlay();
     }
+    // 舞台 overlay 三個 +/✕/▼ 按鈕已移除（任務 #6）：舞台編輯改由
+    // center_panel 的 stage_panel timeline 負責。
 
     loadScript();
   }
@@ -179,6 +210,7 @@
     }
     sceneIndex = 0;
     dialogueIndex = 0;
+    historyEntries = [];
     enterScene(0);
   }
 
@@ -195,8 +227,8 @@
       var newBg = 'url("' + bgUrl.replace(/"/g, "%22") + '")';
       var currentBg = els.bg.style.backgroundImage;
       if (newBg !== currentBg) {
-        if (CAPTURE_MODE) {
-          // Capture 模式跳過轉場動畫
+        if (isSkipping || CAPTURE_MODE) {
+          // Skip / Capture 模式跳過轉場動畫
           els.bg.style.backgroundImage = newBg;
           els.bgNext.style.backgroundImage = newBg;
         } else {
@@ -273,6 +305,11 @@
     var d = scene.dialogues[dialogueIndex];
     var charInfo = d.character ? (charactersMap[d.character] || null) : null;
 
+    // 確保 UI 可見（Skip 時可能被隱藏）
+    if (isUiHidden) {
+      showUi();
+    }
+
     // 名稱牌（B7：半透明背景 + 寬度貼合文字）
     if (d.character) {
       els.namePlate.textContent = d.character;
@@ -298,20 +335,22 @@
     // 套用文字效果（D1 多選）：對 #dialogue-text 加 fx-{key} class
     applyTextEffects(d.text_effects || []);
 
-    // Capture 模式：跳過打字機，直接顯示完整文字
-    if (CAPTURE_MODE) {
+    // Skip / Capture 模式：跳過打字機，直接顯示完整文字
+    if (isSkipping || CAPTURE_MODE) {
       els.dialogueText.innerHTML = mdToHtml(d.text);
       isTyping = false;
     } else {
       typeText(els.dialogueText, d.text);
     }
 
-    isTransitioning = false;
+    // 加入歷史
+    historyEntries.push({
+      character: d.character,
+      text: d.text,
+      nameColor: charInfo ? charInfo.name_color : null
+    });
 
-    // 更新舞台 overlay 按鈕狀態（Preview 模式）
-    if (!CAPTURE_MODE) {
-      refreshStageOverlayButtons(d);
-    }
+    isTransitioning = false;
 
     // 通知 Python 端當前台詞（QWebChannel，非 Capture 模式、非 Python 主動跳轉）
     if (!CAPTURE_MODE && window._bridge && !_jumpedFromPython) {
@@ -399,75 +438,11 @@
     return "rgba(" + r + ", " + g + ", " + b + ", " + alpha + ")";
   }
 
-  // ── 舞台 overlay（Preview 模式） ──
-
-  function setupStageOverlay() {
-    var positions = ["left", "center", "right"];
-    positions.forEach(function (pos) {
-      var ctrl = document.querySelector(".slot-control[data-position='" + pos + "']");
-      if (!ctrl) return;
-
-      var btnAdd = document.createElement("button");
-      btnAdd.className = "btn-add";
-      btnAdd.textContent = "+";
-      btnAdd.addEventListener("click", function (e) {
-        e.stopPropagation();
-        if (window._bridge) {
-          window._bridge.on_stage_slot_clicked(sceneIndex, dialogueIndex, pos, "add");
-        }
-      });
-
-      var btnClear = document.createElement("button");
-      btnClear.className = "btn-clear";
-      btnClear.textContent = "✕";
-      btnClear.addEventListener("click", function (e) {
-        e.stopPropagation();
-        if (window._bridge) {
-          window._bridge.on_stage_slot_clicked(sceneIndex, dialogueIndex, pos, "clear");
-        }
-      });
-
-      var btnSwap = document.createElement("button");
-      btnSwap.className = "btn-swap";
-      btnSwap.textContent = "▼";
-      btnSwap.addEventListener("click", function (e) {
-        e.stopPropagation();
-        if (window._bridge) {
-          window._bridge.on_stage_slot_clicked(sceneIndex, dialogueIndex, pos, "swap");
-        }
-      });
-
-      ctrl.appendChild(btnAdd);
-      ctrl.appendChild(btnClear);
-      ctrl.appendChild(btnSwap);
-    });
-  }
-
-  function refreshStageOverlayButtons(d) {
-    var stage = d.stage || {left: null, center: null, right: null};
-    var positions = ["left", "center", "right"];
-    positions.forEach(function (pos) {
-      var ctrl = document.querySelector(".slot-control[data-position='" + pos + "']");
-      if (!ctrl) return;
-      var btnAdd   = ctrl.querySelector(".btn-add");
-      var btnClear = ctrl.querySelector(".btn-clear");
-      var btnSwap  = ctrl.querySelector(".btn-swap");
-      if (!btnAdd) return;
-      if (stage[pos]) {
-        ctrl.classList.add("filled");
-        btnAdd.style.display = "none";
-      } else {
-        ctrl.classList.remove("filled");
-        btnAdd.style.display = "";
-        if (btnClear) btnClear.style.display = "none";
-        if (btnSwap)  btnSwap.style.display  = "none";
-      }
-    });
-  }
-
   // ── 推進 ──
 
   function advance() {
+    if (isHistoryOpen) return;
+
     if (isTyping) {
       skipTypewriter();
       return;
@@ -524,7 +499,7 @@
     if (!isAutoPlay) return;
     var delay = getAutoDuration(text);
     autoPlayTimer = setTimeout(function () {
-      if (isAutoPlay && !isTyping && !isTransitioning) {
+      if (isAutoPlay && !isTyping && !isTransitioning && !isHistoryOpen && !isSkipping) {
         advance();
       }
     }, delay);
@@ -534,6 +509,8 @@
     if (isAutoPlay) {
       stopAutoPlay();
     } else {
+      // 停止 Skip 模式
+      if (isSkipping) stopSkip();
       isAutoPlay = true;
       els.btnAuto.classList.add("active");
       els.autoIndicator.style.display = "block";
@@ -555,10 +532,104 @@
     els.autoIndicator.style.display = "none";
   }
 
+  // ── Skip 模式（Ctrl 按住 / 按鈕 toggle） ──
+
+  function startSkip() {
+    if (isSkipping) return;
+    // 停止 Auto 模式
+    if (isAutoPlay) stopAutoPlay();
+    isSkipping = true;
+    els.btnSkip.classList.add("active");
+    els.skipIndicator.style.display = "block";
+    skipTimer = setInterval(function () {
+      if (isHistoryOpen) return;
+      if (isTyping) skipTypewriter();
+      advance();
+    }, SKIP_INTERVAL);
+  }
+
+  function stopSkip() {
+    if (!isSkipping) return;
+    isSkipping = false;
+    clearInterval(skipTimer);
+    skipTimer = null;
+    els.btnSkip.classList.remove("active");
+    els.skipIndicator.style.display = "none";
+  }
+
+  function toggleSkip() {
+    if (isSkipping) {
+      stopSkip();
+    } else {
+      startSkip();
+    }
+  }
+
+  // ── UI 顯示/隱藏（H 鍵 / 右鍵） ──
+
+  function toggleUiHide() {
+    if (isUiHidden) {
+      showUi();
+    } else {
+      hideUi();
+    }
+  }
+
+  function hideUi() {
+    isUiHidden = true;
+    els.dialogueBox.style.display = "none";
+    els.quickMenu.style.display = "none";
+  }
+
+  function showUi() {
+    isUiHidden = false;
+    els.dialogueBox.style.display = "";
+    els.quickMenu.style.display = "";
+  }
+
+  // ── 歷史紀錄 ──
+
+  function toggleHistory() {
+    if (isHistoryOpen) {
+      closeHistory();
+    } else {
+      openHistory();
+    }
+  }
+
+  function openHistory() {
+    var html = "";
+    for (var i = 0; i < historyEntries.length; i++) {
+      var entry = historyEntries[i];
+      html += '<div class="history-entry">';
+      if (entry.character) {
+        var colorStyle = entry.nameColor
+          ? ' style="color:' + escapeHtml(entry.nameColor) + '"'
+          : "";
+        html += '<span class="history-character"' + colorStyle + '>'
+          + escapeHtml(entry.character) + '</span>';
+        html += '<span class="history-text">' + mdToHtml(entry.text) + '</span>';
+      } else {
+        html += '<span class="history-narration">' + mdToHtml(entry.text) + '</span>';
+      }
+      html += '</div>';
+    }
+    els.historyContent.innerHTML = html;
+    els.historyPanel.style.display = "block";
+    els.historyPanel.scrollTop = els.historyPanel.scrollHeight;
+    isHistoryOpen = true;
+  }
+
+  function closeHistory() {
+    els.historyPanel.style.display = "none";
+    isHistoryOpen = false;
+  }
+
   // ── END 畫面 ──
 
   function showEndScreen() {
     if (isAutoPlay) stopAutoPlay();
+    if (isSkipping) stopSkip();
     if (currentBgm) {
       fadeOutAudio(currentBgm, FADE_DURATION, function () {
         currentBgm.pause();
@@ -612,19 +683,38 @@
   function onContainerClick(e) {
     if (e.target.tagName === "BUTTON") return;
     unlockAudio();
+    // 如果 UI 被隱藏，點擊恢復顯示
+    if (isUiHidden) {
+      showUi();
+      return;
+    }
     advance();
   }
 
   function onRightClick(e) {
     e.preventDefault();
-    // SKIP / LOG / HIDE 已移除；右鍵保留作為 prevent default 防止瀏覽器選單
+    if (isHistoryOpen) {
+      closeHistory();
+      return;
+    }
+    toggleUiHide();
   }
 
   function onKeyDown(e) {
+    // Ctrl 按住快進
+    if (e.key === "Control" && !e.repeat) {
+      startSkip();
+      return;
+    }
+
     // Space / Enter：推進
     if (e.key === " " || e.key === "Enter") {
       e.preventDefault();
       unlockAudio();
+      if (isUiHidden) {
+        showUi();
+        return;
+      }
       advance();
       return;
     }
@@ -635,11 +725,28 @@
       return;
     }
 
-    // Escape：停止 Auto
+    // H：隱藏/顯示 UI
+    if (e.key === "h" || e.key === "H") {
+      toggleUiHide();
+      return;
+    }
+
+    // Escape：關閉歷史 / 停止 Skip / 停止 Auto
     if (e.key === "Escape") {
-      if (isAutoPlay) {
+      if (isHistoryOpen) {
+        closeHistory();
+      } else if (isSkipping) {
+        stopSkip();
+      } else if (isAutoPlay) {
         stopAutoPlay();
       }
+      return;
+    }
+
+    // Page Up：開歷史
+    if (e.key === "PageUp") {
+      e.preventDefault();
+      if (!isHistoryOpen) openHistory();
       return;
     }
 
@@ -649,6 +756,34 @@
       advance();
       return;
     }
+  }
+
+  function onKeyUp(e) {
+    // Ctrl 放開停止快進
+    if (e.key === "Control") {
+      stopSkip();
+    }
+  }
+
+  function onWheel(e) {
+    // 滾輪上：開歷史
+    if (e.deltaY < 0) {
+      e.preventDefault();
+      if (!isHistoryOpen) openHistory();
+    }
+    // 滾輪下：推進（僅在歷史面板關閉時）
+    if (e.deltaY > 0 && !isHistoryOpen) {
+      e.preventDefault();
+      advance();
+    }
+  }
+
+  // ── 工具函式 ──
+
+  function escapeHtml(text) {
+    var div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
   }
 
   // ── 啟動 ──
