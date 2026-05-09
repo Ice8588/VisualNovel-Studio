@@ -114,7 +114,7 @@ class EffectLaneWidget(QWidget):
         p.setFont(QFont("sans", 9, QFont.Weight.Bold))
         metrics = QFontMetrics(p.font())
         label = metrics.elidedText(seg.effect_type, Qt.TextElideMode.ElideRight, rect.width() - 12)
-        p.drawText(rect.adjusted(6, 4, -6, -4), Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft, label)
+        p.drawText(rect.adjusted(6, 4, -6, -4), Qt.AlignmentFlag.AlignCenter, label)
 
         p.setPen(QPen(QColor(255, 255, 255, 130), 2))
         p.drawLine(rect.x() + 12, rect.y() + 1, rect.right() - 12, rect.y() + 1)

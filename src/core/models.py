@@ -75,7 +75,7 @@ class Character:
         else:
             # 自動遷移舊格式（flat sprites）→ 包進單一預設服裝
             old_sprites = [SpriteVariant.from_dict(s) for s in data.get("sprites", [])]
-            costumes = [Costume(name="預設", expressions=old_sprites)] if old_sprites else []
+            costumes = [Costume(name="服裝1", expressions=old_sprites)] if old_sprites else []
         return cls(
             name=data["name"],
             name_color=data.get("name_color", "#4682B4"),

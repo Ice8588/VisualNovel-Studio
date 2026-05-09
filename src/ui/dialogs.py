@@ -27,7 +27,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from qfluentwidgets import ComboBox, LineEdit, PushButton
+from qfluentwidgets import ComboBox, LineEdit, PushButton, StrongBodyLabel
 
 from src.core.models import Character, Costume, SpriteVariant
 
@@ -313,7 +313,7 @@ class CharacterEditorDialog(QDialog):
         # 名稱
         self.edit_name = LineEdit()
         self.edit_name.setPlaceholderText("角色名稱")
-        form.addRow("名稱:", self.edit_name)
+        form.addRow(StrongBodyLabel("名稱："), self.edit_name)
 
         # 名牌顏色：預設色塊
         color_widget = QWidget()
@@ -338,7 +338,7 @@ class CharacterEditorDialog(QDialog):
         color_layout.addWidget(self._lbl_color_preview)
         color_layout.addStretch()
         color_widget.setLayout(color_layout)
-        form.addRow("名牌顏色:", color_widget)
+        form.addRow(StrongBodyLabel("名牌顏色："), color_widget)
 
         layout.addLayout(form)
 
@@ -408,7 +408,6 @@ class CharacterEditorDialog(QDialog):
         self._lbl_color_preview.setStyleSheet(
             f"background-color:{hex_color}; border:1px solid #888; border-radius:3px;"
         )
-        self._lbl_color_preview.setText(hex_color)
         for btn, (c, _) in zip(self._color_btns, _PRESET_COLORS):
             selected = c.upper() == hex_color.upper()
             btn.setStyleSheet(
@@ -561,9 +560,9 @@ class CharacterEditorDialog(QDialog):
             return Character(name=name, name_color=color, costumes=list(self._extra_costumes))
         sprites = []
         if self._sprite_filename:
-            label = self._lbl_sprite_name.text() or "預設"
+            label = self._lbl_sprite_name.text() or "差分1"
             sprites.append(SpriteVariant(label=label, filename=self._sprite_filename))
-        default_costume = Costume(name="預設", expressions=sprites)
+        default_costume = Costume(name="服裝1", expressions=sprites)
         return Character(
             name=name,
             name_color=color,
@@ -597,7 +596,7 @@ class CostumeEditorDialog(QDialog):
         left_widget = QWidget()
         left_layout = QVBoxLayout()
         left_layout.setContentsMargins(0, 0, 4, 0)
-        left_layout.addWidget(QLabel("服裝:"))
+        left_layout.addWidget(StrongBodyLabel("服裝："))
         self._costume_list = QListWidget()
         self._costume_list.setMinimumWidth(140)
         left_layout.addWidget(self._costume_list)
@@ -617,7 +616,7 @@ class CostumeEditorDialog(QDialog):
         right_widget.files_dropped.connect(self._on_files_dropped)
         right_layout = QVBoxLayout()
         right_layout.setContentsMargins(4, 0, 0, 0)
-        right_layout.addWidget(QLabel("立繪差分（可拖曳圖片匯入；雙擊標籤可改名）:"))
+        right_layout.addWidget(StrongBodyLabel("立繪差分（可拖曳圖片匯入；雙擊標籤可改名）："))
         self._expr_list = QListWidget()
         self._expr_list.setIconSize(QSize(48, 48))
         self._expr_list.setMinimumWidth(200)
@@ -701,9 +700,10 @@ class CostumeEditorDialog(QDialog):
 
     def _on_add_costume(self) -> None:
         default_name = f"服裝{len(self._costumes) + 1}"
-        name, ok = QInputDialog.getText(self, "新增服裝", "服裝名稱:", text=default_name)
-        if ok and name.strip():
-            self._costumes.append(Costume(name=name.strip()))
+        name, ok = QInputDialog.getText(self, "新增服裝", "服裝名稱：")
+        if ok:
+            final = name.strip() or default_name
+            self._costumes.append(Costume(name=final))
             self._populate_costume_list()
             self._costume_list.setCurrentRow(len(self._costumes) - 1)
 
@@ -751,12 +751,13 @@ class CostumeEditorDialog(QDialog):
             QMessageBox.warning(self, "匯入失敗", str(e))
             return
         label, ok = QInputDialog.getText(
-            self, "差分標籤", "標籤名稱:", text=file_path.stem
+            self, "差分標籤", "標籤名稱：", text=file_path.stem
         )
-        if not ok or not label.strip():
+        if not ok:
             return
+        final_label = label.strip() or f"差分{len(self._costumes[cos_row].expressions) + 1}"
         self._costumes[cos_row].expressions.append(
-            SpriteVariant(label=label.strip(), filename=filename)
+            SpriteVariant(label=final_label, filename=filename)
         )
         self._on_costume_selected(cos_row)
 

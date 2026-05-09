@@ -24,7 +24,7 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QWidget
 
-from src.core.models import Scene, StageSegment
+from src.core.models import Character, Scene, StageSegment
 from src.ui import _timeline_shared as shared
 
 
@@ -54,6 +54,7 @@ class StageLaneWidget(QWidget):
         self._drag: _DragState | None = None
         self._drag_dirty: bool = False  # mouseMove 期間有實際變動才在 release 時 emit committed
         self._character_colors: dict[str, str] = {}
+        self._characters: list[Character] = []
         self.setMouseTracking(True)
         self.setMinimumWidth(shared.LANE_WIDTH)
         self.setFixedWidth(shared.LANE_WIDTH)
@@ -75,6 +76,18 @@ class StageLaneWidget(QWidget):
     def set_character_colors(self, mapping: dict[str, str]) -> None:
         self._character_colors = dict(mapping or {})
         self.update()
+
+    def set_characters(self, characters: list[Character]) -> None:
+        """提供完整角色列表，給雙擊新增 segment 時自動帶入第一服裝/差分用。"""
+        self._characters = list(characters or [])
+
+    def _default_costume_sprite(self, name: str) -> tuple[str | None, str | None]:
+        char = next((c for c in self._characters if c.name == name), None)
+        if not char or not char.costumes:
+            return None, None
+        cos = char.costumes[0]
+        sprite = cos.expressions[0].label if cos.expressions else None
+        return cos.name, sprite
 
     def refresh(self):
         self._update_height()
@@ -129,7 +142,7 @@ class StageLaneWidget(QWidget):
         label_rect = QRect(rect.x() + 6, rect.y() + 4, rect.width() - 12, 16)
         metrics = QFontMetrics(p.font())
         name = metrics.elidedText(seg.character, Qt.TextElideMode.ElideRight, label_rect.width())
-        p.drawText(label_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, name)
+        p.drawText(label_rect, Qt.AlignmentFlag.AlignCenter, name)
 
         if rect.height() > 30:
             p.setFont(QFont("sans", 8))
@@ -144,7 +157,7 @@ class StageLaneWidget(QWidget):
                 txt = "\n".join(details)
                 p.drawText(
                     detail_rect,
-                    Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap,
+                    Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap,
                     txt,
                 )
 
@@ -206,7 +219,14 @@ class StageLaneWidget(QWidget):
             if not (end < s.start or cur > s.end):
                 return  # 與既有重疊就不新增
         default_char = next(iter(self._character_colors.keys()))
-        new_seg = StageSegment(start=cur, end=end, character=default_char, costume=None, sprite=None)
+        default_costume, default_sprite = self._default_costume_sprite(default_char)
+        new_seg = StageSegment(
+            start=cur,
+            end=end,
+            character=default_char,
+            costume=default_costume,
+            sprite=default_sprite,
+        )
         self._segments().append(new_seg)
         self._segments().sort(key=lambda s: s.start)
         self._selected = new_seg
@@ -405,6 +425,10 @@ class StagePanel(QWidget):
     def set_character_colors(self, mapping: dict[str, str]) -> None:
         for lane in self.lanes.values():
             lane.set_character_colors(mapping)
+
+    def set_characters(self, characters: list[Character]) -> None:
+        for lane in self.lanes.values():
+            lane.set_characters(characters)
 
     def refresh(self):
         for lane in self.lanes.values():

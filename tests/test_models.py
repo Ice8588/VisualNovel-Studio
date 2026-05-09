@@ -210,7 +210,7 @@ class TestCharacterCostume:
         }
         char = Character.from_dict(data)
         assert len(char.costumes) == 1
-        assert char.costumes[0].name == "預設"
+        assert char.costumes[0].name == "服裝1"
         assert len(char.costumes[0].expressions) == 2
         # @property sprites 向下相容
         assert len(char.sprites) == 2

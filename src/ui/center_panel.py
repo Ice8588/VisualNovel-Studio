@@ -203,6 +203,8 @@ class CenterPanel(QWidget):
             color_map = self._character_color_map()
             self.dialogue_list.set_character_colors(color_map)
             self.stage_panel.set_character_colors(color_map)
+            if self._project:
+                self.stage_panel.set_characters(self._project.characters)
 
             # header 們
             dialogue_header = QLabel("對話")
@@ -366,6 +368,8 @@ class CenterPanel(QWidget):
         color_map = self._character_color_map()
         self.dialogue_list.set_character_colors(color_map)
         self.stage_panel.set_character_colors(color_map)
+        if self._project:
+            self.stage_panel.set_characters(self._project.characters)
         self.dialogue_list.refresh()
         self.stage_panel.refresh()
         self.effect_timeline.refresh()

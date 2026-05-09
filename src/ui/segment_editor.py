@@ -187,7 +187,10 @@ class SegmentEditor(QWidget):
         self._cb_costume.clear()
         char_obj = self._find_character(character)
         names = [c.name for c in (char_obj.costumes if char_obj else [])]
-        self._cb_costume.addItems(["（無）"] + names)
+        if names:
+            self._cb_costume.addItems(names)
+        else:
+            self._cb_costume.addItem("（無）")
         if preferred and preferred in names:
             self._cb_costume.setCurrentText(preferred)
         else:
@@ -200,7 +203,10 @@ class SegmentEditor(QWidget):
         if char_obj and costume:
             cos_obj = next((c for c in char_obj.costumes if c.name == costume), None)
         labels = [e.label for e in (cos_obj.expressions if cos_obj else [])]
-        self._cb_sprite.addItems(["（無）"] + labels)
+        if labels:
+            self._cb_sprite.addItems(labels)
+        else:
+            self._cb_sprite.addItem("（無）")
         if preferred and preferred in labels:
             self._cb_sprite.setCurrentText(preferred)
         else:
