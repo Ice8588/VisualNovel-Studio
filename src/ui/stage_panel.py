@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import QHBoxLayout, QLabel, QWidget
 
 from src.core.models import Character, Scene, StageSegment
 from src.ui import _timeline_shared as shared
+from src.ui import palette
 
 
 @dataclass
@@ -149,7 +150,9 @@ class StageLaneWidget(QWidget):
         block_h = name_h + (detail_line_h * len(details) if show_details else 0)
         y_offset = max(2, (rect.height() - block_h) // 2)
 
-        p.setPen(QColor("#FFFFFF"))
+        # 文字顏色依背景（角色色）算對比，黃 / 白等淺色背景時改深字
+        fg = palette.contrast_text(base)
+        p.setPen(fg)
         p.setFont(QFont("sans", 9, QFont.Weight.Bold))
         label_rect = QRect(rect.x() + 6, rect.y() + y_offset, rect.width() - 12, name_h)
         metrics = QFontMetrics(p.font())
@@ -158,7 +161,9 @@ class StageLaneWidget(QWidget):
 
         if show_details:
             p.setFont(QFont("sans", 8))
-            p.setPen(QColor(255, 255, 255, 200))
+            detail_color = QColor(fg)
+            detail_color.setAlpha(200)
+            p.setPen(detail_color)
             detail_rect = QRect(
                 rect.x() + 6,
                 rect.y() + y_offset + name_h,
@@ -172,8 +177,10 @@ class StageLaneWidget(QWidget):
                 txt,
             )
 
-        # 端緣 grip
-        p.setPen(QPen(QColor(255, 255, 255, 130), 2))
+        # 端緣 grip：跟文字同色但更透
+        grip_color = QColor(fg)
+        grip_color.setAlpha(130)
+        p.setPen(QPen(grip_color, 2))
         p.drawLine(rect.x() + 12, rect.y() + 1, rect.right() - 12, rect.y() + 1)
         p.drawLine(rect.x() + 12, rect.bottom() - 1, rect.right() - 12, rect.bottom() - 1)
 

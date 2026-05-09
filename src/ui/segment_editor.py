@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import (
 from qfluentwidgets import BodyLabel, ComboBox
 
 from src.core.models import EffectSegment, StageSegment
+from src.ui import palette
 from src.ui.icons import design_icon_tinted
 
 if TYPE_CHECKING:
@@ -51,12 +52,12 @@ class SegmentEditor(QWidget):
         self._project: "Project | None" = project_ref
         self._segment: object | None = None
         self._suppress_signals: bool = False
-        # Phase 4：浮動視窗外觀（陰影 + 邊框 + 圓角）
+        # Phase 4：浮動視窗外觀（陰影 + 邊框 + 圓角），主題感知
         self.setObjectName("segmentEditorPopup")
-        self.setStyleSheet(
-            "#segmentEditorPopup { background:#2D2D30; border:1px solid #3D8AC4;"
-            " border-radius:6px; }"
-        )
+        palette.register_themed(self, lambda p: (
+            f"#segmentEditorPopup {{ background:{p.surface_alt.name()};"
+            f" border:1px solid {p.border_focus.name()}; border-radius:6px; }}"
+        ))
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)  # 收 ESC
         self._build_ui()
         self.set_segment(None)
@@ -100,16 +101,19 @@ class SegmentEditor(QWidget):
         self._title = BodyLabel("Segment 編輯器")
         self._title.setFont(QFont("sans", 10, QFont.Weight.Bold))
         header.addWidget(self._title, 1)
-        # 浮動視窗背景固定為深色 (#2D2D30)，icon 用淺色才看得到
         self._btn_close = QToolButton()
-        self._btn_close.setIcon(design_icon_tinted("close", "#9AA0A6"))
         self._btn_close.setIconSize(QSize(14, 14))
         self._btn_close.setToolTip("關閉")
         self._btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_close.setStyleSheet(
-            "QToolButton { border:none; padding:2px 6px; }"
-            "QToolButton:hover { background:rgba(255,255,255,0.08); border-radius:3px; }"
-        )
+        # icon 顏色 + hover 底色都跟主題：register builder 會在切主題時重套
+        def _close_btn_style(p):
+            self._btn_close.setIcon(design_icon_tinted("close", p.text_secondary.name(), 14))
+            hover_bg = "rgba(255,255,255,0.08)" if p.is_dark else "rgba(0,0,0,0.06)"
+            return (
+                "QToolButton { border:none; padding:2px 6px; }"
+                f"QToolButton:hover {{ background:{hover_bg}; border-radius:3px; }}"
+            )
+        palette.register_themed(self._btn_close, _close_btn_style)
         self._btn_close.clicked.connect(self.closed.emit)
         header.addWidget(self._btn_close, 0)
         root.addLayout(header)
@@ -122,7 +126,10 @@ class SegmentEditor(QWidget):
         ph_layout = QVBoxLayout(ph)
         ph_layout.setContentsMargins(0, 0, 0, 0)
         self._placeholder_label = QLabel("未選取 segment")
-        self._placeholder_label.setStyleSheet("color:#9AA0A6;")
+        palette.register_themed(
+            self._placeholder_label,
+            lambda p: f"color:{p.text_secondary.name()};",
+        )
         self._placeholder_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         ph_layout.addWidget(self._placeholder_label)
         self._stack.addWidget(ph)

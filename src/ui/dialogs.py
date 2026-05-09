@@ -141,7 +141,8 @@ class VideoExportDialog(QDialog):
 
         # 停留時間說明
         lbl_duration = QLabel("停留時間依字數自動計算（1.5～8 秒）")
-        lbl_duration.setStyleSheet("color: #888;")
+        from src.ui import palette as _pal
+        _pal.register_themed(lbl_duration, lambda p: f"color:{p.text_secondary.name()};")
         form.addRow("停留時間:", lbl_duration)
 
         # 輸出路徑
@@ -156,9 +157,12 @@ class VideoExportDialog(QDialog):
 
         layout.addLayout(form)
 
-        # ffmpeg 警告
+        # ffmpeg 警告（紅色，主題感知）
         self.lbl_ffmpeg_warning = QLabel()
-        self.lbl_ffmpeg_warning.setStyleSheet("color: red;")
+        _pal.register_themed(
+            self.lbl_ffmpeg_warning,
+            lambda p: f"color:{p.danger.name()};",
+        )
         self.lbl_ffmpeg_warning.setWordWrap(True)
         self.lbl_ffmpeg_warning.hide()
         layout.addWidget(self.lbl_ffmpeg_warning)
@@ -182,11 +186,16 @@ class VideoExportDialog(QDialog):
 
     def _check_ffmpeg(self) -> None:
         from src.core.ffmpeg_manager import is_available
+        from src.ui import palette as _pal
         if not is_available():
             self.lbl_ffmpeg_warning.setText(
                 "ℹ 尚未安裝 FFmpeg，點擊確定後將自動下載。"
             )
-            self.lbl_ffmpeg_warning.setStyleSheet("color: #e0a020;")
+            # 改成 warning 色（覆寫先前 register_themed 的 danger 色）
+            _pal.register_themed(
+                self.lbl_ffmpeg_warning,
+                lambda p: f"color:{p.warning.name()};",
+            )
             self.lbl_ffmpeg_warning.show()
 
     def _validate_and_accept(self) -> None:
@@ -884,7 +893,11 @@ class GameSettingsDialog(QDialog):
             "  1080p → 對話 24~40px、名稱 20~32px\n"
             "  4K → 對話 36~56px、名稱 28~48px"
         )
-        tip.setStyleSheet("color: #888; font-size: 12px;")
+        from src.ui import palette as _pal
+        _pal.register_themed(
+            tip,
+            lambda p: f"color:{p.text_secondary.name()}; font-size:12px;",
+        )
         layout.addWidget(tip)
 
         # 即時預覽區

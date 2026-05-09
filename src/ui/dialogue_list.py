@@ -167,7 +167,8 @@ class DialogueColumn(QWidget):
             p.setPen(Qt.PenStyle.NoPen)
             p.drawRoundedRect(chip_rect, 9, 9)
             p.setFont(QFont("sans", 9, QFont.Weight.Bold))
-            p.setPen(QColor("#FFFFFF"))
+            from src.ui import palette as _pal
+            p.setPen(_pal.contrast_text(chip_color))
             p.drawText(chip_rect, Qt.AlignmentFlag.AlignCenter, label)
             text_x += chip_w + 6
 

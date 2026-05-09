@@ -12,6 +12,7 @@ from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import QVBoxLayout, QWidget
 
 from src.core.models import Project
+from src.ui import palette
 
 ENGINE_DIR = Path(__file__).parent.parent / "engine"
 
@@ -57,7 +58,11 @@ class LetterboxContainer(QWidget):
         super().__init__(parent)
         self._web_view = web_view
         self._web_view.setParent(self)
-        self.setStyleSheet("background-color: #000;")
+        # 預覽四周邊框跟主題（深色保留接近黑、淺色用 surface 不破視覺）
+        palette.register_themed(
+            self,
+            lambda p: f"background-color: {p.bg.name()};",
+        )
 
     def resizeEvent(self, event) -> None:
         self._refit()

@@ -110,13 +110,18 @@ class EffectLaneWidget(QWidget):
             p.setPen(QPen(base.darker(140), 1))
         p.drawRoundedRect(rect, 6, 6)
 
-        p.setPen(QColor("#FFFFFF"))
+        # 文字色依 base（effect_type 色）算對比
+        from src.ui import palette as _pal
+        fg = _pal.contrast_text(base)
+        p.setPen(fg)
         p.setFont(QFont("sans", 9, QFont.Weight.Bold))
         metrics = QFontMetrics(p.font())
         label = metrics.elidedText(seg.effect_type, Qt.TextElideMode.ElideRight, rect.width() - 12)
         p.drawText(rect.adjusted(6, 4, -6, -4), Qt.AlignmentFlag.AlignCenter, label)
 
-        p.setPen(QPen(QColor(255, 255, 255, 130), 2))
+        grip_color = QColor(fg)
+        grip_color.setAlpha(130)
+        p.setPen(QPen(grip_color, 2))
         p.drawLine(rect.x() + 12, rect.y() + 1, rect.right() - 12, rect.y() + 1)
         p.drawLine(rect.x() + 12, rect.bottom() - 1, rect.right() - 12, rect.bottom() - 1)
 
