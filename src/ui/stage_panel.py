@@ -176,40 +176,46 @@ class StageLaneWidget(QWidget):
             p.setPen(QPen(base.darker(140), 1))
         p.drawRoundedRect(rect, 6, 6)
 
-        # Label：character / costume / sprite
-        # 動態垂直置中：先量總文字塊高度，再放在 rect 中央。
-        details: list[str] = []
+        # Label：character / costume / sprite — 全專案字體 ≥ 18px（task #2）
+        # 高度不夠時依序丟掉 sprite → costume，永遠保留 character name
+        candidates: list[str] = [seg.character]
         if seg.costume:
-            details.append(seg.costume)
+            candidates.append(seg.costume)
         if seg.sprite:
-            details.append(seg.sprite)
-        show_details = rect.height() > 30 and bool(details)
-        name_h = 16
-        detail_line_h = 14
-        block_h = name_h + (detail_line_h * len(details) if show_details else 0)
+            candidates.append(seg.sprite)
+
+        line_h = 24  # 18px font + ~6px line gap
+        max_lines = max(1, (rect.height() - 6) // line_h)
+        visible = candidates[: int(max_lines)]
+        block_h = line_h * len(visible)
         y_offset = max(2, (rect.height() - block_h) // 2)
 
         # 文字顏色依背景（角色色）算對比，黃 / 白等淺色背景時改深字
         fg = palette.contrast_text(base)
-        p.setPen(fg)
-        p.setFont(QFont("sans", 9, QFont.Weight.Bold))
-        label_rect = QRect(rect.x() + 6, rect.y() + y_offset, rect.width() - 12, name_h)
-        metrics = QFontMetrics(p.font())
-        name = metrics.elidedText(seg.character, Qt.TextElideMode.ElideRight, label_rect.width())
-        p.drawText(label_rect, Qt.AlignmentFlag.AlignCenter, name)
 
-        if show_details:
-            p.setFont(QFont("sans", 8))
+        # Line 1：character name（粗體）
+        name_font = QFont("sans"); name_font.setPixelSize(18); name_font.setBold(True)
+        p.setFont(name_font)
+        p.setPen(fg)
+        name_rect = QRect(rect.x() + 6, rect.y() + y_offset, rect.width() - 12, line_h)
+        metrics = QFontMetrics(p.font())
+        name = metrics.elidedText(visible[0], Qt.TextElideMode.ElideRight, name_rect.width())
+        p.drawText(name_rect, Qt.AlignmentFlag.AlignCenter, name)
+
+        # Line 2+：details（regular，alpha 220）
+        if len(visible) > 1:
+            detail_font = QFont("sans"); detail_font.setPixelSize(18)
+            p.setFont(detail_font)
             detail_color = QColor(fg)
-            detail_color.setAlpha(200)
+            detail_color.setAlpha(220)
             p.setPen(detail_color)
             detail_rect = QRect(
                 rect.x() + 6,
-                rect.y() + y_offset + name_h,
+                rect.y() + y_offset + line_h,
                 rect.width() - 12,
-                detail_line_h * len(details),
+                line_h * (len(visible) - 1),
             )
-            txt = "\n".join(details)
+            txt = "\n".join(visible[1:])
             p.drawText(
                 detail_rect,
                 Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap,

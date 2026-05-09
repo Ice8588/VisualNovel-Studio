@@ -50,7 +50,7 @@ class AboutDialog(QDialog):
         version_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         palette.register_themed(
             version_label,
-            lambda p: f"color:{p.text_secondary.name()}; font-size:13px;",
+            lambda p: f"color:{p.text_secondary.name()}; font-size:18px;",
         )
         layout.addWidget(version_label)
 

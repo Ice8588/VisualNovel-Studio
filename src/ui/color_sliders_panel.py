@@ -60,7 +60,7 @@ class ColorSlidersPanel(QWidget):
         self._swatch.setStyleSheet("background:#141428; border:1px solid #888; border-radius:4px;")
         head.addWidget(self._swatch)
         self._lbl_hex = QLabel("#141428")
-        self._lbl_hex.setStyleSheet("font-family:monospace; font-size:14px;")
+        self._lbl_hex.setStyleSheet("font-family:monospace; font-size:18px;")
         head.addWidget(self._lbl_hex, 1)
         outer.addLayout(head)
 
@@ -75,7 +75,7 @@ class ColorSlidersPanel(QWidget):
         for key, hi, row, name in rows:
             tag = QLabel(name)
             tag.setFixedWidth(36)
-            tag.setStyleSheet("font-size:13px;")
+            tag.setStyleSheet("font-size:18px;")
             sl = QSlider(Qt.Orientation.Horizontal)
             sl.setRange(0, hi)
             sl.setSingleStep(1)
@@ -84,7 +84,7 @@ class ColorSlidersPanel(QWidget):
             lbl = QLabel("0")
             lbl.setFixedWidth(36)
             lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            lbl.setStyleSheet("font-family:monospace; font-size:13px;")
+            lbl.setStyleSheet("font-family:monospace; font-size:18px;")
             grid.addWidget(tag, row, 0)
             grid.addWidget(sl, row, 1)
             grid.addWidget(lbl, row, 2)

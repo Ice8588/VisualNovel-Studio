@@ -898,7 +898,7 @@ class GameSettingsDialog(QDialog):
         from src.ui import palette as _pal
         _pal.register_themed(
             tip,
-            lambda p: f"color:{p.text_secondary.name()}; font-size:12px;",
+            lambda p: f"color:{p.text_secondary.name()}; font-size:18px;",
         )
         layout.addWidget(tip)
 

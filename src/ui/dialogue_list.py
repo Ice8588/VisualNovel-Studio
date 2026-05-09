@@ -146,7 +146,7 @@ class DialogueColumn(QWidget):
         # ── 索引欄：數字 + 類型 icon（▶ 對話 / ▒ 旁白）──
         idx_text = str(idx + 1)
         icon = "▶" if not is_narration else "▒"
-        idx_font = QFont("sans"); idx_font.setPixelSize(14)
+        idx_font = QFont("sans"); idx_font.setPixelSize(18)
         p.setFont(idx_font)
         # 數字置左半，icon 置右半
         half = shared.COL_INDEX_W // 2
@@ -166,14 +166,14 @@ class DialogueColumn(QWidget):
             chip_color = shared.character_color(
                 dlg.character, self._character_colors.get(dlg.character)
             )
-            chip_font = QFont("sans"); chip_font.setPixelSize(14); chip_font.setBold(True)
+            chip_font = QFont("sans"); chip_font.setPixelSize(18); chip_font.setBold(True)
             metrics = QFontMetrics(chip_font)
             label = dlg.character
             chip_w = min(
                 shared.COL_CHARACTER_W - 12,
                 metrics.horizontalAdvance(label) + 16,
             )
-            chip_h = 22
+            chip_h = 30  # 18px font + ~6px 上下留白
             chip_rect = QRect(
                 char_col_x + (shared.COL_CHARACTER_W - chip_w) // 2,
                 inner.y() + (inner.height() - chip_h) // 2,
@@ -192,13 +192,18 @@ class DialogueColumn(QWidget):
         text_x = text_col_x + 8
         text_right = inner.right() - 4
 
-        # 文字效果 chip（右側貼邊；在台詞欄內）
+        # 文字效果 chip（右側貼邊；在台詞欄內）— 字體 ≥ 18px
         if dlg.text_effects:
             eff_label = " ".join(f"·{e}" for e in dlg.text_effects)
-            eff_font = QFont("sans"); eff_font.setPixelSize(13)
+            eff_font = QFont("sans"); eff_font.setPixelSize(18)
             metrics = QFontMetrics(eff_font)
-            chip_w = metrics.horizontalAdvance(eff_label) + 10
-            chip_rect = QRect(text_right - chip_w, inner.y() + 6, chip_w, 18)
+            chip_w = metrics.horizontalAdvance(eff_label) + 12
+            chip_h = 28
+            chip_rect = QRect(
+                text_right - chip_w,
+                inner.y() + (inner.height() - chip_h) // 2,
+                chip_w, chip_h,
+            )
             chip_bg = QColor(0, 0, 0, 30) if shared.is_light() else QColor(255, 255, 255, 30)
             p.setBrush(chip_bg)
             p.setPen(Qt.PenStyle.NoPen)
@@ -234,7 +239,7 @@ class DialogueColumn(QWidget):
         p.drawLine(text_col_x, inner.y() + 4, text_col_x, inner.bottom() - 4)
 
         # 索引欄
-        idx_font = QFont("sans"); idx_font.setPixelSize(14); idx_font.setBold(True)
+        idx_font = QFont("sans"); idx_font.setPixelSize(18); idx_font.setBold(True)
         p.setFont(idx_font)
         p.setPen(shared.DROP_INDICATOR)
         p.drawText(
@@ -245,7 +250,7 @@ class DialogueColumn(QWidget):
 
         # 角色欄（若有）
         if dlg.character:
-            ch_font = QFont("sans"); ch_font.setPixelSize(14)
+            ch_font = QFont("sans"); ch_font.setPixelSize(18)
             p.setFont(ch_font)
             p.drawText(
                 QRect(char_col_x, inner.y(), shared.COL_CHARACTER_W, inner.height()),

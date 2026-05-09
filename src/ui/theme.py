@@ -280,7 +280,7 @@ QPushButton#hoverDeleteButton {{
     border: none;
     color: {text_secondary};
     background: transparent;
-    font-size: 13px;
+    font-size: 18px;
     font-weight: bold;
     padding: 0;
 }}
