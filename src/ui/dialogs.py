@@ -27,7 +27,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from qfluentwidgets import ComboBox, LineEdit, PushButton, StrongBodyLabel
+from qfluentwidgets import ComboBox, LineEdit, ListWidget, PushButton, StrongBodyLabel
 
 from src.core.models import Character, Costume, SpriteVariant
 
@@ -592,7 +592,7 @@ class CostumeEditorDialog(QDialog):
         left_layout = QVBoxLayout()
         left_layout.setContentsMargins(0, 0, 4, 0)
         left_layout.addWidget(StrongBodyLabel("服裝："))
-        self._costume_list = QListWidget()
+        self._costume_list = ListWidget()
         self._costume_list.setMinimumWidth(140)
         left_layout.addWidget(self._costume_list)
         cos_btns = QHBoxLayout()
@@ -612,7 +612,7 @@ class CostumeEditorDialog(QDialog):
         right_layout = QVBoxLayout()
         right_layout.setContentsMargins(4, 0, 0, 0)
         right_layout.addWidget(StrongBodyLabel("立繪差分（可拖曳圖片匯入；雙擊標籤可改名）："))
-        self._expr_list = QListWidget()
+        self._expr_list = ListWidget()
         self._expr_list.setIconSize(QSize(48, 48))
         self._expr_list.setMinimumWidth(200)
         self._expr_list.setEditTriggers(

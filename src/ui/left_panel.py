@@ -260,7 +260,7 @@ class LeftPanel(QWidget):
         char_props_layout.addLayout(color_grid)
         # 服裝列表
         char_props_layout.addWidget(StrongBodyLabel("服裝："))
-        self._char_costume_list = QListWidget()
+        self._char_costume_list = ListWidget()
         self._char_costume_list.setFixedHeight(70)
         char_props_layout.addWidget(self._char_costume_list)
         btn_edit_costume = QPushButton("編輯服裝…")
