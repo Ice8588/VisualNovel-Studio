@@ -388,13 +388,14 @@ class CenterPanel(QWidget):
         self.project_changed.emit()
 
     def _on_cursor_from_widget(self, idx: int) -> None:
-        # 三 widget 共享游標：轉發到另外兩個
+        # 三 widget 共享游標：一律廣播到所有 widget（包括 sender 自己）。
+        # 因為 stage_panel / effect_timeline 內部各有多條 sub-lane，當其中一條 lane
+        # 自己 hover 更新 _cursor_idx 後，必須讓「同 panel 內的其他 lane」也同步。
+        # set_cursor 是 idempotent（值相同就 early return），重複呼叫無副作用。
         if self._building:
             return
-        sender = self.sender()
         for w in (self.dialogue_list, self.stage_panel, self.effect_timeline):
-            if w is not sender:
-                w.set_cursor(idx)
+            w.set_cursor(idx)
         # 預覽同步（Preview 已載入時）
         if self._preview_stack.currentIndex() == 1 and self._current_scene_index >= 0:
             self.preview.jump_to_dialogue(self._current_scene_index, idx)

@@ -137,29 +137,40 @@ class StageLaneWidget(QWidget):
         p.drawRoundedRect(rect, 6, 6)
 
         # Label：character / costume / sprite
+        # 動態垂直置中：先量總文字塊高度，再放在 rect 中央。
+        details: list[str] = []
+        if seg.costume:
+            details.append(seg.costume)
+        if seg.sprite:
+            details.append(seg.sprite)
+        show_details = rect.height() > 30 and bool(details)
+        name_h = 16
+        detail_line_h = 14
+        block_h = name_h + (detail_line_h * len(details) if show_details else 0)
+        y_offset = max(2, (rect.height() - block_h) // 2)
+
         p.setPen(QColor("#FFFFFF"))
         p.setFont(QFont("sans", 9, QFont.Weight.Bold))
-        label_rect = QRect(rect.x() + 6, rect.y() + 4, rect.width() - 12, 16)
+        label_rect = QRect(rect.x() + 6, rect.y() + y_offset, rect.width() - 12, name_h)
         metrics = QFontMetrics(p.font())
         name = metrics.elidedText(seg.character, Qt.TextElideMode.ElideRight, label_rect.width())
         p.drawText(label_rect, Qt.AlignmentFlag.AlignCenter, name)
 
-        if rect.height() > 30:
+        if show_details:
             p.setFont(QFont("sans", 8))
             p.setPen(QColor(255, 255, 255, 200))
-            details = []
-            if seg.costume:
-                details.append(seg.costume)
-            if seg.sprite:
-                details.append(seg.sprite)
-            if details:
-                detail_rect = QRect(rect.x() + 6, rect.y() + 20, rect.width() - 12, rect.height() - 22)
-                txt = "\n".join(details)
-                p.drawText(
-                    detail_rect,
-                    Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap,
-                    txt,
-                )
+            detail_rect = QRect(
+                rect.x() + 6,
+                rect.y() + y_offset + name_h,
+                rect.width() - 12,
+                detail_line_h * len(details),
+            )
+            txt = "\n".join(details)
+            p.drawText(
+                detail_rect,
+                Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap,
+                txt,
+            )
 
         # 端緣 grip
         p.setPen(QPen(QColor(255, 255, 255, 130), 2))

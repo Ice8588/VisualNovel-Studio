@@ -21,7 +21,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from qfluentwidgets import ComboBox, LineEdit, ListWidget, PushButton, SegmentedWidget
+from qfluentwidgets import ComboBox, LineEdit, ListWidget, PushButton, SegmentedWidget, StrongBodyLabel
 
 from src.core.models import Character, Project, Scene
 from src.ui.icons import design_icon
@@ -194,6 +194,7 @@ class LeftPanel(QWidget):
 
         # ── 下方：Inspector 屬性面板 ──
         inspector_group = QGroupBox("屬性")
+        inspector_group.setStyleSheet("QGroupBox::title { font-weight: bold; }")
         inspector_layout = QVBoxLayout()
         self._inspector = QStackedWidget()
 
@@ -235,13 +236,13 @@ class LeftPanel(QWidget):
         char_props_layout.setSpacing(4)
         # 名稱
         name_row = QHBoxLayout()
-        name_row.addWidget(QLabel("名稱:"))
+        name_row.addWidget(StrongBodyLabel("名稱："))
         self._edit_char_name = LineEdit()
         self._edit_char_name.setPlaceholderText("角色名稱")
         name_row.addWidget(self._edit_char_name, 1)
         char_props_layout.addLayout(name_row)
         # 顏色：預設色塊按鈕列
-        char_props_layout.addWidget(QLabel("名牌顏色:"))
+        char_props_layout.addWidget(StrongBodyLabel("名牌顏色："))
         color_grid = QHBoxLayout()
         color_grid.setSpacing(4)
         self._color_btns: list[QPushButton] = []
@@ -257,13 +258,8 @@ class LeftPanel(QWidget):
             self._color_btns.append(btn)
         color_grid.addStretch()
         char_props_layout.addLayout(color_grid)
-        # 色塊預覽
-        self._lbl_char_color = QLabel()
-        self._lbl_char_color.setFixedSize(80, 18)
-        self._lbl_char_color.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        char_props_layout.addWidget(self._lbl_char_color)
         # 服裝列表
-        char_props_layout.addWidget(QLabel("服裝:"))
+        char_props_layout.addWidget(StrongBodyLabel("服裝："))
         self._char_costume_list = QListWidget()
         self._char_costume_list.setFixedHeight(70)
         char_props_layout.addWidget(self._char_costume_list)
@@ -604,11 +600,7 @@ class LeftPanel(QWidget):
         self._updating = False
 
     def _update_color_display(self, hex_color: str) -> None:
-        """更新顏色預覽標籤，並標示目前選取的預設色。"""
-        self._lbl_char_color.setStyleSheet(
-            f"background-color:{hex_color}; border:1px solid #888; border-radius:3px;"
-        )
-        self._lbl_char_color.setText(hex_color)
+        """標示目前選取的預設色（無獨立預覽方塊；以選取邊框呈現）。"""
         for btn, (c, _) in zip(self._color_btns, PRESET_COLORS):
             selected = c.upper() == hex_color.upper()
             btn.setStyleSheet(

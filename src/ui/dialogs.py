@@ -331,11 +331,6 @@ class CharacterEditorDialog(QDialog):
             btn.clicked.connect(lambda _, c=hex_color: self._on_color_clicked(c))
             color_layout.addWidget(btn)
             self._color_btns.append(btn)
-        self._lbl_color_preview = QLabel()
-        self._lbl_color_preview.setFixedSize(60, 22)
-        self._lbl_color_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        color_layout.addSpacing(4)
-        color_layout.addWidget(self._lbl_color_preview)
         color_layout.addStretch()
         color_widget.setLayout(color_layout)
         form.addRow(StrongBodyLabel("名牌顏色："), color_widget)
@@ -405,9 +400,6 @@ class CharacterEditorDialog(QDialog):
 
     def _apply_color(self, hex_color: str) -> None:
         self._selected_color = hex_color
-        self._lbl_color_preview.setStyleSheet(
-            f"background-color:{hex_color}; border:1px solid #888; border-radius:3px;"
-        )
         for btn, (c, _) in zip(self._color_btns, _PRESET_COLORS):
             selected = c.upper() == hex_color.upper()
             btn.setStyleSheet(

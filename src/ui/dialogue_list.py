@@ -184,8 +184,8 @@ class DialogueColumn(QWidget):
             p.drawText(chip_rect, Qt.AlignmentFlag.AlignCenter, label)
             text_right -= chip_w + 6
 
-        # 文字內容
-        text_rect = QRect(text_x, inner.y() + 22, text_right - text_x, inner.height() - 24)
+        # 文字內容：以整個 inner 高度作為垂直置中範圍（chip 在側邊不在上方）
+        text_rect = QRect(text_x, inner.y(), text_right - text_x, inner.height())
         p.setFont(QFont("sans", 10))
         p.setPen(shared.TEXT_PRIMARY if not is_narration else shared.TEXT_MUTED)
         metrics = QFontMetrics(p.font())
