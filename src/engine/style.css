@@ -1,5 +1,10 @@
 /* VisualNovel Studio — 播放引擎樣式 */
 
+:root {
+  /* 預設（深色）旁白次要文字色；body.preview-* 會覆寫 */
+  --vn-text-muted: #B0B0B0;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -101,17 +106,17 @@
 /* ── 對話框 ── */
 
 /* 視覺小說標準字框：固定位置與大小、底部橫跨全寬、文字靠左對齊
-   box 尺寸與位置不會隨文字變動（打字過程只有文字本身顯現）。
-   Quick Menu 高 32px 貼底，因此 dialogue-box bottom: 32px。 */
+   Quick Menu 內嵌於對話框正中下方（不再獨立 bar），因此 dialogue-box 貼底。
+   bottom padding 28px 是 quick-menu 高度 + 4px 留白，避免長文字撞按鈕。 */
 #dialogue-box {
   position: absolute;
-  bottom: 32px;
+  bottom: 0;
   left: 0;
   right: 0;
   z-index: 10;
   background: rgba(20, 20, 40, 0.85);
   border-top: 2px solid rgba(70, 130, 180, 0.4);
-  padding: 18px 32px;
+  padding: 18px 32px 28px 32px;
   min-height: 150px;
   box-sizing: border-box;
   text-align: left;
@@ -203,40 +208,41 @@ body.fx-screen_shake #game-container {
 }
 /* Phase 4：CAPTURE_MODE 下動畫照跑；webengine_capture 多幀截圖會抓到不同 transform 位置，MP4 即可呈現晃動。 */
 
-/* ── Quick Menu（對話框下方按鈕列） ── */
+/* ── Quick Menu（內嵌於對話框正中下方，色繼承 dialogue-box → 跟文字色） ── */
 
 #quick-menu {
   position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  left: 50%;
+  bottom: 4px;
+  transform: translateX(-50%);
   z-index: 11;
-  height: 32px;
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 4px;
-  background: rgba(10, 10, 30, 0.6);
+  background: transparent;
+  color: inherit;
 }
 
 #quick-menu button {
   background: transparent;
-  color: rgba(200, 200, 220, 0.7);
+  color: inherit;
+  opacity: 1;
   border: none;
-  padding: 4px 16px;
-  font-size: 12px;
+  padding: 2px 10px;
+  font-size: 13px;
   font-family: inherit;
   letter-spacing: 1px;
   cursor: pointer;
-  transition: color 0.2s;
+  transition: font-weight 0.15s;
 }
 
 #quick-menu button:hover {
-  color: #fff;
+  font-weight: bold;
 }
 
 #quick-menu button.active {
-  color: rgba(70, 180, 220, 1);
+  font-weight: bold;
+  text-decoration: underline;
 }
 
 /* ── 狀態指示器 ── */
@@ -286,19 +292,23 @@ body.fx-screen_shake #game-container {
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+/* task.md #5/#10：歷史紀錄不用斜體；字體完全不透明；色繼承 dialogue-box 文字色，
+   旁白用 .history-narration 加 var(--vn-text-muted) 略淡（仍 opacity 1，非半透明）。 */
 #history-panel .history-character {
-  color: rgba(70, 130, 180, 1);
+  color: inherit;
+  opacity: 1;
   font-weight: bold;
   margin-right: 8px;
 }
 
 #history-panel .history-narration {
-  color: #999;
-  font-style: italic;
+  color: var(--vn-text-muted, currentColor);
+  opacity: 1;
 }
 
 #history-panel .history-text {
-  color: #ddd;
+  color: inherit;
+  opacity: 1;
   line-height: 1.5;
 }
 
@@ -359,28 +369,12 @@ body.preview-light #dialogue-text strong {
   color: #000;
 }
 
-body.preview-light #quick-menu {
-  background: rgba(240, 240, 245, 0.8);
-}
-
-body.preview-light #quick-menu button {
-  color: rgba(60, 60, 70, 0.9);
-}
-
-body.preview-light #quick-menu button:hover {
-  color: #000;
+body.preview-light {
+  --vn-text-muted: #666;
 }
 
 body.preview-light #history-panel {
   background: rgba(245, 245, 248, 0.97);
-}
-
-body.preview-light #history-panel .history-text {
-  color: #333;
-}
-
-body.preview-light #history-panel .history-narration {
-  color: #888;
 }
 
 body.preview-light #btn-close-history {
@@ -400,12 +394,8 @@ body.preview-parchment #dialogue-box {
 }
 body.preview-parchment #dialogue-text { color: #2B2416; }
 body.preview-parchment #dialogue-text strong { color: #C15F3C; }
-body.preview-parchment #quick-menu { background: rgba(234, 223, 191, 0.85); }
-body.preview-parchment #quick-menu button { color: rgba(43, 36, 22, 0.85); }
-body.preview-parchment #quick-menu button:hover { color: #C15F3C; }
+body.preview-parchment { --vn-text-muted: #8A7B5C; }
 body.preview-parchment #history-panel { background: rgba(245, 236, 215, 0.97); }
-body.preview-parchment #history-panel .history-text { color: #2B2416; }
-body.preview-parchment #history-panel .history-narration { color: #8A7B5C; }
 body.preview-parchment #btn-close-history {
   background: rgba(43, 36, 22, 0.06);
   color: #2B2416;
@@ -422,12 +412,8 @@ body.preview-midnight #dialogue-box {
 }
 body.preview-midnight #dialogue-text { color: #E0E0E0; }
 body.preview-midnight #dialogue-text strong { color: #F0F0F0; }
-body.preview-midnight #quick-menu { background: rgba(26, 26, 26, 0.8); }
-body.preview-midnight #quick-menu button { color: rgba(192, 192, 192, 0.85); }
-body.preview-midnight #quick-menu button:hover { color: #7090A0; }
+body.preview-midnight { --vn-text-muted: #7A7A7A; }
 body.preview-midnight #history-panel { background: rgba(20, 20, 20, 0.97); }
-body.preview-midnight #history-panel .history-text { color: #D0D0D0; }
-body.preview-midnight #history-panel .history-narration { color: #7A7A7A; }
 body.preview-midnight #btn-close-history {
   background: rgba(255, 255, 255, 0.05);
   color: #C0C0C0;
@@ -444,12 +430,8 @@ body.preview-figma-dark #dialogue-box {
 }
 body.preview-figma-dark #dialogue-text { color: #B0AACE; }
 body.preview-figma-dark #dialogue-text strong { color: #EEE8FF; }
-body.preview-figma-dark #quick-menu { background: rgba(28, 27, 38, 0.85); }
-body.preview-figma-dark #quick-menu button { color: rgba(144, 144, 184, 0.85); }
-body.preview-figma-dark #quick-menu button:hover { color: #B06EF7; }
+body.preview-figma-dark { --vn-text-muted: #6A6788; }
 body.preview-figma-dark #history-panel { background: rgba(22, 21, 30, 0.97); }
-body.preview-figma-dark #history-panel .history-text { color: #B0AACE; }
-body.preview-figma-dark #history-panel .history-narration { color: #4A4868; }
 body.preview-figma-dark #btn-close-history {
   background: rgba(255, 255, 255, 0.04);
   color: #9090B8;
@@ -466,12 +448,8 @@ body.preview-ivory #dialogue-box {
 }
 body.preview-ivory #dialogue-text { color: #1C1B19; }
 body.preview-ivory #dialogue-text strong { color: #000; }
-body.preview-ivory #quick-menu { background: rgba(244, 243, 239, 0.85); }
-body.preview-ivory #quick-menu button { color: rgba(28, 27, 25, 0.85); }
-body.preview-ivory #quick-menu button:hover { color: #3A75D9; }
+body.preview-ivory { --vn-text-muted: #5A5852; }
 body.preview-ivory #history-panel { background: rgba(248, 247, 244, 0.97); }
-body.preview-ivory #history-panel .history-text { color: #1C1B19; }
-body.preview-ivory #history-panel .history-narration { color: #8A8880; }
 body.preview-ivory #btn-close-history {
   background: rgba(0, 0, 0, 0.04);
   color: #1C1B19;

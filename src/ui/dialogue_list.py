@@ -19,6 +19,7 @@ class DialogueColumn(QWidget):
     cursor_changed = pyqtSignal(int)       # 使用者點/hover 某列
     dialogue_moved = pyqtSignal(int, int)  # src_idx, dst_idx
     selection_changed = pyqtSignal(int)    # 單選簡化版
+    speaker_changed = pyqtSignal(int)      # task.md #8：點 chip 改說話者
 
     WIDTH_HINT = 360
 
@@ -38,6 +39,15 @@ class DialogueColumn(QWidget):
 
     def _update_height(self):
         self.setMinimumHeight(shared.idx_to_y(len(self.scene.dialogues)))
+
+    def _font_size_px(self) -> int:
+        """task.md #12：自繪文字大小跟 QApplication 主 font；fallback 20。"""
+        sz = self.font().pixelSize()
+        if sz <= 0:
+            # pointSize 退回估算（pt → px 約 1.33 倍）
+            pt = self.font().pointSize()
+            sz = int(pt * 1.33) if pt > 0 else 20
+        return max(18, min(28, sz))
 
     def set_cursor(self, idx: int | None):
         if idx == self._cursor_idx:
@@ -146,7 +156,7 @@ class DialogueColumn(QWidget):
         # ── 索引欄：數字 + 類型 icon（▶ 對話 / ▒ 旁白）──
         idx_text = str(idx + 1)
         icon = "▶" if not is_narration else "▒"
-        idx_font = QFont("sans"); idx_font.setPixelSize(18)
+        idx_font = shared.ui_sans_font(self._font_size_px(), base=self.font())
         p.setFont(idx_font)
         # 數字置左半，icon 置右半
         half = shared.COL_INDEX_W // 2
@@ -166,7 +176,7 @@ class DialogueColumn(QWidget):
             chip_color = shared.character_color(
                 dlg.character, self._character_colors.get(dlg.character)
             )
-            chip_font = QFont("sans"); chip_font.setPixelSize(18); chip_font.setBold(True)
+            chip_font = shared.ui_sans_font(self._font_size_px(), bold=True, base=self.font())
             metrics = QFontMetrics(chip_font)
             label = dlg.character
             chip_w = min(
@@ -195,7 +205,7 @@ class DialogueColumn(QWidget):
         # 文字效果 chip（右側貼邊；在台詞欄內）— 字體 ≥ 18px
         if dlg.text_effects:
             eff_label = " ".join(f"·{e}" for e in dlg.text_effects)
-            eff_font = QFont("sans"); eff_font.setPixelSize(18)
+            eff_font = shared.ui_sans_font(self._font_size_px(), base=self.font())
             metrics = QFontMetrics(eff_font)
             chip_w = metrics.horizontalAdvance(eff_label) + 12
             chip_h = 28
@@ -214,9 +224,8 @@ class DialogueColumn(QWidget):
             text_right -= chip_w + 6
 
         text_rect = QRect(text_x, inner.y(), text_right - text_x, inner.height())
-        # 全專案字體規範：台詞主文 ≥ 18px
-        main_font = QFont("sans")
-        main_font.setPixelSize(18)
+        # 全專案字體規範：台詞主文 ≥ 18px；用 ui sans fallback chain 並繼承 app font 大小
+        main_font = shared.ui_sans_font(self._font_size_px(), base=self.font())
         p.setFont(main_font)
         p.setPen(shared.TEXT_PRIMARY if not is_narration else shared.TEXT_MUTED)
         metrics = QFontMetrics(p.font())
@@ -239,7 +248,7 @@ class DialogueColumn(QWidget):
         p.drawLine(text_col_x, inner.y() + 4, text_col_x, inner.bottom() - 4)
 
         # 索引欄
-        idx_font = QFont("sans"); idx_font.setPixelSize(18); idx_font.setBold(True)
+        idx_font = shared.ui_sans_font(self._font_size_px(), bold=True, base=self.font())
         p.setFont(idx_font)
         p.setPen(shared.DROP_INDICATOR)
         p.drawText(
@@ -250,7 +259,7 @@ class DialogueColumn(QWidget):
 
         # 角色欄（若有）
         if dlg.character:
-            ch_font = QFont("sans"); ch_font.setPixelSize(18)
+            ch_font = shared.ui_sans_font(self._font_size_px(), base=self.font())
             p.setFont(ch_font)
             p.drawText(
                 QRect(char_col_x, inner.y(), shared.COL_CHARACTER_W, inner.height()),
@@ -260,8 +269,7 @@ class DialogueColumn(QWidget):
 
         # 台詞欄（半透明）— ≥ 18px
         p.setOpacity(0.7)
-        ghost_font = QFont("sans")
-        ghost_font.setPixelSize(18)
+        ghost_font = shared.ui_sans_font(self._font_size_px(), base=self.font())
         p.setFont(ghost_font)
         p.setPen(shared.TEXT_PRIMARY)
         text_rect = QRect(text_col_x + 8, inner.y(),
@@ -292,14 +300,65 @@ class DialogueColumn(QWidget):
         idx = self._idx_at(ev.pos().y())
         if idx is None:
             return
+        # 先選中該行（讓預覽跟上）
         self._selected_idx = idx
         self.selection_changed.emit(idx)
         self.cursor_changed.emit(idx)
+
+        # task.md #8：點到角色欄就彈 ComboBox（不啟動 drag）
+        char_rect = self._character_col_rect(idx)
+        if char_rect.contains(ev.pos()):
+            self._popup_speaker_combo(idx, char_rect)
+            self.update()
+            return
+
         self._drag_src = idx
         self._drag_press_y = ev.pos().y()
         self._drag_current_y = ev.pos().y()
         self._is_dragging = False
         self.update()
+
+    def _character_col_rect(self, idx: int) -> QRect:
+        """回傳該 row 角色欄的命中區（與 paintEvent 計算一致）。"""
+        rect = QRect(0, idx * shared.ROW_HEIGHT, self.width(), shared.ROW_HEIGHT)
+        inner = rect.adjusted(6, 4, -6, -4)
+        idx_col_x = inner.x()
+        char_col_x = idx_col_x + shared.COL_INDEX_W
+        return QRect(char_col_x, inner.y(), shared.COL_CHARACTER_W, inner.height())
+
+    def _popup_speaker_combo(self, idx: int, anchor: QRect) -> None:
+        """task.md #8：浮動 ComboBox 改說話者，選完即套用。"""
+        from qfluentwidgets import ComboBox
+        combo = ComboBox(self)
+        combo.addItem("（無）")
+        names = list(self._character_colors.keys())
+        for name in names:
+            combo.addItem(name)
+        cur = self.scene.dialogues[idx].character
+        if cur and cur in names:
+            combo.setCurrentText(cur)
+        else:
+            combo.setCurrentIndex(0)
+
+        def on_text_changed(text: str) -> None:
+            new_speaker = None if text == "（無）" else text
+            dlg = self.scene.dialogues[idx]
+            if dlg.character == new_speaker:
+                combo.deleteLater()
+                return
+            dlg.character = new_speaker
+            self.speaker_changed.emit(idx)
+            self.update()
+            combo.deleteLater()
+
+        combo.currentTextChanged.connect(on_text_changed)
+        combo.setGeometry(
+            anchor.x(), anchor.y(),
+            max(140, anchor.width()), max(28, anchor.height()),
+        )
+        combo.show()
+        combo.raise_()
+        combo.showPopup()
 
     def mouseMoveEvent(self, ev: QMouseEvent):
         if self._drag_src is not None:
@@ -308,10 +367,11 @@ class DialogueColumn(QWidget):
             self._drag_current_y = ev.pos().y()
             self.update()
         else:
+            # task.md #3：hover 只更新本 widget 視覺 cursor，不再 emit
+            # cursor_changed（避免預覽頻繁跳動）。換預覽由 mousePressEvent 觸發。
             idx = self._idx_at(ev.pos().y())
             if idx is not None and idx != self._cursor_idx:
                 self._cursor_idx = idx
-                self.cursor_changed.emit(idx)
                 self.update()
 
     def mouseReleaseEvent(self, ev: QMouseEvent):

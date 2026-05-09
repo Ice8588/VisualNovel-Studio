@@ -112,7 +112,7 @@ class CenterPanel(QWidget):
         layout.setSpacing(2)
 
         toolbar = QHBoxLayout()
-        toolbar.setContentsMargins(2, 2, 2, 2)
+        toolbar.setContentsMargins(14, 4, 4, 4)
         toolbar.setSpacing(10)
         self.btn_refresh_preview = PushButton("重新整理")
         toolbar.addWidget(self.btn_refresh_preview)
@@ -369,6 +369,8 @@ class CenterPanel(QWidget):
         self.dialogue_list.dialogue_moved.connect(self._on_dialogue_moved)
         self.dialogue_list.cursor_changed.connect(self._on_cursor_from_widget)
         self.dialogue_list.selection_changed.connect(self._on_cursor_from_widget)
+        # task.md #8：點 chip 改說話者 → 通知外層重載預覽 + 標 dirty
+        self.dialogue_list.speaker_changed.connect(self._on_dialogue_speaker_changed)
 
         # 拖端點 mouseMove 期間 segment_changed 連續觸發；不在此重載預覽，
         # 等到 segment_committed (mouseRelease / Delete / 雙擊新增) 才 reload。
@@ -392,6 +394,7 @@ class CenterPanel(QWidget):
                 ("dialogue_moved", self._on_dialogue_moved),
                 ("cursor_changed", self._on_cursor_from_widget),
                 ("selection_changed", self._on_cursor_from_widget),
+                ("speaker_changed", self._on_dialogue_speaker_changed),
             )),
             (getattr(self, "stage_panel", None), (
                 ("cursor_changed", self._on_cursor_from_widget),
@@ -589,12 +592,33 @@ class CenterPanel(QWidget):
         # stage 選中 → 清掉 effect 的選取
         for lane in self.effect_timeline.lanes.values():
             lane.select_segment(None)
+        # task.md #7：依 lane 動態替換編輯器標題
+        if seg is not None:
+            lane_pos = self._stage_lane_of_segment(seg)
+            label = {
+                "left": "舞台左側角色設定",
+                "center": "舞台中間角色設定",
+                "right": "舞台右側角色設定",
+            }.get(lane_pos, "Segment 編輯器")
+            self.segment_editor.set_lane_label(label)
         self._show_segment_editor_for(seg, self.stage_panel)
 
     def _on_effect_segment_selected(self, seg) -> None:
         for lane in self.stage_panel.lanes.values():
             lane.select_segment(None)
+        if seg is not None:
+            self.segment_editor.set_lane_label("特效軌道設定")
         self._show_segment_editor_for(seg, self.effect_timeline)
+
+    def _stage_lane_of_segment(self, seg) -> str | None:
+        """task.md #7：找出 stage segment 屬於哪條 lane（左/中/右）。"""
+        if not self._project or self._current_scene_index < 0:
+            return None
+        scene = self._project.scenes[self._current_scene_index]
+        for pos, segments in scene.all_stage_lanes().items():
+            if seg in segments:
+                return pos
+        return None
 
     def _show_segment_editor_for(self, seg, source_widget) -> None:
         """Phase 4：浮動 SegmentEditor 定位在 segment 旁；seg=None 則隱藏。"""
@@ -655,6 +679,13 @@ class CenterPanel(QWidget):
         widget 自己已在 mouseMove 內 self.update() 完成重繪。
         Phase 5.1：reload 後跳回原位置。
         """
+        if self._building:
+            return
+        self._reload_preview_keep_position()
+        self.project_changed.emit()
+
+    def _on_dialogue_speaker_changed(self, _idx: int) -> None:
+        """task.md #8：對話列說話者 chip 改變 → reload 預覽 + 標 dirty。"""
         if self._building:
             return
         self._reload_preview_keep_position()

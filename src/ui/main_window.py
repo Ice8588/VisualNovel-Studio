@@ -110,17 +110,17 @@ class MainWindow(QMainWindow):
         # 外觀選單（獨立，即時套用）
         view_menu = menu_bar.addMenu("外觀")
         theme_menu = view_menu.addMenu("主題")
-        self._act_dark = theme_menu.addAction("深色")
+        self._act_dark = theme_menu.addAction("Dark")
         self._act_dark.setCheckable(True)
         self._act_dark.setChecked(self._theme_name == "dark")
         self._act_dark.triggered.connect(lambda: self._apply_theme_immediate("dark"))
-        self._act_light = theme_menu.addAction("淺色")
+        self._act_light = theme_menu.addAction("Light")
         self._act_light.setCheckable(True)
         self._act_light.setChecked(self._theme_name == "light")
         self._act_light.triggered.connect(lambda: self._apply_theme_immediate("light"))
 
         theme_menu.addSeparator()
-        self._act_parchment = theme_menu.addAction("羊皮紙詩歌")
+        self._act_parchment = theme_menu.addAction("Parchment")
         self._act_parchment.setCheckable(True)
         self._act_parchment.setChecked(self._theme_name == "parchment")
         self._act_parchment.triggered.connect(
@@ -142,7 +142,7 @@ class MainWindow(QMainWindow):
             lambda: self._apply_theme_immediate("ivory"))
 
         font_menu = view_menu.addMenu("UI 字體大小")
-        for size in [18, 20, 22, 24, 26, 28]:
+        for size in [18, 20, 22]:
             act = font_menu.addAction(f"{size}px")
             act.setCheckable(True)
             act.setChecked(size == self._font_size)
@@ -351,7 +351,7 @@ class MainWindow(QMainWindow):
 
     def _on_restore_default_appearance(self) -> None:
         self._apply_theme_immediate("ivory")
-        self._apply_font_size_immediate(18)
+        self._apply_font_size_immediate(20)
 
     def _on_show_tutorial(self) -> None:
         QMessageBox.information(
@@ -530,14 +530,28 @@ class MainWindow(QMainWindow):
             return
 
         project_dir = self._get_project_dir()
+        last_filename: str | None = None
         for path in paths:
             try:
                 filename = import_asset(path, category, project_dir)
-                self._project.assets[category].append(filename)
+                if filename not in self._project.assets[category]:
+                    self._project.assets[category].append(filename)
+                last_filename = filename
             except (ValueError, FileNotFoundError) as e:
                 dialogs.show_error(self, "匯入失敗", str(e))
 
         self._sync_asset_lists()
+        # 上傳完直接套用到當前場景（task.md #2：不用再做選取）
+        if last_filename is not None:
+            scene_idx = self.left_panel.get_current_scene_index()
+            if 0 <= scene_idx < len(self._project.scenes):
+                scene = self._project.scenes[scene_idx]
+                if category == "backgrounds":
+                    scene.background = last_filename
+                    self.left_panel.combo_background.setCurrentText(last_filename)
+                elif category == "music":
+                    scene.bgm = last_filename
+                    self.left_panel.combo_bgm.setCurrentText(last_filename)
         self._on_project_changed()
 
     # ── 預覽 ──

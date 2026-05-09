@@ -54,10 +54,29 @@ class SegmentEditor(QWidget):
         self._suppress_signals: bool = False
         # Phase 4：浮動視窗外觀（陰影 + 邊框 + 圓角），主題感知
         self.setObjectName("segmentEditorPopup")
-        palette.register_themed(self, lambda p: (
-            f"#segmentEditorPopup {{ background:{p.surface_alt.name()};"
-            f" border:1px solid {p.border_focus.name()}; border-radius:6px; }}"
-        ))
+
+        # task.md #7：背景比 surface 高一階對比的同色系（深色主題稍亮、淺色主題稍暗），
+        # 配陰影產生視覺分層；不再做反相（深淺對撞撕裂視覺）。
+        def _editor_style(p):
+            elevated = p.surface_alt.lighter(115) if p.is_dark else p.surface_alt.darker(108)
+            return (
+                f"#segmentEditorPopup {{"
+                f" background:{elevated.name()};"
+                f" color:{p.text_primary.name()};"
+                f" border:1px solid {p.border_focus.name()};"
+                f" border-radius:8px;"
+                f"}}"
+            )
+        palette.register_themed(self, _editor_style)
+        # 加柔和陰影
+        from PyQt6.QtWidgets import QGraphicsDropShadowEffect
+        from PyQt6.QtGui import QColor as _QColor
+        _shadow = QGraphicsDropShadowEffect(self)
+        _shadow.setBlurRadius(20)
+        _shadow.setOffset(0, 4)
+        _shadow.setColor(_QColor(0, 0, 0, 90))
+        self.setGraphicsEffect(_shadow)
+
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)  # 收 ESC
         self._build_ui()
         self.set_segment(None)
@@ -69,6 +88,10 @@ class SegmentEditor(QWidget):
         # 若正在編輯 StageSegment，更新下拉內容
         if isinstance(self._segment, StageSegment):
             self._load_stage_segment(self._segment)
+
+    def set_lane_label(self, label: str) -> None:
+        """task.md #7：依 lane（左/中/右/特效軌道）動態替換編輯器標題。"""
+        self._title.setText(label)
 
     def set_segment(self, seg) -> None:
         self._segment = seg
@@ -99,7 +122,8 @@ class SegmentEditor(QWidget):
         header = QHBoxLayout()
         header.setContentsMargins(0, 0, 0, 0)
         self._title = BodyLabel("Segment 編輯器")
-        _tf = QFont("sans"); _tf.setPixelSize(18); _tf.setBold(True)
+        # task.md #12：title 字體跟 QApplication.font；只設 bold（不硬編碼 size）
+        _tf = QFont(self._title.font()); _tf.setBold(True)
         self._title.setFont(_tf)
         header.addWidget(self._title, 1)
         self._btn_close = QToolButton()
@@ -166,7 +190,9 @@ class SegmentEditor(QWidget):
         self._params_edit.setFont(_pf)
         self._params_edit.installEventFilter(self)
         form_effect.addRow(BodyLabel("特效類型"), self._cb_effect_type)
-        form_effect.addRow(BodyLabel("Params (JSON)"), self._params_edit)
+        # task.md #7：暫隱藏 params 欄。當前效果用預設值即可；
+        # TODO（task.md #7 後續）：之後改用 UI（slider / X-Y 選擇器）做角色位移等進階特效，不再用 JSON。
+        self._params_edit.hide()
         self._stack.addWidget(effect)
 
     # ── StageSegment 模式 ──────────────────────────────────

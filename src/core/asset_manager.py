@@ -46,6 +46,22 @@ def import_asset(source: Path, category: str, project_dir: Path) -> str:
     assets_dir = project_dir / "assets"
     assets_dir.mkdir(parents=True, exist_ok=True)
 
+    # task.md #11：sprites 走標準化（PNG 透明畫布 1080×1440），其餘類別維持 copy。
+    if category == "sprites":
+        from src.core.image_normalize import normalize_sprite
+
+        # 標準化輸出統一為 .png（避免 jpg 透明問題）
+        dest = assets_dir / (source.stem + ".png")
+        # 檔名重複處理（與既有檔不同檔才重命名）
+        if dest.exists() and not dest.samefile(source):
+            stem = source.stem
+            counter = 1
+            while dest.exists():
+                dest = assets_dir / f"{stem}_{counter}.png"
+                counter += 1
+        normalize_sprite(source, dest)
+        return dest.name
+
     dest = assets_dir / source.name
     # 若檔名重複，加上數字後綴
     if dest.exists() and not dest.samefile(source):

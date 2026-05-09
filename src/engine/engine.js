@@ -175,8 +175,12 @@
       var op = gs.dialogue_box_opacity != null ? gs.dialogue_box_opacity : 0.85;
       els.dialogueBox.style.backgroundColor = _hexToRgba(hex, op);
     }
-    if (els.dialogueText && gs.dialogue_text_color) {
-      els.dialogueText.style.color = gs.dialogue_text_color;
+    if (gs.dialogue_text_color) {
+      // task.md #5/#10：套到 game-container，dialogue-box / quick-menu / history-panel
+      // 全部透過 color: inherit 跟上文字色
+      if (els.container) els.container.style.color = gs.dialogue_text_color;
+      if (els.dialogueBox) els.dialogueBox.style.color = gs.dialogue_text_color;
+      if (els.dialogueText) els.dialogueText.style.color = gs.dialogue_text_color;
     }
   }
 
@@ -290,6 +294,13 @@
   // ── 對話渲染 ──
 
   function showDialogue() {
+    // 從 END 畫面跳回任意對話：清掉 overlay、還原 dialogue / quick-menu
+    if (els.endScreen && els.endScreen.style.display !== "none") {
+      els.endScreen.style.display = "none";
+      els.dialogueBox.style.display = "";
+      if (els.quickMenu) els.quickMenu.style.display = "";
+    }
+
     var scene = scriptData.scenes[sceneIndex];
 
     if (!scene.dialogues || scene.dialogues.length === 0) {

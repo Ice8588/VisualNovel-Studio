@@ -66,6 +66,14 @@ class StageLaneWidget(QWidget):
     def _segments(self) -> list[StageSegment]:
         return self.scene.all_stage_lanes()[self.position]
 
+    def _font_size_px(self) -> int:
+        """task.md #12：自繪文字大小跟 QApplication 主 font；fallback 20。"""
+        sz = self.font().pixelSize()
+        if sz <= 0:
+            pt = self.font().pointSize()
+            sz = int(pt * 1.33) if pt > 0 else 20
+        return max(18, min(28, sz))
+
     def _update_height(self):
         self.setMinimumHeight(shared.idx_to_y(len(self.scene.dialogues)))
 
@@ -106,6 +114,15 @@ class StageLaneWidget(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         p.fillRect(self.rect(), shared.BG_DARK)
 
+        # task.md #6 cell hover：滑鼠在 lane 內 + 該列無 segment 時，先畫高亮方塊
+        if (
+            self._mouse_inside
+            and self._cursor_idx is not None
+            and self._drag is None
+            and not self._row_has_segment(self._cursor_idx)
+        ):
+            self._paint_hover_cell(p, self._cursor_idx)
+
         # 列分隔線
         p.setPen(QPen(shared.GRID_LINE, 1))
         for idx in range(len(self.scene.dialogues) + 1):
@@ -139,6 +156,26 @@ class StageLaneWidget(QWidget):
             if s.start <= idx <= s.end:
                 return True
         return False
+
+    def _paint_hover_cell(self, p: QPainter, idx: int) -> None:
+        """task.md #6：在 hover row 上畫半透明 accent 方塊（cell-level 高亮）。"""
+        from src.ui import palette as _pal
+        bg = shared.BG_DARK
+        fg = _pal.contrast_text(bg)
+        cell = QColor(fg)
+        cell.setAlpha(28)
+        top = shared.idx_to_y(idx)
+        rect = QRect(4, top + 2, self.width() - 8, shared.ROW_HEIGHT - 4)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(cell)
+        p.drawRoundedRect(rect, 5, 5)
+
+    def _plus_hit_rect(self, idx: int) -> QRect:
+        """回傳「+」icon 命中區（圓 + 些微緩衝）。"""
+        cx = self.width() // 2
+        cy = shared.idx_to_y(idx) + shared.ROW_HEIGHT // 2
+        radius = 13
+        return QRect(cx - radius, cy - radius, radius * 2, radius * 2)
 
     def _paint_hover_plus(self, p: QPainter, idx: int) -> None:
         """於指定 row 中央畫圓形「+」icon；色用 BG 反色（contrast_text）。"""
@@ -194,7 +231,7 @@ class StageLaneWidget(QWidget):
         fg = palette.contrast_text(base)
 
         # Line 1：character name（粗體）
-        name_font = QFont("sans"); name_font.setPixelSize(18); name_font.setBold(True)
+        name_font = shared.ui_sans_font(self._font_size_px(), bold=True, base=self.font())
         p.setFont(name_font)
         p.setPen(fg)
         name_rect = QRect(rect.x() + 6, rect.y() + y_offset, rect.width() - 12, line_h)
@@ -202,13 +239,11 @@ class StageLaneWidget(QWidget):
         name = metrics.elidedText(visible[0], Qt.TextElideMode.ElideRight, name_rect.width())
         p.drawText(name_rect, Qt.AlignmentFlag.AlignCenter, name)
 
-        # Line 2+：details（regular，alpha 220）
+        # Line 2+：details（regular；task.md #5 字完全不透明）
         if len(visible) > 1:
-            detail_font = QFont("sans"); detail_font.setPixelSize(18)
+            detail_font = shared.ui_sans_font(self._font_size_px(), base=self.font())
             p.setFont(detail_font)
-            detail_color = QColor(fg)
-            detail_color.setAlpha(220)
-            p.setPen(detail_color)
+            p.setPen(fg)
             detail_rect = QRect(
                 rect.x() + 6,
                 rect.y() + y_offset + line_h,
@@ -252,6 +287,15 @@ class StageLaneWidget(QWidget):
         if ev.button() != Qt.MouseButton.LeftButton:
             return
         self.setFocus()  # 收到 keyPress (Delete)
+        # task.md #6：點擊到「+」icon → 直接走新增 segment
+        if (
+            self._mouse_inside
+            and self._cursor_idx is not None
+            and not self._row_has_segment(self._cursor_idx)
+            and self._plus_hit_rect(self._cursor_idx).contains(ev.pos())
+        ):
+            self._create_segment_at_y(ev.pos().y())
+            return
         seg, mode = self._hit_segment(ev.pos().y())
         if seg is None:
             self._selected = None
@@ -269,13 +313,17 @@ class StageLaneWidget(QWidget):
         seg, _ = self._hit_segment(ev.pos().y())
         if seg is not None:
             return  # 已經在 segment 上
+        self._create_segment_at_y(ev.pos().y())
+
+    def _create_segment_at_y(self, y: int) -> None:
+        """在指定 y 座標新增 stage segment（單擊「+」、雙擊空白共用）。"""
         if not self.scene.dialogues:
             return
         # Bug B fix：沒有任何角色時不新增 ghost segment（character 必填、不能是不存在的名字）
         if not self._character_colors:
             return
         max_idx = len(self.scene.dialogues) - 1
-        cur = shared.y_to_idx(ev.pos().y(), max_idx)
+        cur = shared.y_to_idx(y, max_idx)
         end = min(cur + 1, max_idx)
         # 避免與既有 segment 重疊（lane 內 mutual exclusive）
         for s in self._segments():

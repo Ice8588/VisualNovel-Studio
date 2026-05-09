@@ -210,21 +210,27 @@ class LeftPanel(QWidget):
         scene_props = QWidget()
         props_layout = QVBoxLayout()
         props_layout.setContentsMargins(0, 0, 0, 0)
+        # 兩列共用 label 寬度，確保 ComboBox 左緣對齊
+        _LABEL_W = 56
         bg_row = QHBoxLayout()
-        bg_row.addWidget(QLabel("背景:"))
+        _bg_lbl = QLabel("背景:")
+        _bg_lbl.setFixedWidth(_LABEL_W)
+        bg_row.addWidget(_bg_lbl)
         self.combo_background = ComboBox()
         self.combo_background.addItem(NONE_LABEL)
         bg_row.addWidget(self.combo_background, 1)
-        # 匯入按鈕：不設 fixed 寬，讓字體放大時不裁切
-        self.btn_import_bg = PushButton("匯入")
+        # 上傳按鈕：不設 fixed 寬，讓字體放大時不裁切
+        self.btn_import_bg = PushButton("上傳")
         bg_row.addWidget(self.btn_import_bg)
         props_layout.addLayout(bg_row)
         bgm_row = QHBoxLayout()
-        bgm_row.addWidget(QLabel("BGM:"))
+        _bgm_lbl = QLabel("BGM:")
+        _bgm_lbl.setFixedWidth(_LABEL_W)
+        bgm_row.addWidget(_bgm_lbl)
         self.combo_bgm = ComboBox()
         self.combo_bgm.addItem(NONE_LABEL)
         bgm_row.addWidget(self.combo_bgm, 1)
-        self.btn_import_music = PushButton("匯入")
+        self.btn_import_music = PushButton("上傳")
         bgm_row.addWidget(self.btn_import_music)
         props_layout.addLayout(bgm_row)
         # Phase 2：場景層級的特效 ComboBox 移除，改由特效 timeline 拖 segment 管理。
@@ -261,9 +267,7 @@ class LeftPanel(QWidget):
         # 服裝列表
         char_props_layout.addWidget(StrongBodyLabel("服裝："))
         self._char_costume_list = ListWidget()
-        _cl_font = self._char_costume_list.font()
-        _cl_font.setPixelSize(18)
-        self._char_costume_list.setFont(_cl_font)
+        # task.md #12：跟 QApplication.font，不硬編碼 18px
         self._char_costume_list.setFixedHeight(70)
         char_props_layout.addWidget(self._char_costume_list)
         btn_edit_costume = QPushButton("編輯服裝…")

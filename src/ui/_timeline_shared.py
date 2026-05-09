@@ -5,9 +5,36 @@
 維持既有 `from src.ui import _timeline_shared as shared; shared.BG_DARK` 用法。
 """
 
-from PyQt6.QtGui import QColor
+from PyQt6.QtGui import QColor, QFont
 
 from src.ui import palette as _palette
+
+
+# 中文無襯線字體 fallback 鏈：Windows / macOS / Linux 各自挑能用的
+_SANS_FAMILIES = [
+    "Microsoft JhengHei UI",
+    "Microsoft JhengHei",
+    "PingFang TC",
+    "Noto Sans CJK TC",
+    "Noto Sans TC",
+    "sans-serif",
+]
+
+
+def ui_sans_font(px: int | None = None, bold: bool = False, base: QFont | None = None) -> QFont:
+    """task.md #5：明示中文無襯線 fallback chain。
+
+    Args:
+        px: 指定 pixelSize；None 代表沿用 base.pixelSize() / Qt 預設。
+        bold: 是否粗體。
+        base: 來源 QFont（通常傳 widget.font()）；用於繼承 QApplication 的 font_size。
+    """
+    f = QFont(base) if base is not None else QFont()
+    f.setFamilies(_SANS_FAMILIES)
+    if px is not None:
+        f.setPixelSize(px)
+    f.setBold(bold)
+    return f
 
 ROW_HEIGHT = 52
 GUTTER_WIDTH = 36

@@ -354,10 +354,31 @@ def apply_theme(app: QApplication, theme_name: str, font_size: int) -> None:
 
 
 def apply_custom_overrides(app: QApplication, theme_name: str, font_size: int) -> None:
-    """為原生 Qt 元件（非 qfluentwidgets）補充樣式；顏色由 palette 注入。"""
+    """為原生 Qt 元件（非 qfluentwidgets）補充樣式；顏色由 palette 注入。
+
+    task.md #12：把 font_size 也下到 QApplication.font()，自繪 widget（dialogue_list /
+    stage_panel / effect_timeline）以 self.font().pixelSize() 取得，自然繼承。
+    """
     subs = _palette.qss_substitutions(_palette.current())
     subs["font_size"] = font_size
     app.setStyleSheet(_QSS_TEMPLATE.format(**subs))
+
+    # task.md #12：QApplication 主 font 同步，讓自繪 widget 透過 self.font() 跟上
+    app_font = QFont()
+    app_font.setFamilies([
+        "Microsoft JhengHei UI",
+        "Microsoft JhengHei",
+        "PingFang TC",
+        "Noto Sans CJK TC",
+        "Noto Sans TC",
+        "sans-serif",
+    ])
+    app_font.setPixelSize(font_size)
+    app.setFont(app_font)
+    # 觸發自繪 widget 重畫（QSS 變動會自動 polish QPushButton / QLabel；但
+    # paintEvent-based widget 需手動 update 才能套新 font size）
+    for w in app.allWidgets():
+        w.update()
 
 
 def save_preference(theme_name: str, font_size: int) -> None:
@@ -368,13 +389,13 @@ def save_preference(theme_name: str, font_size: int) -> None:
 
 
 def load_preference() -> tuple[str, int]:
-    """從 QSettings 讀取主題偏好，預設 Ivory Titanium 18px；夾至 [18, 28]。"""
+    """從 QSettings 讀取主題偏好，預設 Ivory Titanium 20px；夾至 [18, 22]（task.md #12）。"""
     settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
     theme = settings.value("theme", "ivory")
     try:
-        font_size = int(settings.value("font_size", 18))
+        font_size = int(settings.value("font_size", 20))
     except (TypeError, ValueError):
-        font_size = 18
-    # 全專案字體 ≥ 18px（任務 #2）；上限 28 避免元件裁切
-    font_size = max(18, min(28, font_size))
+        font_size = 20
+    # task.md #12：UI 字體範圍 18~22px、預設 20px
+    font_size = max(18, min(22, font_size))
     return theme, font_size

@@ -48,6 +48,7 @@ class EffectLaneWidget(QWidget):
         self._selected: EffectSegment | None = None
         self._drag: _DragState | None = None
         self._drag_dirty: bool = False
+        self._mouse_inside: bool = False  # task.md #6 hover + icon
         self.setMouseTracking(True)
         self.setMinimumWidth(shared.LANE_WIDTH)
         self.setFixedWidth(shared.LANE_WIDTH)
@@ -56,6 +57,13 @@ class EffectLaneWidget(QWidget):
 
     def _update_height(self):
         self.setMinimumHeight(shared.idx_to_y(len(self.scene.dialogues)))
+
+    def _font_size_px(self) -> int:
+        sz = self.font().pixelSize()
+        if sz <= 0:
+            pt = self.font().pointSize()
+            sz = int(pt * 1.33) if pt > 0 else 20
+        return max(18, min(28, sz))
 
     def set_cursor(self, idx: int | None):
         if idx == self._cursor_idx:
@@ -78,6 +86,15 @@ class EffectLaneWidget(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         p.fillRect(self.rect(), shared.BG_DARK)
 
+        # task.md #6 cell hover：滑鼠在 lane 內 + 該列無 segment 時，先畫高亮方塊
+        if (
+            self._mouse_inside
+            and self._cursor_idx is not None
+            and self._drag is None
+            and not self._row_has_segment(self._cursor_idx)
+        ):
+            self._paint_hover_cell(p, self._cursor_idx)
+
         p.setPen(QPen(shared.GRID_LINE, 1))
         for idx in range(len(self.scene.dialogues) + 1):
             y = shared.idx_to_y(idx)
@@ -86,12 +103,64 @@ class EffectLaneWidget(QWidget):
         for seg in self.track.segments:
             self._paint_segment(p, seg)
 
+        # task.md #6 hover「+」icon
+        if (
+            self._mouse_inside
+            and self._cursor_idx is not None
+            and self._drag is None
+            and not self._row_has_segment(self._cursor_idx)
+        ):
+            self._paint_hover_plus(p, self._cursor_idx)
+
         if self._cursor_idx is not None:
             y = shared.idx_to_y(self._cursor_idx) + shared.ROW_HEIGHT // 2
             p.setPen(QPen(shared.CURSOR_LINE, 1, Qt.PenStyle.DashLine))
             p.drawLine(0, y, self.width(), y)
 
         p.end()
+
+    def _row_has_segment(self, idx: int) -> bool:
+        for s in self.track.segments:
+            if s.start <= idx <= s.end:
+                return True
+        return False
+
+    def _paint_hover_cell(self, p: QPainter, idx: int) -> None:
+        from src.ui import palette as _pal
+        bg = shared.BG_DARK
+        fg = _pal.contrast_text(bg)
+        cell = QColor(fg)
+        cell.setAlpha(28)
+        top = shared.idx_to_y(idx)
+        rect = QRect(4, top + 2, self.width() - 8, shared.ROW_HEIGHT - 4)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(cell)
+        p.drawRoundedRect(rect, 5, 5)
+
+    def _plus_hit_rect(self, idx: int) -> QRect:
+        cx = self.width() // 2
+        cy = shared.idx_to_y(idx) + shared.ROW_HEIGHT // 2
+        radius = 13
+        return QRect(cx - radius, cy - radius, radius * 2, radius * 2)
+
+    def _paint_hover_plus(self, p: QPainter, idx: int) -> None:
+        from src.ui import palette as _pal
+        cx = self.width() // 2
+        cy = shared.idx_to_y(idx) + shared.ROW_HEIGHT // 2
+        radius = 11
+        bg = shared.BG_DARK
+        fg = _pal.contrast_text(bg)
+        p.setPen(Qt.PenStyle.NoPen)
+        bg_disk = QColor(fg)
+        bg_disk.setAlpha(46)
+        p.setBrush(bg_disk)
+        p.drawEllipse(cx - radius, cy - radius, radius * 2, radius * 2)
+        pen = QPen(fg, 2)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(pen)
+        arm = 5
+        p.drawLine(cx - arm, cy, cx + arm, cy)
+        p.drawLine(cx, cy - arm, cx, cy + arm)
 
     def _seg_rect(self, seg: EffectSegment) -> QRect:
         top, bottom = shared.idx_range_to_rect_y(seg.start, seg.end)
@@ -114,7 +183,7 @@ class EffectLaneWidget(QWidget):
         from src.ui import palette as _pal
         fg = _pal.contrast_text(base)
         p.setPen(fg)
-        f = QFont("sans"); f.setPixelSize(18); f.setBold(True)
+        f = shared.ui_sans_font(self._font_size_px(), bold=True, base=self.font())
         p.setFont(f)
         metrics = QFontMetrics(p.font())
         label = metrics.elidedText(seg.effect_type, Qt.TextElideMode.ElideRight, rect.width() - 12)
@@ -168,10 +237,29 @@ class EffectLaneWidget(QWidget):
             return seg, "move"
         return None, ""
 
+    def enterEvent(self, ev) -> None:
+        self._mouse_inside = True
+        self.update()
+        super().enterEvent(ev)
+
+    def leaveEvent(self, ev) -> None:
+        self._mouse_inside = False
+        self.update()
+        super().leaveEvent(ev)
+
     def mousePressEvent(self, ev: QMouseEvent):
         if ev.button() != Qt.MouseButton.LeftButton:
             return
         self.setFocus()  # 收到 keyPress (Delete)
+        # task.md #6：點擊「+」icon → 新增 segment
+        if (
+            self._mouse_inside
+            and self._cursor_idx is not None
+            and not self._row_has_segment(self._cursor_idx)
+            and self._plus_hit_rect(self._cursor_idx).contains(ev.pos())
+        ):
+            self._create_effect_at_y(ev.pos().y())
+            return
         seg, mode = self._hit_segment(ev.pos())
         if seg is None:
             self._selected = None
@@ -189,12 +277,15 @@ class EffectLaneWidget(QWidget):
         seg, _ = self._hit_segment(ev.pos())
         if seg is not None:
             return
+        self._create_effect_at_y(ev.pos().y())
+
+    def _create_effect_at_y(self, y: int) -> None:
+        """task.md #6：單擊「+」、雙擊空白共用的新增邏輯。"""
         if not self.scene.dialogues:
             return
         max_idx = len(self.scene.dialogues) - 1
-        cur = shared.y_to_idx(ev.pos().y(), max_idx)
+        cur = shared.y_to_idx(y, max_idx)
         end = min(cur + 1, max_idx)
-        # 互斥檢查：與既有任何 segment 重疊就不新增
         for s in self.track.segments:
             if not (end < s.start or cur > s.end):
                 return
@@ -221,6 +312,8 @@ class EffectLaneWidget(QWidget):
                 self._cursor_idx = cur_idx
                 self.cursor_changed.emit(cur_idx)
                 self.update()
+            else:
+                self.update()  # 重畫 hover + icon
             return
 
         max_idx = len(self.scene.dialogues) - 1
