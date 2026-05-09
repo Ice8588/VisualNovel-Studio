@@ -228,6 +228,20 @@ QPlainTextEdit, QTextEdit {{
     selection-color: {accent_text};
     font-size: {font_size}px;
 }}
+QListWidget, QListView {{
+    background-color: {input_bg};
+    color: {text_primary};
+    border: 1px solid {border};
+    font-size: {font_size}px;
+}}
+QListWidget::item, QListView::item {{
+    padding: 6px 8px;
+    font-size: {font_size}px;
+}}
+QListWidget::item:selected, QListView::item:selected {{
+    background-color: {accent};
+    color: {accent_text};
+}}
 QTreeWidget {{
     background-color: {input_bg};
     color: {text_primary};

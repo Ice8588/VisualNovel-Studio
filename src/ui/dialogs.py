@@ -604,6 +604,7 @@ class CostumeEditorDialog(QDialog):
         left_layout.setContentsMargins(0, 0, 4, 0)
         left_layout.addWidget(StrongBodyLabel("服裝："))
         self._costume_list = ListWidget()
+        _f = self._costume_list.font(); _f.setPixelSize(18); self._costume_list.setFont(_f)
         self._costume_list.setMinimumWidth(140)
         left_layout.addWidget(self._costume_list)
         cos_btns = QHBoxLayout()
@@ -624,6 +625,7 @@ class CostumeEditorDialog(QDialog):
         right_layout.setContentsMargins(4, 0, 0, 0)
         right_layout.addWidget(StrongBodyLabel("立繪差分（可拖曳圖片匯入；雙擊標籤可改名）："))
         self._expr_list = ListWidget()
+        _f = self._expr_list.font(); _f.setPixelSize(18); self._expr_list.setFont(_f)
         self._expr_list.setIconSize(QSize(48, 48))
         self._expr_list.setMinimumWidth(200)
         self._expr_list.setEditTriggers(
