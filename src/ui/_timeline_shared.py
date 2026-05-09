@@ -15,6 +15,10 @@ LANE_WIDTH = 110
 EDGE_HIT = 7
 DRAG_THRESHOLD = 5
 
+# 對話列三欄寬度（任務 #9）：索引｜角色｜台詞
+COL_INDEX_W = 50         # 包含索引數字 + ▶/▒ icon
+COL_CHARACTER_W = 110    # 角色 chip 區（足夠常見 3-4 字角色名 + padding）
+
 # 名稱 → palette 屬性的對照（給 module-level __getattr__）
 _FORWARD_MAP = {
     "BG_DARK":           "bg",

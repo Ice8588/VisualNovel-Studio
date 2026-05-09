@@ -133,61 +133,81 @@ class DialogueColumn(QWidget):
             p.setPen(QPen(shared.CURSOR_LINE, 2))
             p.drawRoundedRect(inner.adjusted(1, 1, -1, -1), 6, 6)
 
-        # Gutter 索引
-        p.setPen(shared.TEXT_MUTED)
-        p.setFont(QFont("sans", 9))
-        p.drawText(
-            QRect(inner.x() + 2, inner.y(), 24, inner.height()),
-            Qt.AlignmentFlag.AlignCenter,
-            str(idx + 1),
-        )
+        # 三欄區塊邊界（任務 #9：索引｜角色｜台詞 顯式分欄）
+        idx_col_x = inner.x()
+        char_col_x = idx_col_x + shared.COL_INDEX_W
+        text_col_x = char_col_x + shared.COL_CHARACTER_W
 
-        # 類型 icon（▶ 對話 / ▒ 旁白）
+        # 欄分隔線（垂直細線，跟主題感知）
+        p.setPen(QPen(shared.GRID_LINE, 1))
+        p.drawLine(char_col_x, inner.y() + 4, char_col_x, inner.bottom() - 4)
+        p.drawLine(text_col_x, inner.y() + 4, text_col_x, inner.bottom() - 4)
+
+        # ── 索引欄：數字 + 類型 icon（▶ 對話 / ▒ 旁白）──
+        idx_text = str(idx + 1)
         icon = "▶" if not is_narration else "▒"
+        idx_font = QFont("sans"); idx_font.setPixelSize(14)
+        p.setFont(idx_font)
+        # 數字置左半，icon 置右半
+        half = shared.COL_INDEX_W // 2
+        p.setPen(shared.TEXT_MUTED)
+        p.drawText(
+            QRect(idx_col_x, inner.y(), half, inner.height()),
+            Qt.AlignmentFlag.AlignCenter, idx_text,
+        )
         p.setPen(shared.TEXT_MUTED if is_narration else shared.TEXT_PRIMARY)
         p.drawText(
-            QRect(inner.x() + 24, inner.y(), 16, inner.height()),
-            Qt.AlignmentFlag.AlignCenter,
-            icon,
+            QRect(idx_col_x + half, inner.y(), half, inner.height()),
+            Qt.AlignmentFlag.AlignCenter, icon,
         )
 
-        text_x = inner.x() + 46
-        text_right = inner.right() - 4
-
-        # 角色 chip
+        # ── 角色欄：chip 居中 ──
         if dlg.character:
             chip_color = shared.character_color(
                 dlg.character, self._character_colors.get(dlg.character)
             )
-            metrics = QFontMetrics(QFont("sans", 9, QFont.Weight.Bold))
+            chip_font = QFont("sans"); chip_font.setPixelSize(14); chip_font.setBold(True)
+            metrics = QFontMetrics(chip_font)
             label = dlg.character
-            chip_w = metrics.horizontalAdvance(label) + 14
-            chip_rect = QRect(text_x, inner.y() + 6, chip_w, 18)
+            chip_w = min(
+                shared.COL_CHARACTER_W - 12,
+                metrics.horizontalAdvance(label) + 16,
+            )
+            chip_h = 22
+            chip_rect = QRect(
+                char_col_x + (shared.COL_CHARACTER_W - chip_w) // 2,
+                inner.y() + (inner.height() - chip_h) // 2,
+                chip_w, chip_h,
+            )
             p.setBrush(chip_color)
             p.setPen(Qt.PenStyle.NoPen)
-            p.drawRoundedRect(chip_rect, 9, 9)
-            p.setFont(QFont("sans", 9, QFont.Weight.Bold))
+            p.drawRoundedRect(chip_rect, 11, 11)
             from src.ui import palette as _pal
+            p.setFont(chip_font)
             p.setPen(_pal.contrast_text(chip_color))
-            p.drawText(chip_rect, Qt.AlignmentFlag.AlignCenter, label)
-            text_x += chip_w + 6
+            elided_lbl = metrics.elidedText(label, Qt.TextElideMode.ElideRight, chip_w - 8)
+            p.drawText(chip_rect, Qt.AlignmentFlag.AlignCenter, elided_lbl)
 
-        # 文字效果 chip（右側貼邊）
+        # ── 台詞欄 ──
+        text_x = text_col_x + 8
+        text_right = inner.right() - 4
+
+        # 文字效果 chip（右側貼邊；在台詞欄內）
         if dlg.text_effects:
-            label = " ".join(f"·{e}" for e in dlg.text_effects)
-            metrics = QFontMetrics(QFont("sans", 8))
-            chip_w = metrics.horizontalAdvance(label) + 10
-            chip_rect = QRect(text_right - chip_w, inner.y() + 6, chip_w, 16)
+            eff_label = " ".join(f"·{e}" for e in dlg.text_effects)
+            eff_font = QFont("sans"); eff_font.setPixelSize(13)
+            metrics = QFontMetrics(eff_font)
+            chip_w = metrics.horizontalAdvance(eff_label) + 10
+            chip_rect = QRect(text_right - chip_w, inner.y() + 6, chip_w, 18)
             chip_bg = QColor(0, 0, 0, 30) if shared.is_light() else QColor(255, 255, 255, 30)
             p.setBrush(chip_bg)
             p.setPen(Qt.PenStyle.NoPen)
             p.drawRoundedRect(chip_rect, 8, 8)
-            p.setFont(QFont("sans", 8))
+            p.setFont(eff_font)
             p.setPen(shared.TEXT_MUTED)
-            p.drawText(chip_rect, Qt.AlignmentFlag.AlignCenter, label)
+            p.drawText(chip_rect, Qt.AlignmentFlag.AlignCenter, eff_label)
             text_right -= chip_w + 6
 
-        # 文字內容：以整個 inner 高度作為垂直置中範圍（chip 在側邊不在上方）
         text_rect = QRect(text_x, inner.y(), text_right - text_x, inner.height())
         # 全專案字體規範：台詞主文 ≥ 18px
         main_font = QFont("sans")
@@ -206,22 +226,41 @@ class DialogueColumn(QWidget):
         p.setPen(QPen(shared.DROP_INDICATOR, 2, Qt.PenStyle.DashLine))
         p.drawRoundedRect(inner, 6, 6)
 
-        # gutter idx
+        # 三欄分隔線（虛線淡色）
+        char_col_x = inner.x() + shared.COL_INDEX_W
+        text_col_x = char_col_x + shared.COL_CHARACTER_W
+        p.setPen(QPen(shared.GRID_LINE, 1))
+        p.drawLine(char_col_x, inner.y() + 4, char_col_x, inner.bottom() - 4)
+        p.drawLine(text_col_x, inner.y() + 4, text_col_x, inner.bottom() - 4)
+
+        # 索引欄
+        idx_font = QFont("sans"); idx_font.setPixelSize(14); idx_font.setBold(True)
+        p.setFont(idx_font)
         p.setPen(shared.DROP_INDICATOR)
-        p.setFont(QFont("sans", 9, QFont.Weight.Bold))
         p.drawText(
-            QRect(inner.x() + 2, inner.y(), 24, inner.height()),
+            QRect(inner.x(), inner.y(), shared.COL_INDEX_W, inner.height()),
             Qt.AlignmentFlag.AlignCenter,
             str(display_idx + 1),
         )
 
-        # 文字（半透明）— 同樣 ≥ 18px
+        # 角色欄（若有）
+        if dlg.character:
+            ch_font = QFont("sans"); ch_font.setPixelSize(14)
+            p.setFont(ch_font)
+            p.drawText(
+                QRect(char_col_x, inner.y(), shared.COL_CHARACTER_W, inner.height()),
+                Qt.AlignmentFlag.AlignCenter,
+                dlg.character,
+            )
+
+        # 台詞欄（半透明）— ≥ 18px
         p.setOpacity(0.7)
         ghost_font = QFont("sans")
         ghost_font.setPixelSize(18)
         p.setFont(ghost_font)
         p.setPen(shared.TEXT_PRIMARY)
-        text_rect = QRect(inner.x() + 30, inner.y(), inner.width() - 36, inner.height())
+        text_rect = QRect(text_col_x + 8, inner.y(),
+                          inner.right() - text_col_x - 12, inner.height())
         metrics = QFontMetrics(p.font())
         label = metrics.elidedText(dlg.text, Qt.TextElideMode.ElideRight, text_rect.width())
         p.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, label)

@@ -336,9 +336,8 @@ class CenterPanel(QWidget):
             if self._project:
                 self.stage_panel.set_characters(self._project.characters)
 
-            # header 們
-            dialogue_header = QLabel("對話")
-            dialogue_header.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            # header 們：對話列三欄（索引 / 角色 / 台詞），寬度跟 dialogue_list 一致
+            dialogue_header = self._build_dialogue_header()
             self._dialogue_header = dialogue_header
             self._apply_dialogue_header_style()
             stage_header = StageHeader()
@@ -508,13 +507,44 @@ class CenterPanel(QWidget):
         if self._project:
             self.segment_editor.set_project(self._project)
 
+    def _build_dialogue_header(self) -> QWidget:
+        """三欄 header（索引 / 角色 / 台詞），寬度對齊 dialogue_list 的卡片內三欄。"""
+        h = QWidget()
+        h.setObjectName("dialogueHeader")
+        lay = QHBoxLayout(h)
+        # 卡片有 6px 外邊距 + 4px 內邊距，total left padding ~6px。對齊
+        lay.setContentsMargins(6, 0, 6, 0)
+        lay.setSpacing(0)
+        self._dlg_header_labels: list[QLabel] = []
+        # 索引欄
+        l_idx = QLabel("索引")
+        l_idx.setFixedWidth(shared.COL_INDEX_W)
+        l_idx.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._dlg_header_labels.append(l_idx)
+        lay.addWidget(l_idx)
+        # 角色欄
+        l_char = QLabel("角色")
+        l_char.setFixedWidth(shared.COL_CHARACTER_W)
+        l_char.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._dlg_header_labels.append(l_char)
+        lay.addWidget(l_char)
+        # 台詞欄（伸縮）
+        l_text = QLabel("台詞")
+        l_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._dlg_header_labels.append(l_text)
+        lay.addWidget(l_text, 1)
+        return h
+
     def _apply_dialogue_header_style(self) -> None:
         if not getattr(self, "_dialogue_header", None):
             return
         bg = shared.BG_PANEL.name()
         fg = shared.TEXT_PRIMARY.name()
+        # 父 widget bg；子 label 文字色 + 粗體
         self._dialogue_header.setStyleSheet(
-            f"color:{fg}; background:{bg}; padding:6px 0; font-weight:bold;"
+            f"QWidget#dialogueHeader {{ background:{bg}; }} "
+            f"QWidget#dialogueHeader QLabel {{ color:{fg}; padding:6px 0; "
+            f"font-weight:bold; background:transparent; }}"
         )
 
     def _apply_workspace_bg(self) -> None:
