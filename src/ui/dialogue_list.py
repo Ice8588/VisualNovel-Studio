@@ -189,7 +189,10 @@ class DialogueColumn(QWidget):
 
         # 文字內容：以整個 inner 高度作為垂直置中範圍（chip 在側邊不在上方）
         text_rect = QRect(text_x, inner.y(), text_right - text_x, inner.height())
-        p.setFont(QFont("sans", 10))
+        # 全專案字體規範：台詞主文 ≥ 18px
+        main_font = QFont("sans")
+        main_font.setPixelSize(18)
+        p.setFont(main_font)
         p.setPen(shared.TEXT_PRIMARY if not is_narration else shared.TEXT_MUTED)
         metrics = QFontMetrics(p.font())
         elided = metrics.elidedText(dlg.text, Qt.TextElideMode.ElideRight, text_rect.width())
@@ -212,9 +215,11 @@ class DialogueColumn(QWidget):
             str(display_idx + 1),
         )
 
-        # 文字（半透明）
+        # 文字（半透明）— 同樣 ≥ 18px
         p.setOpacity(0.7)
-        p.setFont(QFont("sans", 10))
+        ghost_font = QFont("sans")
+        ghost_font.setPixelSize(18)
+        p.setFont(ghost_font)
         p.setPen(shared.TEXT_PRIMARY)
         text_rect = QRect(inner.x() + 30, inner.y(), inner.width() - 36, inner.height())
         metrics = QFontMetrics(p.font())

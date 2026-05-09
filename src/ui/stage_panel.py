@@ -56,6 +56,7 @@ class StageLaneWidget(QWidget):
         self._drag_dirty: bool = False  # mouseMove 期間有實際變動才在 release 時 emit committed
         self._character_colors: dict[str, str] = {}
         self._characters: list[Character] = []
+        self._mouse_inside: bool = False  # #10 hover + icon 用
         self.setMouseTracking(True)
         self.setMinimumWidth(shared.LANE_WIDTH)
         self.setFixedWidth(shared.LANE_WIDTH)
@@ -115,6 +116,15 @@ class StageLaneWidget(QWidget):
         for seg in self._segments():
             self._paint_segment(p, seg)
 
+        # #10 hover「+」icon：滑鼠在 lane 內 + 該列無 segment 時，於列中央畫加號
+        if (
+            self._mouse_inside
+            and self._cursor_idx is not None
+            and self._drag is None
+            and not self._row_has_segment(self._cursor_idx)
+        ):
+            self._paint_hover_plus(p, self._cursor_idx)
+
         # 游標線
         if self._cursor_idx is not None:
             y = shared.idx_to_y(self._cursor_idx) + shared.ROW_HEIGHT // 2
@@ -122,6 +132,35 @@ class StageLaneWidget(QWidget):
             p.drawLine(0, y, self.width(), y)
 
         p.end()
+
+    def _row_has_segment(self, idx: int) -> bool:
+        """idx 是否已被某 segment 占用（含端點）。"""
+        for s in self._segments():
+            if s.start <= idx <= s.end:
+                return True
+        return False
+
+    def _paint_hover_plus(self, p: QPainter, idx: int) -> None:
+        """於指定 row 中央畫圓形「+」icon；色用 BG 反色（contrast_text）。"""
+        from src.ui import palette as _pal
+        cx = self.width() // 2
+        cy = shared.idx_to_y(idx) + shared.ROW_HEIGHT // 2
+        radius = 11
+        bg = shared.BG_DARK
+        fg = _pal.contrast_text(bg)
+        # 半透明圓底（讓使用者一眼看到「點這裡會新增」）
+        p.setPen(Qt.PenStyle.NoPen)
+        bg_disk = QColor(fg)
+        bg_disk.setAlpha(46)
+        p.setBrush(bg_disk)
+        p.drawEllipse(cx - radius, cy - radius, radius * 2, radius * 2)
+        # 「+」字符（粗線條：兩條短線比 setFont 顯眼）
+        pen = QPen(fg, 2)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(pen)
+        arm = 5
+        p.drawLine(cx - arm, cy, cx + arm, cy)
+        p.drawLine(cx, cy - arm, cx, cy + arm)
 
     def _paint_segment(self, p: QPainter, seg: StageSegment):
         top, bottom = shared.idx_range_to_rect_y(seg.start, seg.end)
@@ -253,6 +292,16 @@ class StageLaneWidget(QWidget):
         self.segment_selected.emit(new_seg)
         self.update()
 
+    def enterEvent(self, ev) -> None:
+        self._mouse_inside = True
+        self.update()
+        super().enterEvent(ev)
+
+    def leaveEvent(self, ev) -> None:
+        self._mouse_inside = False
+        self.update()
+        super().leaveEvent(ev)
+
     def mouseMoveEvent(self, ev: QMouseEvent):
         if self._drag is None:
             seg, mode = self._hit_segment(ev.pos().y())
@@ -266,6 +315,9 @@ class StageLaneWidget(QWidget):
             if cur_idx != self._cursor_idx:
                 self._cursor_idx = cur_idx
                 self.cursor_changed.emit(cur_idx)
+                self.update()
+            else:
+                # 同一列移動：仍要 update 以重畫 hover + icon（_mouse_inside 變化或鄰列）
                 self.update()
             return
 

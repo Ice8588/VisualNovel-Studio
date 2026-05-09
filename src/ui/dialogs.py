@@ -880,7 +880,7 @@ class GameSettingsDialog(QDialog):
         form.addRow("角色名稱大小 (px):", self._spin_name_font)
 
         self._spin_opacity = QDoubleSpinBox()
-        self._spin_opacity.setRange(0.5, 1.0)
+        self._spin_opacity.setRange(0.0, 1.0)
         self._spin_opacity.setSingleStep(0.05)
         self._spin_opacity.setDecimals(2)
         self._spin_opacity.setValue(self._gs.dialogue_box_opacity)

@@ -354,13 +354,13 @@ def save_preference(theme_name: str, font_size: int) -> None:
 
 
 def load_preference() -> tuple[str, int]:
-    """從 QSettings 讀取主題偏好，預設 Ivory Titanium 18px；上限夾至 28。"""
+    """從 QSettings 讀取主題偏好，預設 Ivory Titanium 18px；夾至 [18, 28]。"""
     settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
     theme = settings.value("theme", "ivory")
     try:
         font_size = int(settings.value("font_size", 18))
     except (TypeError, ValueError):
         font_size = 18
-    # UI 字體上限 28px（避免元件裁切）；低於 14 也視為不合理，夾回 14
-    font_size = max(14, min(28, font_size))
+    # 全專案字體 ≥ 18px（任務 #2）；上限 28 避免元件裁切
+    font_size = max(18, min(28, font_size))
     return theme, font_size

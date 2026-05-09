@@ -135,7 +135,7 @@ class CenterPanel(QWidget):
         toolbar.addSpacing(10)
         toolbar.addWidget(QLabel("透明度:"))
         self.spin_opacity = QDoubleSpinBox()
-        self.spin_opacity.setRange(0.5, 1.0)
+        self.spin_opacity.setRange(0.0, 1.0)  # 0% ~ 100%
         self.spin_opacity.setSingleStep(0.05)
         self.spin_opacity.setDecimals(2)
         self.spin_opacity.setValue(0.85)
