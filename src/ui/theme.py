@@ -289,6 +289,22 @@ QPushButton#hoverDeleteButton:hover {{
 }}
 QDialog {{
     background-color: {bg};
+    color: {text_primary};
+}}
+/* QMessageBox / QInputDialog / QFileDialog 是 QDialog 子類，但部分 native style
+   不繼承 QDialog 規則（Windows / Linux 預設 palette 介入）。明確指定確保
+   淺色主題下 bg / text 可讀。 */
+QMessageBox, QInputDialog, QFileDialog {{
+    background-color: {bg};
+    color: {text_primary};
+}}
+QMessageBox QLabel, QInputDialog QLabel, QFileDialog QLabel {{
+    color: {text_primary};
+}}
+QInputDialog QLineEdit, QFileDialog QLineEdit {{
+    background-color: {input_bg};
+    color: {text_primary};
+    border: 1px solid {border};
 }}
 QLabel#spritePreview {{
     border: 1px solid {border};
