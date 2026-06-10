@@ -329,11 +329,8 @@ class LeftPanel(QWidget):
             self._update_color_display(current)
 
     def set_asset_lists(self, backgrounds: list[str], music: list[str]) -> None:
-        """更新背景和 BGM 的 ComboBox 選項。"""
+        """更新背景和 BGM 的 ComboBox 選項，重建後以當前場景 model 值回填。"""
         self._updating = True
-
-        cur_bg = self.combo_background.currentText()
-        cur_bgm = self.combo_bgm.currentText()
 
         self.combo_background.clear()
         self.combo_background.addItem(NONE_LABEL)
@@ -343,12 +340,10 @@ class LeftPanel(QWidget):
         self.combo_bgm.addItem(NONE_LABEL)
         self.combo_bgm.addItems(music)
 
-        idx_bg = self.combo_background.findText(cur_bg)
-        self.combo_background.setCurrentIndex(max(0, idx_bg))
-        idx_bgm = self.combo_bgm.findText(cur_bgm)
-        self.combo_bgm.setCurrentIndex(max(0, idx_bgm))
-
         self._updating = False
+
+        # 選項重建後以當前場景 model 值回填（而非舊的 currentText），防呆
+        self._sync_props_to_scene()
 
     def get_current_scene_index(self) -> int:
         """取得目前選取的場景索引。"""

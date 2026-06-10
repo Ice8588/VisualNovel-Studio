@@ -371,6 +371,8 @@ class CenterPanel(QWidget):
         self.dialogue_list.selection_changed.connect(self._on_cursor_from_widget)
         # task.md #8：點 chip 改說話者 → 通知外層重載預覽 + 標 dirty
         self.dialogue_list.speaker_changed.connect(self._on_dialogue_speaker_changed)
+        # Task 6：刪除 / 編輯文字 / 插入 → refresh + 重載預覽 + 標 dirty
+        self.dialogue_list.content_changed.connect(self._on_dialogue_content_changed)
 
         # 拖端點 mouseMove 期間 segment_changed 連續觸發；不在此重載預覽，
         # 等到 segment_committed (mouseRelease / Delete / 雙擊新增) 才 reload。
@@ -395,6 +397,7 @@ class CenterPanel(QWidget):
                 ("cursor_changed", self._on_cursor_from_widget),
                 ("selection_changed", self._on_cursor_from_widget),
                 ("speaker_changed", self._on_dialogue_speaker_changed),
+                ("content_changed", self._on_dialogue_content_changed),
             )),
             (getattr(self, "stage_panel", None), (
                 ("cursor_changed", self._on_cursor_from_widget),
@@ -475,9 +478,10 @@ class CenterPanel(QWidget):
         self.project_changed.emit()
 
     def get_selected_dialogue_index(self) -> int | None:
-        # 對話卡片列目前無「選取」概念 → 回傳 None。
-        # Phase 3/5 加 inline 編輯時再把 _selected_idx 暴露出來。
-        return None
+        # Task 6：暴露 dialogue_list 的目前選取列，供「貼上文字」插入模式定位。
+        if not hasattr(self, "dialogue_list"):
+            return None
+        return self.dialogue_list._selected_idx
 
     def refresh(self) -> None:
         """外部觸發重新繪製三域 widget（資料未變結構、只需重繪）。"""
@@ -690,6 +694,17 @@ class CenterPanel(QWidget):
         """task.md #8：對話列說話者 chip 改變 → reload 預覽 + 標 dirty。"""
         if self._building:
             return
+        self._reload_preview_keep_position()
+        self.project_changed.emit()
+
+    def _on_dialogue_content_changed(self) -> None:
+        """Task 6：對話列內容變更（刪除 / 編輯文字 / 插入）→ refresh + reload 預覽 + 標 dirty。
+
+        列數可能變化，需 refresh() 重算三域高度（共用 Y 軸）。
+        """
+        if self._building:
+            return
+        self.refresh()
         self._reload_preview_keep_position()
         self.project_changed.emit()
 

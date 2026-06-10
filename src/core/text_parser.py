@@ -37,6 +37,14 @@ def _parse_docx(path: Path) -> list[str]:
 UNASSIGNED_LABEL = "(未選取)"
 
 
+def classify_line(text: str) -> str:
+    """單行分類：整行以「開頭、」結尾 → "dialogue"，否則 "narration"。
+
+    供 UI inline 編輯重判 type 重用（傳入已 strip 的文字）。
+    """
+    return "dialogue" if _is_dialogue_line(text) else "narration"
+
+
 def _classify_lines(lines: list[str]) -> list[Dialogue]:
     """逐行套用「」規則分類。空行跳過。「」行保留引號，角色設為未選取。"""
     result = []
@@ -44,7 +52,7 @@ def _classify_lines(lines: list[str]) -> list[Dialogue]:
         stripped = line.strip()
         if not stripped:
             continue
-        if _is_dialogue_line(stripped):
+        if classify_line(stripped) == "dialogue":
             result.append(Dialogue(type="dialogue", text=stripped, character=None))
         else:
             result.append(Dialogue(type="narration", text=stripped))

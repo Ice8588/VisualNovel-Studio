@@ -45,6 +45,40 @@
 
 ---
 
+## UX 走查修復紀錄（2026-06-11，fix/ux-audit）
+
+以 QTest 驅動腳本模擬真實使用者全功能走查（框架與逐步紀錄在 `build/uxtest/`，
+完整問題清單見 `build/uxtest/UX_REPORT.md`），證實 3 個 S0 + 3 個 S1 bug 並修復：
+
+- **編輯角色丟服裝/差分（資料遺失）**：`CharacterEditorDialog.get_character()` 原本一律重建
+  `[服裝1(單立繪)]`，編輯任何多服裝角色按 OK 即靜默毀資料；「儲存為角色卡」同路徑連帶只剩服裝1。
+  改三情境分支：編輯既有角色以 `deepcopy(_original.costumes)` 為基礎，只覆寫名稱/名牌色/預設立繪；
+  按「清除」立繪刻意不刪資料（寧可忽略清除也不無聲毀損）。
+- **MP4 被短 BGM 截斷（核心功能）**：`-shortest` + 單一 BGM 直接回傳原檔（不裁不補），
+  2 秒 BGM 會把 14.7 秒影片截成 2 秒且顯示「導出成功」。改為移除 `-shortest`、
+  一律 `-t {sum(concat durations)}` 控長（**BGM 不足補靜音、超長截斷、刻意不循環**）；
+  順帶修掉無 BGM 時末幀重複造成的 +2.3 秒尾巴，以及單 BGM `start>0`（首場景無 BGM）提早播放的偏移。
+  ffmpeg 指令組裝抽成 `_build_encode_cmd` 方法供單元測試。
+- **點角色欄拋 AttributeError**：qfluentwidgets 的 `ComboBox` 不是 QComboBox，沒有 `showPopup()`；
+  正確 API 是 `_showComboMenu()`（**1.11.2 內部 API**，已 hasattr 防衛，升級 qfluentwidgets 時留意）。
+- **開檔後屬性面板顯示 (無)**：`_rebuild_ui` 先選場景後才填 combo 選項，`findText` 落空。
+  改先 `_sync_asset_lists()` 再 `set_project()`；`set_asset_lists` 改 model-driven 回填防呆。
+- **影片解析度被 Windows DPI 放大**：125% 縮放下 `view.grab()` 回傳 1.25× 實體像素
+  （選 720p 輸出 1600×900）。`_grab_frame` 後接 `_normalize_frame` 正規化到精確目標尺寸。
+- **對話列補齊刪改功能**（原教學宣稱 Delete / Ctrl+C/V 但全不存在；`_on_paste_text` 是死碼）：
+  Delete 刪句、雙擊台詞 inline 編輯（依「」規則自動重判 dialogue/narration）、右鍵插入/刪除、
+  Ctrl+C 複製、「貼上文字」接回檔案選單（Ctrl+Shift+V），教學文字同步。
+  **鐵則照舊：所有列表變更必經 `Scene.insert_dialogue/remove_dialogue`**（segment 自動 shift，有測試守護）。
+  inline editor 的提交旗標必須 per-editor（曾因掛在 instance 上造成 stale closure 誤寫，`bc26f89`）。
+
+**誤報澄清**：走查時「淺色主題開檔後左側面板變深」實為截圖假象——背景 transparent 的 widget
+單獨 `grab()` 會把透明處渲染成黑；單獨截子面板驗證主題時務必抓整窗對照。
+
+驗證：每項修復先有失敗回歸測試再修（offscreen 全綠 259 passed + 1 skipped）；
+另以 `build/uxtest/probe_verify_s0.py` / `probe_verify_s1.py` 在真實 GUI + 真實 MP4 導出端對端複驗。
+
+---
+
 ## 程式碼健檢紀錄（2026-06-10，fix/audit-2026-06）
 
 全庫審查後的一次性修正，無新功能：
