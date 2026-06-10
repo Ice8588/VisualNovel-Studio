@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -234,3 +234,78 @@ class TestWriteConcatFileFormat:
         ]
         total = sum(dur for _, dur in entries)
         assert total == pytest.approx(7.5, abs=1e-9)
+
+
+class TestBuildAudioTrack:
+    """_build_audio_track BGM 捷徑與 filter_complex 分支測試。
+
+    驗證重點：
+    - start==0 單一 BGM：走捷徑，直接回傳原始路徑（不呼叫 ffmpeg）。
+    - start>0 單一 BGM：不走捷徑，cmd 含 adelay 毫秒值（修正偏移 bug）。
+    - 空 timeline：回傳 None。
+    """
+
+    def test_single_bgm_start_zero_returns_original(self, tmp_path):
+        """start==0 的單一 BGM 應走捷徑，直接回傳原始 BGM 路徑，不呼叫 ffmpeg。"""
+        exporter = _make_exporter(tmp_path / "out.mp4")
+        bgm_path = tmp_path / "music.mp3"
+        bgm_path.touch()
+
+        timeline = [(bgm_path, 0, 10.0)]
+
+        with patch("subprocess.run") as mock_run:
+            result = exporter._build_audio_track(timeline, tmp_path)
+
+        # 走捷徑：回傳原始路徑，且不應呼叫 ffmpeg
+        assert result == bgm_path, "start==0 單一 BGM 應直接回傳原始路徑"
+        mock_run.assert_not_called()
+
+    def test_single_bgm_start_nonzero_enters_filter_branch(self, tmp_path):
+        """start>0 的單一 BGM 不應走捷徑，應進入 filter_complex 路徑，
+        ffmpeg cmd 中須包含對應的 adelay 毫秒值。"""
+        exporter = _make_exporter(tmp_path / "out.mp4")
+        bgm_path = tmp_path / "music.mp3"
+        bgm_path.touch()
+
+        start_sec = 5.0
+        timeline = [(bgm_path, start_sec, 15.0)]
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+
+        with patch("subprocess.run", return_value=mock_result) as mock_run:
+            result = exporter._build_audio_track(timeline, tmp_path)
+
+        # 不走捷徑：應呼叫 ffmpeg 並回傳 mixed 檔路徑
+        mock_run.assert_called_once()
+        cmd = mock_run.call_args[0][0]  # subprocess.run(cmd, ...)
+        cmd_str = " ".join(str(c) for c in cmd)
+
+        expected_delay_ms = int(start_sec * 1000)  # 5000
+        assert f"adelay={expected_delay_ms}|{expected_delay_ms}" in cmd_str, (
+            f"start={start_sec}s 時 cmd 應含 adelay={expected_delay_ms}，"
+            f"實際 cmd：{cmd_str}"
+        )
+        assert result == tmp_path / "audio_mixed.wav", (
+            "filter_complex 路徑應回傳 audio_mixed.wav"
+        )
+
+    def test_empty_timeline_returns_none(self, tmp_path):
+        """空 timeline 應回傳 None。"""
+        exporter = _make_exporter(tmp_path / "out.mp4")
+        result = exporter._build_audio_track([], tmp_path)
+        assert result is None
+
+    def test_single_bgm_start_zero_float_treated_as_zero(self, tmp_path):
+        """start==0.0（浮點數零）也應走捷徑。"""
+        exporter = _make_exporter(tmp_path / "out.mp4")
+        bgm_path = tmp_path / "music.mp3"
+        bgm_path.touch()
+
+        timeline = [(bgm_path, 0.0, 8.0)]
+
+        with patch("subprocess.run") as mock_run:
+            result = exporter._build_audio_track(timeline, tmp_path)
+
+        assert result == bgm_path
+        mock_run.assert_not_called()

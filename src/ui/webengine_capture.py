@@ -492,11 +492,13 @@ class WebEngineVideoExporter:
         """將 BGM 時間軸合併為單一音訊檔案。"""
         if not timeline:
             return None
-        if len(timeline) == 1:
-            # 單一 BGM 直接回傳原始路徑，不裁剪也不補靜音。
-            # 輸出長度由呼叫端的 _build_encode_cmd 以 -t 參數控制：
+        if len(timeline) == 1 and timeline[0][1] == 0:
+            # 單一 BGM 且從影片開頭（start==0）播放：直接回傳原始路徑，
+            # 不做任何裁剪或延遲處理。輸出長度由 _build_encode_cmd 以 -t 控制：
             #   - BGM 比影片短時，ffmpeg 自動補靜音至 -t 指定時長（不循環）；
             #   - BGM 比影片長時，在 -t 處截斷。
+            # start≠0 的情況（第一個場景無 BGM）落入下方 filter_complex 路徑，
+            # 由 atrim+adelay 在正確時間點插入 BGM。
             return timeline[0][0]
 
         total_duration = max(end for _, _, end in timeline)
