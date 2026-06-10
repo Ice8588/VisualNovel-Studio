@@ -119,12 +119,15 @@ class WebEngineVideoExporter:
                 view, temp_dir, progress_callback, total_dialogues
             )
 
-            # 6. 寫入 concat 文件
+            # 6. 計算影片總時長（所有對話 duration 加總）
+            total_duration = sum(dur for _, dur in concat_entries)
+
+            # 7. 寫入 concat 文件
             concat_path = temp_dir / "concat.txt"
             self._write_concat_file(concat_path, concat_entries)
 
-            # 7. ffmpeg 編碼
-            self._encode_video(concat_path, audio_timeline, temp_dir)
+            # 8. ffmpeg 編碼
+            self._encode_video(concat_path, audio_timeline, temp_dir, total_duration)
 
         finally:
             if view is not None:
@@ -402,7 +405,60 @@ class WebEngineVideoExporter:
             lines.append(f"file '{entries[-1][0]}'")
         path.write_text("\n".join(lines), encoding="utf-8")
 
-    def _encode_video(self, concat_path: Path, audio_timeline, temp_dir: Path) -> None:
+    def _build_encode_cmd(
+        self,
+        encoder: str | None,
+        concat_path: Path,
+        audio_path: Path | None,
+        total_duration: float,
+    ) -> list[str]:
+        """組裝 ffmpeg 編碼指令。
+
+        使用 ``-t {total_duration}`` 精確控制輸出長度，不使用 ``-shortest``：
+        - BGM 比內容短時：影片維持完整長度，BGM 播完後無聲（不循環，保守行為）。
+        - BGM 比內容長時：在 total_duration 處切斷。
+        - 無 BGM 時：精確剪裁，消除 concat demuxer 最後一幀重複可能帶來的誤差。
+
+        Args:
+            encoder: GPU 編碼器名稱，或 None 表示使用 libx264 CPU 編碼。
+            concat_path: ffmpeg concat demuxer 清單檔路徑。
+            audio_path: 混合後的音訊檔路徑，無音訊時為 None。
+            total_duration: 影片目標總時長（秒）。
+        """
+        cmd = [
+            str(self._ffmpeg), "-y",
+            "-f", "concat", "-safe", "0",
+            "-i", str(concat_path),
+        ]
+        if audio_path and audio_path.exists():
+            cmd.extend(["-i", str(audio_path)])
+
+        if encoder == "h264_nvenc":
+            cmd.extend(["-c:v", "h264_nvenc", "-preset", "p4",
+                         "-rc:v", "vbr", "-cq:v", "19", "-b:v", "0"])
+        elif encoder == "h264_amf":
+            cmd.extend(["-c:v", "h264_amf", "-quality", "balanced",
+                         "-rc", "cqp", "-qp_i", "20"])
+        elif encoder == "h264_qsv":
+            cmd.extend(["-c:v", "h264_qsv", "-preset", "medium",
+                         "-global_quality", "20"])
+        else:
+            cmd.extend(["-c:v", "libx264", "-preset", "medium", "-crf", "23"])
+
+        cmd.extend(["-pix_fmt", "yuv420p", "-r", str(self._fps)])
+
+        if audio_path and audio_path.exists():
+            cmd.extend(["-c:a", "aac", "-b:a", "128k"])
+
+        # -t 一律加在輸出前：精確控制影片時長
+        # BGM 不足時補靜音（ffmpeg 預設行為），不強制 -shortest 截斷
+        cmd.extend(["-t", f"{total_duration:.4f}"])
+        cmd.append(str(self._output_path))
+        return cmd
+
+    def _encode_video(
+        self, concat_path: Path, audio_timeline, temp_dir: Path, total_duration: float
+    ) -> None:
         """用 ffmpeg 將幀序列 + 音訊編碼為 MP4。支援 GPU 加速，自動回退到 CPU。"""
         gpu_encoder = _get_gpu_encoder(self._ffmpeg)
 
@@ -410,49 +466,23 @@ class WebEngineVideoExporter:
         if audio_timeline:
             audio_path = self._build_audio_track(audio_timeline, temp_dir)
 
-        def _build_cmd(encoder: str | None) -> list[str]:
-            cmd = [
-                str(self._ffmpeg), "-y",
-                "-f", "concat", "-safe", "0",
-                "-i", str(concat_path),
-            ]
-            if audio_path and audio_path.exists():
-                cmd.extend(["-i", str(audio_path)])
-
-            if encoder == "h264_nvenc":
-                cmd.extend(["-c:v", "h264_nvenc", "-preset", "p4",
-                             "-rc:v", "vbr", "-cq:v", "19", "-b:v", "0"])
-            elif encoder == "h264_amf":
-                cmd.extend(["-c:v", "h264_amf", "-quality", "balanced",
-                             "-rc", "cqp", "-qp_i", "20"])
-            elif encoder == "h264_qsv":
-                cmd.extend(["-c:v", "h264_qsv", "-preset", "medium",
-                             "-global_quality", "20"])
-            else:
-                cmd.extend(["-c:v", "libx264", "-preset", "medium", "-crf", "23"])
-
-            cmd.extend(["-pix_fmt", "yuv420p", "-r", str(self._fps)])
-
-            if audio_path and audio_path.exists():
-                cmd.extend(["-c:a", "aac", "-b:a", "128k", "-shortest"])
-
-            cmd.append(str(self._output_path))
-            return cmd
-
         if gpu_encoder:
             logger.info("使用 GPU 編碼器：%s", gpu_encoder)
             result = subprocess.run(
-                _build_cmd(gpu_encoder), capture_output=True, text=True, timeout=600
+                self._build_encode_cmd(gpu_encoder, concat_path, audio_path, total_duration),
+                capture_output=True, text=True, timeout=600
             )
             if result.returncode != 0:
                 logger.warning("GPU 編碼失敗，回退到 CPU：%s", result.stderr[-200:])
                 result = subprocess.run(
-                    _build_cmd(None), capture_output=True, text=True, timeout=600
+                    self._build_encode_cmd(None, concat_path, audio_path, total_duration),
+                    capture_output=True, text=True, timeout=600
                 )
         else:
             logger.info("使用 CPU 編碼器：libx264")
             result = subprocess.run(
-                _build_cmd(None), capture_output=True, text=True, timeout=600
+                self._build_encode_cmd(None, concat_path, audio_path, total_duration),
+                capture_output=True, text=True, timeout=600
             )
 
         if result.returncode != 0:
@@ -463,6 +493,10 @@ class WebEngineVideoExporter:
         if not timeline:
             return None
         if len(timeline) == 1:
+            # 單一 BGM 直接回傳原始路徑，不裁剪也不補靜音。
+            # 輸出長度由呼叫端的 _build_encode_cmd 以 -t 參數控制：
+            #   - BGM 比影片短時，ffmpeg 自動補靜音至 -t 指定時長（不循環）；
+            #   - BGM 比影片長時，在 -t 處截斷。
             return timeline[0][0]
 
         total_duration = max(end for _, _, end in timeline)
