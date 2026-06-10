@@ -24,4 +24,4 @@ def test_file_menu_has_paste_text_action(qapp):
     act = _find_action(menu_bar, "貼上文字")
     assert act is not None, "檔案選單應含『貼上文字』action"
     # 快捷鍵 Ctrl+Shift+V
-    assert act.shortcut().toString() in ("Ctrl+Shift+V", "Ctrl+Shift+V")
+    assert act.shortcut().toString() == "Ctrl+Shift+V"

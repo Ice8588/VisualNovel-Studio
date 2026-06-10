@@ -263,7 +263,6 @@ class WebEngineVideoExporter:
         1600×900），導致 ffmpeg 編碼出錯誤解析度的 MP4。
         此方法確保輸出幀永遠等於 self._resolution 設定的尺寸。
         """
-        from PyQt6.QtGui import QPixmap as _QPixmap  # noqa: F401（型別確認用）
         w, h = self._resolution
         target = QSize(w, h)
         if pixmap.size() == target:

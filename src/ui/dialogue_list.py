@@ -423,7 +423,11 @@ class DialogueColumn(QWidget):
         super().keyPressEvent(ev)
 
     def _delete_dialogue(self, idx: int) -> None:
-        """經 Scene.remove_dialogue 刪除（自動 shift segment），再修正選取 / 游標。"""
+        """經 Scene.remove_dialogue 刪除（自動 shift segment），再修正選取 / 游標。
+
+        M1：刪除前先收掉 inline editor overlay，避免孤兒 overlay 殘留。
+        """
+        self._close_text_editor()  # 對 None 安全（_close_text_editor 內有 None 檢查）
         self.scene.remove_dialogue(idx)
         n = len(self.scene.dialogues)
         if n == 0:
@@ -455,9 +459,16 @@ class DialogueColumn(QWidget):
         return QRect(text_col_x, inner.y(), inner.right() - text_col_x, inner.height())
 
     def _begin_text_edit(self, idx: int) -> None:
-        """在台詞欄浮一個 LineEdit 編輯文字；Enter/失焦提交、Esc 取消。"""
+        """在台詞欄浮一個 LineEdit 編輯文字；Enter/失焦提交、Esc 取消。
+
+        I1 修正：committed 旗標改為 per-editor 區域變數（commit/cancel closure 共享），
+        移除舊的 self._edit_committed 實例屬性，徹底避免跨 editor 共用旗標導致的
+        stale closure 誤寫問題。另外 commit 時檢查 editor 是否仍是 self._text_editor，
+        不是就直接 return，確保被丟棄的舊 editor 永不寫 model。
+        """
         from qfluentwidgets import LineEdit
 
+        # 先關閉舊 editor（不提交）
         if self._text_editor is not None:
             self._text_editor.deleteLater()
             self._text_editor = None
@@ -469,18 +480,45 @@ class DialogueColumn(QWidget):
         anchor = self._text_col_rect(idx)
         editor.setGeometry(anchor.x(), anchor.y(), anchor.width(), max(28, anchor.height()))
         self._text_editor = editor
-        self._edit_committed = False  # 防 Enter + focusOut 重複提交
+
+        # per-editor 旗標：此 closure 組獨享，不與其他 editor 共用
+        committed = False
+
+        def _is_stale() -> bool:
+            """此 editor 是否已被另一個 editor 取代（stale 防護）。
+            self._text_editor is None 表示正常提交 / 關閉流程中，不算 stale。
+            """
+            return self._text_editor is not None and editor is not self._text_editor
 
         def commit() -> None:
-            if self._edit_committed:
+            """returnPressed / editingFinished 共用的提交入口。
+            committed 旗標防止 Enter + focusOut 雙重觸發。
+            """
+            nonlocal committed
+            if _is_stale():
                 return
-            self._edit_committed = True
-            self._commit_text_edit(idx, editor.text())
+            if committed:
+                return
+            # 只有文字真正變更時才設 committed，讓 editingFinished 誤觸發（無改動）
+            # 時不鎖旗標——下次 returnPressed 或再度失焦仍能正常提交。
+            new_text = editor.text()
+            stripped = new_text.strip()
+            dlg_text = (
+                self.scene.dialogues[idx].text
+                if 0 <= idx < len(self.scene.dialogues) else ""
+            )
+            if stripped and stripped != dlg_text:
+                # 真正有變更：鎖定旗標再提交，防止 editingFinished 重複觸發
+                committed = True
+            self._commit_text_edit(idx, new_text)
 
         def cancel() -> None:
-            if self._edit_committed:
+            nonlocal committed
+            if _is_stale():
                 return
-            self._edit_committed = True
+            if committed:
+                return
+            committed = True
             self._close_text_editor()
 
         editor.returnPressed.connect(commit)
@@ -530,6 +568,8 @@ class DialogueColumn(QWidget):
     # --- Task 6：右鍵選單（編輯 / 插入 / 刪除） ---
 
     def contextMenuEvent(self, ev):
+        # M1：開右鍵選單前先收掉 inline editor overlay，避免孤兒 overlay 殘留
+        self._close_text_editor()
         menu = QMenu(self)
         idx = self._idx_at(ev.pos().y())
         if idx is not None:

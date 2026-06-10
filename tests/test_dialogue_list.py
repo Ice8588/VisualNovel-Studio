@@ -232,9 +232,11 @@ def test_delete_removes_dialogue_and_shifts_segments(qapp):
 
 
 def test_double_click_edit_text_retypes(qapp):
-    """雙擊台詞區 → overlay LineEdit；改成台詞 / 旁白各自重判 type。"""
-    from qfluentwidgets import LineEdit
+    """雙擊台詞區 → overlay LineEdit；改成台詞 / 旁白各自重判 type。
 
+    注意：用 w._text_editor 取得「當前活躍」editor，避免因 deleteLater 尚未回收
+    的舊物件混入 children() 列表而取到錯誤的 editor。
+    """
     scene = _make_scene(3)  # row0 dialogue character="小明"
     w = DialogueColumn(scene)
     w.set_character_colors({"小明": "#FF0000"})
@@ -246,9 +248,8 @@ def test_double_click_edit_text_retypes(qapp):
     w.mouseDoubleClickEvent(_mouse_event(QEvent.Type.MouseButtonDblClick, center_y))
     qapp.processEvents()
 
-    editors = [c for c in w.children() if isinstance(c, LineEdit)]
-    assert editors, "overlay LineEdit 應出現"
-    editor = editors[0]
+    editor = w._text_editor
+    assert editor is not None, "overlay LineEdit 應出現"
 
     # 改成台詞 → type=="dialogue"，character 保留
     editor.setText("「新台詞」")
@@ -261,7 +262,8 @@ def test_double_click_edit_text_retypes(qapp):
     # 再改成旁白 → type=="narration" 且 character is None
     w.mouseDoubleClickEvent(_mouse_event(QEvent.Type.MouseButtonDblClick, center_y))
     qapp.processEvents()
-    editor2 = [c for c in w.children() if isinstance(c, LineEdit)][0]
+    editor2 = w._text_editor
+    assert editor2 is not None, "overlay LineEdit 應再次出現"
     editor2.setText("普通旁白文字")
     editor2.returnPressed.emit()
     qapp.processEvents()
@@ -336,3 +338,53 @@ def test_ctrl_c_copies_text(qapp):
     qapp.processEvents()
 
     assert QApplication.clipboard().text() == scene.dialogues[1].text
+
+
+# ── M4 regression：stale editor 不得寫 model ─────────────────────────────
+
+
+def test_stale_editor_does_not_write_model(qapp):
+    """I1 回歸測試：
+    開 editor0（row0）→ 不提交，直接開 editor1（row1）→ editor1 輸入新文字按 Enter
+    → row1 更新、row0 不變；舊 editor0 的 stale returnPressed 信號不得寫入 model。
+
+    設計原則：不在 editor 操作之間呼叫 processEvents，避免 editingFinished 意外觸發
+    影響 committed 旗標（offscreen 環境的 Qt focus 行為差異）。
+    直接以 w._text_editor 取得內部參考，精確控制觸發時機。
+    """
+    scene = _make_scene(3)
+    orig_row0 = scene.dialogues[0].text
+    w = DialogueColumn(scene)
+    w.resize(400, shared.ROW_HEIGHT * 3)
+
+    # 開 editor0（row0）；直接取內部參考，不呼叫 processEvents
+    w._begin_text_edit(0)
+    editor0 = w._text_editor
+    assert editor0 is not None, "editor0 應存在"
+
+    # 不提交，直接開 editor1（row1）→ editor0 被靜默丟棄（deleteLater）
+    w._begin_text_edit(1)
+    editor1 = w._text_editor
+    assert editor1 is not None, "editor1 應存在"
+    assert editor0 is not editor1, "editor0 應已被 editor1 取代"
+
+    # editor1 輸入新文字並 Enter（不先 processEvents，避免 editingFinished 干擾 committed 旗標）
+    editor1.setText("「editor1 新台詞」")
+    editor1.returnPressed.emit()
+
+    # row1 應更新
+    assert scene.dialogues[1].text == "「editor1 新台詞」", "row1 應被 editor1 提交更新"
+    # row0 不變（editor0 被丟棄，其 closure 不得寫入）
+    assert scene.dialogues[0].text == orig_row0, "row0 不應被 stale editor0 改寫"
+
+    # 額外：手動觸發 stale editor0 的 returnPressed（此時 editor0 已被取代）
+    # editor0 可能已被 deleteLater 回收，用 try/except 保護
+    try:
+        editor0.returnPressed.emit()
+    except RuntimeError:
+        pass  # 物件已銷毀是正常的
+
+    # row0 仍不變
+    assert scene.dialogues[0].text == orig_row0, "row0 在 stale emit 後仍不應被改寫"
+    # row1 也不應被 stale editor0 覆蓋
+    assert scene.dialogues[1].text == "「editor1 新台詞」", "row1 不應被 stale editor0 覆蓋"
