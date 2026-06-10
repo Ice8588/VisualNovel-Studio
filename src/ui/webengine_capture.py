@@ -18,6 +18,7 @@ from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QApplication, QWidget
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 
+from src.core.exporter_video import calc_auto_duration
 from src.core.models import Project
 
 logger = logging.getLogger(__name__)
@@ -59,12 +60,6 @@ def _get_gpu_encoder(ffmpeg_path: Path) -> str | None:
     if _GPU_ENCODER_CACHE is False:
         _GPU_ENCODER_CACHE = _detect_gpu_encoder(ffmpeg_path)
     return _GPU_ENCODER_CACHE  # type: ignore[return-value]
-
-
-def _calc_duration(text: str) -> float:
-    """依字數計算停留秒數，與前端 Auto 模式邏輯一致。"""
-    duration = 1.0 + len(text) * 0.15
-    return max(1.5, min(duration, 8.0))
 
 
 class WebEngineVideoExporter:
@@ -357,7 +352,7 @@ class WebEngineVideoExporter:
                 # Phase 4 修 #4：截第一幀前，先確保所有 <img> 載完，避免 opacity 0 閃爍
                 self._wait_for_images_loaded(view)
 
-                duration = _calc_duration(dlg.text)
+                duration = calc_auto_duration(dlg.text)
 
                 if has_effect:
                     # 有特效：按 fps 截多幀（讓粒子動起來、screen_shake/text shake 顯示）

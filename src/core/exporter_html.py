@@ -9,6 +9,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+from src.core.asset_manager import get_project_assets_dir
 from src.core.models import Project
 
 
@@ -30,7 +31,7 @@ def estimate_export_size(project: Project) -> int:
     Base64 編碼使資料膨脹約 1.37 倍，加上 HTML/JS/CSS 開銷。
     """
     total = 0
-    assets_dir = _get_assets_dir(project)
+    assets_dir = get_project_assets_dir(project)
     if assets_dir:
         for category in ("backgrounds", "sprites", "music"):
             for filename in project.assets.get(category, []):
@@ -77,7 +78,7 @@ def export_single_html(
     script_data = project.to_script_json()
 
     # 建立素材 data URI 映射
-    assets_dir = _get_assets_dir(project)
+    assets_dir = get_project_assets_dir(project)
     asset_map = {}  # filename → data URI
     if assets_dir:
         asset_map = _build_asset_map(
@@ -191,15 +192,3 @@ def _guess_mime(path: Path) -> str:
         ".mp3": "audio/mpeg",
         ".wav": "audio/wav",
     }.get(suffix, "application/octet-stream")
-
-
-def _get_assets_dir(project: Project) -> Path | None:
-    """取得專案素材所在目錄。"""
-    if project.project_path:
-        d = project.project_path.parent / "assets"
-        if d.exists():
-            return d
-    unsaved = Path(tempfile.gettempdir()) / "vnstudio_unsaved" / "assets"
-    if unsaved.exists():
-        return unsaved
-    return None

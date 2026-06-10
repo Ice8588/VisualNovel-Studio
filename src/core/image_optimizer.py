@@ -21,22 +21,18 @@ def optimize_image(
     Returns:
         實際寫入的檔案路徑（.webp）。
     """
-    img = Image.open(src)
+    with Image.open(src) as img:
+        # WebP 原生支援 RGBA（保留透明度）；其他模式轉 RGB
+        if img.mode not in ("RGBA", "RGB"):
+            img = img.convert("RGB")
 
-    # RGBA → RGB（WebP 支援 RGBA，但轉 RGB 可縮小檔案）
-    if img.mode == "RGBA":
-        # 保留透明度，WebP 原生支援
-        pass
-    elif img.mode != "RGB":
-        img = img.convert("RGB")
+        # 縮放
+        if max(img.size) > max_size:
+            img.thumbnail((max_size, max_size), Image.LANCZOS)
 
-    # 縮放
-    if max(img.size) > max_size:
-        img.thumbnail((max_size, max_size), Image.LANCZOS)
-
-    # 寫入 WebP
-    dst = dst.with_suffix(".webp")
-    img.save(dst, "WEBP", quality=quality)
+        # 寫入 WebP
+        dst = dst.with_suffix(".webp")
+        img.save(dst, "WEBP", quality=quality)
     return dst
 
 

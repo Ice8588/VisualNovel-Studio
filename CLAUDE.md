@@ -78,17 +78,17 @@ python -m PyInstaller vnstudio.spec --noconfirm
 ```javascript
 // engine.js（毫秒）
 function getAutoDuration(text) {
-  return Math.max(1500, 1000 + text.length * 150);
+  return Math.max(1500, Math.min(1000 + text.length * 150, 8000));
 }
 ```
 
 ```python
-# exporter_video.py（秒）
-def _calc_duration(text):
+# exporter_video.py（秒；webengine_capture.py 亦 import 此函式，Python 端僅此一份）
+def calc_auto_duration(text):
     return max(1.5, min(1.0 + len(text) * 0.15, 8.0))
 ```
 
-修改任一端時**必須同步更新另一端**。
+修改任一端時**必須同步更新另一端**；`tests/test_duration_sync.py` 自動守護。
 
 ### TEXT_EFFECTS key 集合 Python ↔ JS 必須對齊
 

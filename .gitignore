@@ -26,6 +26,9 @@ tests/samples/
 tests/*.mp4
 tests/*.docx
 
+# 手動測試時 app 於 tests/ 下產生的素材副本
+tests/assets/
+
 # 個人筆記 / AI 指令
 task.md
 CLAUDE.md

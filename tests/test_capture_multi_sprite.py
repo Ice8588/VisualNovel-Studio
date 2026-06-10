@@ -70,16 +70,17 @@ def _within_tolerance(actual, expected, tol=60):
 
 def _webengine_available() -> bool:
     """環境檢查：能否建立 QWebEngineView + 最小渲染。"""
-    if sys.platform.startswith("win"):
-        return True  # 假定 Windows 開發環境可用
-    try:
-        from PyQt6.QtWebEngineWidgets import QWebEngineView  # noqa: F401
-    except Exception:
-        return False
-    # Linux offscreen + 無 GPU：QtWebEngine 常會 fallback 成 SwiftShader 並 flaky；
-    # 以環境變數 VNSTUDIO_E2E=1 顯式啟用才跑。
     import os
-    return os.environ.get("VNSTUDIO_E2E") == "1"
+    if os.environ.get("VNSTUDIO_E2E") == "1":
+        return True
+    # offscreen 平台下 QtWebEngine GPU 截幀不可靠（Windows 亦會 context lost 截出白幀）；
+    # 需以 VNSTUDIO_E2E=1 顯式啟用才跑。
+    if os.environ.get("QT_QPA_PLATFORM") == "offscreen":
+        return False
+    if sys.platform.startswith("win"):
+        return True  # 假定 Windows 開發環境（有顯示）可用
+    # Linux 無 GPU 時 QtWebEngine 常 fallback 成 SwiftShader 並 flaky，一律走 VNSTUDIO_E2E
+    return False
 
 
 requires_webengine = pytest.mark.skipif(

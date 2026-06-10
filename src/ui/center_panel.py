@@ -670,7 +670,9 @@ class CenterPanel(QWidget):
             return
         scene_idx, dlg_idx = self._last_preview_pos
         self.preview.reload_preview(self._project)
-        QTimer.singleShot(500, lambda: self.preview.jump_to_dialogue(scene_idx, dlg_idx))
+        QTimer.singleShot(
+            500, lambda s=scene_idx, d=dlg_idx: self.preview.jump_to_dialogue(s, d)
+        )
 
     def _on_segment_committed(self) -> None:
         """commit 邊界（拖完 / 雙擊新增 / Delete / 加軌道 / 改軌道色）：reload 預覽 + 標 dirty。

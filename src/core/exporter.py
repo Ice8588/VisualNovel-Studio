@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import json
 import sys
-import tempfile
 import zipfile
 from pathlib import Path
 
+from src.core.asset_manager import get_project_assets_dir
 from src.core.models import Project
 
 
@@ -77,7 +77,7 @@ def export_zip(project: Project, output_path: Path) -> None:
         effects_js = effects_path.read_text(encoding="utf-8")
 
     # 找出素材來源目錄
-    assets_source = _get_assets_source(project)
+    assets_source = get_project_assets_dir(project)
 
     # 寫入 ZIP
     with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -96,16 +96,3 @@ def export_zip(project: Project, output_path: Path) -> None:
                     src_file = assets_source / filename
                     if src_file.exists():
                         zf.write(src_file, f"assets/{filename}")
-
-
-def _get_assets_source(project: Project) -> Path | None:
-    """取得素材檔案所在目錄。"""
-    if project.project_path:
-        assets_dir = project.project_path.parent / "assets"
-        if assets_dir.exists():
-            return assets_dir
-    # 尚未儲存的專案
-    unsaved = Path(tempfile.gettempdir()) / "vnstudio_unsaved" / "assets"
-    if unsaved.exists():
-        return unsaved
-    return None

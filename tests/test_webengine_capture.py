@@ -15,21 +15,21 @@ class TestCalcDuration:
     """_calc_duration 與 v1 使用同一公式。"""
 
     def test_short_text(self):
-        from src.ui.webengine_capture import _calc_duration
+        from src.core.exporter_video import calc_auto_duration as _calc_duration
         assert _calc_duration("短") == 1.5  # 1.0 + 1*0.15 = 1.15 → clamped to 1.5
 
     def test_medium_text(self):
-        from src.ui.webengine_capture import _calc_duration
+        from src.core.exporter_video import calc_auto_duration as _calc_duration
         d = _calc_duration("十個字的測試文字啊啊")  # 10 chars → 1.0 + 1.5 = 2.5
         assert d == 2.5
 
     def test_long_text_capped(self):
-        from src.ui.webengine_capture import _calc_duration
+        from src.core.exporter_video import calc_auto_duration as _calc_duration
         d = _calc_duration("字" * 100)  # 1.0 + 15.0 → capped to 8.0
         assert d == 8.0
 
     def test_empty_text(self):
-        from src.ui.webengine_capture import _calc_duration
+        from src.core.exporter_video import calc_auto_duration as _calc_duration
         assert _calc_duration("") == 1.5
 
 
