@@ -255,9 +255,28 @@ class WebEngineVideoExporter:
         loop.exec()
         return result[0]
 
+    def _normalize_frame(self, pixmap: "QPixmap") -> "QPixmap":
+        """將截幀縮放至精確的目標解析度。
+
+        Windows 高 DPI（如 125% 縮放）會讓 QWidget.grab() 回傳
+        devicePixelRatio 倍尺寸的 QPixmap（例如選 1280×720 實際得到
+        1600×900），導致 ffmpeg 編碼出錯誤解析度的 MP4。
+        此方法確保輸出幀永遠等於 self._resolution 設定的尺寸。
+        """
+        from PyQt6.QtGui import QPixmap as _QPixmap  # noqa: F401（型別確認用）
+        w, h = self._resolution
+        target = QSize(w, h)
+        if pixmap.size() == target:
+            return pixmap
+        return pixmap.scaled(
+            target,
+            Qt.AspectRatioMode.IgnoreAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+
     def _grab_frame(self, view: QWebEngineView) -> "QPixmap":
-        """截取當前 WebEngineView 畫面。"""
-        return view.grab()
+        """截取當前 WebEngineView 畫面，並正規化至目標解析度。"""
+        return self._normalize_frame(view.grab())
 
     @staticmethod
     def _sleep_ms(ms: int) -> None:

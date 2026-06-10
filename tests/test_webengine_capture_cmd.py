@@ -309,3 +309,56 @@ class TestBuildAudioTrack:
 
         assert result == bgm_path
         mock_run.assert_not_called()
+
+
+class TestNormalizeFrame:
+    """_normalize_frame DPI 縮放修正測試。
+
+    Windows 高 DPI（125% 縮放）下，QWidget.grab() 回傳 devicePixelRatio 倍
+    尺寸的 QPixmap；_normalize_frame 確保輸出幀永遠等於 _resolution 設定尺寸。
+    """
+
+    @pytest.fixture(autouse=True)
+    def qt_app(self):
+        """確保 QApplication 存在（QPixmap 需要）。"""
+        from PyQt6.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app is None:
+            app = QApplication([])
+        yield app
+
+    def _make_exporter_with_res(self, resolution: tuple[int, int]):
+        """建立指定解析度的 exporter（繞過 __init__）。"""
+        from src.ui.webengine_capture import WebEngineVideoExporter
+        with patch("src.ui.webengine_capture.WebEngineVideoExporter.__init__",
+                   lambda self, *a, **kw: None):
+            exporter = WebEngineVideoExporter.__new__(WebEngineVideoExporter)
+        exporter._resolution = resolution
+        return exporter
+
+    def test_dpi_scaled_1600x900_to_1280x720(self):
+        """DPI 125% 放大後的 1600×900 應被縮回 (1280, 720)。"""
+        from PyQt6.QtGui import QPixmap
+        exporter = self._make_exporter_with_res((1280, 720))
+        big = QPixmap(1600, 900)
+        result = exporter._normalize_frame(big)
+        assert result.width() == 1280
+        assert result.height() == 720
+
+    def test_already_correct_size_unchanged(self):
+        """已是目標尺寸 (1280, 720) 應原樣回傳（尺寸不變）。"""
+        from PyQt6.QtGui import QPixmap
+        exporter = self._make_exporter_with_res((1280, 720))
+        exact = QPixmap(1280, 720)
+        result = exporter._normalize_frame(exact)
+        assert result.width() == 1280
+        assert result.height() == 720
+
+    def test_arbitrary_wrong_size_scaled_to_target(self):
+        """非標準倍率的怪尺寸（1300×731）也應被縮到精確目標 (1280, 720)（防呆）。"""
+        from PyQt6.QtGui import QPixmap
+        exporter = self._make_exporter_with_res((1280, 720))
+        odd = QPixmap(1300, 731)
+        result = exporter._normalize_frame(odd)
+        assert result.width() == 1280
+        assert result.height() == 720
