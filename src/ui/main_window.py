@@ -739,9 +739,10 @@ class MainWindow(QMainWindow):
         )
 
     def _rebuild_ui(self) -> None:
+        # 先填充 combo 選項，再 set_project（_sync_props_to_scene 才能 findText 成功）
+        self._sync_asset_lists()
         self.left_panel.set_project(self._project)
         self.center_panel.set_project(self._project)
-        self._sync_asset_lists()
         self._sync_game_settings_ui()
         self._on_refresh_preview()
         self._update_title()
