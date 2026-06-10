@@ -26,18 +26,7 @@ from qfluentwidgets import ComboBox, LineEdit, ListWidget, PushButton, Segmented
 from src.core.models import Character, Project, Scene
 from src.ui import palette
 from src.ui.icons import design_icon, themed_icon
-
-# 預設名牌顏色（淺/深色模式下皆清晰可辨）
-PRESET_COLORS = [
-    ("#FFFFFF", "白"),
-    ("#222222", "黑"),
-    ("#E05555", "紅"),
-    ("#4682B4", "藍"),
-    ("#4CAF50", "綠"),
-    ("#FFD700", "黃"),
-    ("#FF8C00", "橙"),
-    ("#9B59B6", "紫"),
-]
+from src.ui.palette import PRESET_NAME_COLORS as PRESET_COLORS
 
 NONE_LABEL = "(無)"
 

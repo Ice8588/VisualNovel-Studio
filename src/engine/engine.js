@@ -173,7 +173,7 @@
     if (els.dialogueBox) {
       var hex = gs.dialogue_box_color || "#141428";
       var op = gs.dialogue_box_opacity != null ? gs.dialogue_box_opacity : 0.85;
-      els.dialogueBox.style.backgroundColor = _hexToRgba(hex, op);
+      els.dialogueBox.style.backgroundColor = hexToRgba(hex, op, "#141428");
     }
     if (gs.dialogue_text_color) {
       // task.md #5/#10：套到 game-container，dialogue-box / quick-menu / history-panel
@@ -182,17 +182,6 @@
       if (els.dialogueBox) els.dialogueBox.style.color = gs.dialogue_text_color;
       if (els.dialogueText) els.dialogueText.style.color = gs.dialogue_text_color;
     }
-  }
-
-  function _hexToRgba(hex, alpha) {
-    // 接受 #RGB / #RRGGBB；非合法 fallback 深藍黑
-    var h = (hex || "").replace("#", "");
-    if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
-    if (h.length !== 6) h = "141428";
-    var r = parseInt(h.substr(0,2), 16);
-    var g = parseInt(h.substr(2,2), 16);
-    var b = parseInt(h.substr(4,2), 16);
-    return "rgba(" + r + "," + g + "," + b + "," + alpha + ")";
   }
 
   function buildCharactersMap() {
@@ -433,15 +422,14 @@
     });
   }
 
-  // 將 #RRGGBB / #RGB 轉 rgba(r, g, b, alpha)；非合法 hex 回傳預設藍色半透明
-  function hexToRgba(hex, alpha) {
-    if (typeof hex !== "string") return "rgba(70, 130, 180, " + alpha + ")";
-    var h = hex.trim().replace(/^#/, "");
+  // 將 #RRGGBB / #RGB 轉 rgba(r, g, b, alpha)；非合法 hex 用 fallbackHex（預設鋼藍）
+  function hexToRgba(hex, alpha, fallbackHex) {
+    var h = typeof hex === "string" ? hex.trim().replace(/^#/, "") : "";
     if (h.length === 3) {
       h = h.split("").map(function (c) { return c + c; }).join("");
     }
     if (!/^[0-9a-fA-F]{6}$/.test(h)) {
-      return "rgba(70, 130, 180, " + alpha + ")";
+      h = (fallbackHex || "#4682B4").replace(/^#/, "");
     }
     var r = parseInt(h.substring(0, 2), 16);
     var g = parseInt(h.substring(2, 4), 16);
@@ -501,8 +489,8 @@
   // ── Auto 模式（依字數計算延遲） ──
 
   function getAutoDuration(text) {
-    // 最少 1.5 秒，每字加 150ms
-    return Math.max(1500, 1000 + text.length * 150);
+    // 最少 1.5 秒，每字加 150ms，上限 8 秒（與 exporter_video.py::calc_auto_duration 同步）
+    return Math.max(1500, Math.min(1000 + text.length * 150, 8000));
   }
 
   function scheduleAutoAdvance(text) {
@@ -822,7 +810,7 @@
       setDialogueBoxColor: function (hex, opacity) {
         if (!els.dialogueBox) return;
         var op = opacity != null ? opacity : 0.85;
-        els.dialogueBox.style.backgroundColor = _hexToRgba(hex || "#141428", op);
+        els.dialogueBox.style.backgroundColor = hexToRgba(hex, op, "#141428");
       },
       setDialogueTextColor: function (hex) {
         if (!els.dialogueText || !hex) return;

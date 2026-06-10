@@ -30,6 +30,7 @@ from PyQt6.QtWidgets import (
 from qfluentwidgets import ComboBox, LineEdit, ListWidget, PushButton, StrongBodyLabel
 
 from src.core.models import Character, Costume, SpriteVariant
+from src.ui.palette import PRESET_NAME_COLORS as _PRESET_COLORS
 
 
 def open_text_file(parent: QWidget) -> Path | None:
@@ -285,12 +286,6 @@ class PasteTextDialog(QDialog):
 
 
 # ── 角色編輯對話框 ──
-
-# 預設名牌顏色（淺/深色皆清晰）
-_PRESET_COLORS = [
-    ("#FFFFFF", "白"), ("#222222", "黑"), ("#E05555", "紅"), ("#4682B4", "藍"),
-    ("#4CAF50", "綠"), ("#FFD700", "黃"), ("#FF8C00", "橙"), ("#9B59B6", "紫"),
-]
 
 
 class CharacterEditorDialog(QDialog):

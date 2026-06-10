@@ -45,6 +45,34 @@
 
 ---
 
+## 程式碼健檢紀錄（2026-06-10，fix/audit-2026-06）
+
+全庫審查後的一次性修正，無新功能：
+
+- **Auto duration 公式跨端對齊（跨端同步）**：engine.js `getAutoDuration` 補上 8 秒上限
+  （先前僅 Python 端有 cap，>47 字台詞 Preview 與 MP4 停留時間不一致）。
+  Python 端兩份重複公式（exporter_video / webengine_capture）收斂為
+  `exporter_video.calc_auto_duration` 單一來源；新增 `tests/test_duration_sync.py`
+  以 regex 抽 JS 常數自動守護（仿 test_effects_sync.py 模式）。
+- **engine.js hex→rgba 收斂**：刪除 `_hexToRgba`，統一用穩健版 `hexToRgba(hex, alpha, fallbackHex)`；
+  對話框 fallback `#141428`、名牌 fallback 鋼藍語意不變。
+- **Image.open 全面改 context manager**（exporter_video / image_normalize / image_optimizer）：
+  避免異常路徑洩漏檔案 handle（Windows 上會卡住檔案刪除/搬移）。
+- **去重**：`_get_assets_source` / `_get_assets_dir` 收斂為 `asset_manager.get_project_assets_dir`；
+  兩份 `PRESET_COLORS` 收斂為 `palette.PRESET_NAME_COLORS`。
+- **清理**：requirements.txt 移除未使用的 pygame；`tests/assets/`（手動測試產物）加入 .gitignore。
+- **test_capture_multi_sprite skip 閘門修正**：原本「Windows 一律跑」沒考慮
+  `QT_QPA_PLATFORM=offscreen` 下 QtWebEngine GPU context lost 截出白幀；
+  改為 offscreen 一律 skip（除非 VNSTUDIO_E2E=1）。有顯示環境下測試照常執行且通過。
+- **刻意不改**：src/ui 各處 `QPushButton` 看似違反「優先用 qfluentwidgets」規範，
+  但實際全部依賴 theme.py 的自訂 QSS（`dashedButton` / `hoverDeleteButton` / 色塊按鈕）；
+  換成 fluent `PushButton` 會與其內建樣式打架，維持現狀。
+
+驗證：`QT_QPA_PLATFORM=offscreen pytest tests/` → 215 passed + 1 skipped；
+有顯示環境下 `pytest tests/test_capture_multi_sprite.py` → passed（E2E 截幀）。
+
+---
+
 ## 里程碑紀錄
 
 | 日期 | Phase | 成果 | 遺留 |

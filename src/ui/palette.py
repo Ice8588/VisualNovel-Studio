@@ -25,6 +25,18 @@ import weakref
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import QWidget
 
+# 預設名牌顏色（淺/深色模式下皆清晰可辨）；left_panel 與 dialogs 共用
+PRESET_NAME_COLORS = [
+    ("#FFFFFF", "白"),
+    ("#222222", "黑"),
+    ("#E05555", "紅"),
+    ("#4682B4", "藍"),
+    ("#4CAF50", "綠"),
+    ("#FFD700", "黃"),
+    ("#FF8C00", "橙"),
+    ("#9B59B6", "紫"),
+]
+
 
 @dataclass(frozen=True)
 class Palette:

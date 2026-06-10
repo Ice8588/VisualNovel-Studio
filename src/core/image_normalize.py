@@ -25,7 +25,8 @@ def normalize_sprite(src: Path, dst: Path) -> None:
     4. 新建 TARGET_WIDTH × TARGET_HEIGHT 透明畫布。
     5. 內容水平置中、底部留 2.5% 邊（腰部以上構圖：人物頂部離畫布頂約 2.5%）。
     """
-    img = Image.open(src).convert("RGBA")
+    with Image.open(src) as src_img:
+        img = src_img.convert("RGBA")
     bbox = img.getbbox()
     if bbox:
         img = img.crop(bbox)

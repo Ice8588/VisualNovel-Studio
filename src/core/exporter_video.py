@@ -49,8 +49,8 @@ def _hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
     return tuple(int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
 
 
-def _calc_duration(text: str) -> float:
-    """依字數計算停留秒數，與前端 Auto 模式邏輯一致。"""
+def calc_auto_duration(text: str) -> float:
+    """依字數計算停留秒數，與 engine.js::getAutoDuration 一致（雙端同步，勿單獨修改）。"""
     duration = 1.0 + len(text) * 0.15
     return max(1.5, min(duration, 8.0))
 
@@ -155,7 +155,8 @@ class FrameRenderer:
 
         key = str(path)
         if key not in self._bg_cache:
-            img = Image.open(path).convert("RGBA")
+            with Image.open(path) as src_img:
+                img = src_img.convert("RGBA")
             img = img.resize((self.width, self.height), Image.LANCZOS)
             self._bg_cache[key] = img
         return self._bg_cache[key].copy()
@@ -164,7 +165,8 @@ class FrameRenderer:
         self, frame: Image.Image, sprite_path: Path, position: str = "center"
     ) -> Image.Image:
         """將立繪等比縮放後貼到底部，依 position 定位。"""
-        sprite = Image.open(sprite_path).convert("RGBA")
+        with Image.open(sprite_path) as src_img:
+            sprite = src_img.convert("RGBA")
 
         max_h = int(self.height * 0.8)
         max_w = int(self.width * 0.6)
@@ -320,7 +322,7 @@ class VideoExporter:
 
             for dlg_idx, dlg in enumerate(scene.dialogues):
                 # 依字數計算停留時間
-                duration = _calc_duration(dlg.text)
+                duration = calc_auto_duration(dlg.text)
 
                 # 合成幀
                 bg_path = self._resolve_asset(scene.background)
@@ -394,7 +396,8 @@ class VideoExporter:
         n_frames = max(1, int(self._transition_duration * self._fps))
         frame_duration = self._transition_duration / n_frames
 
-        last_frame = Image.open(last_frame_path).convert("RGB")
+        with Image.open(last_frame_path) as src_img:
+            last_frame = src_img.convert("RGB")
         black = Image.new("RGB", self._resolution, DEFAULT_BG_COLOR)
 
         # 淡出到黑

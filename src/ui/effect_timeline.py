@@ -448,6 +448,11 @@ class EffectTimelineWidget(QWidget):
             return False
         self.scene.effect_tracks.remove(track)
         lane = self.lanes.pop(name)
+        # 銷毀排程到 event loop，先斷開轉發訊號，避免等待期間殘留事件打回本 widget
+        lane.cursor_changed.disconnect()
+        lane.segment_changed.disconnect()
+        lane.segment_committed.disconnect()
+        lane.segment_selected.disconnect()
         self._layout.removeWidget(lane)
         lane.setParent(None)
         lane.deleteLater()

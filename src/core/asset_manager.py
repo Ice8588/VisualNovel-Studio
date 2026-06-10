@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 import shutil
+import tempfile
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.core.models import Project
 
 VALID_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg"}
 VALID_AUDIO_EXTENSIONS = {".mp3", ".wav"}
@@ -79,3 +84,15 @@ def import_asset(source: Path, category: str, project_dir: Path) -> str:
 def get_asset_filename(path: Path) -> str:
     """回傳檔案名稱，供 script.json 引用。"""
     return Path(path).name
+
+
+def get_project_assets_dir(project: "Project") -> Path | None:
+    """取得專案素材所在目錄；未儲存的專案 fallback 到暫存目錄。"""
+    if project.project_path:
+        assets_dir = project.project_path.parent / "assets"
+        if assets_dir.exists():
+            return assets_dir
+    unsaved = Path(tempfile.gettempdir()) / "vnstudio_unsaved" / "assets"
+    if unsaved.exists():
+        return unsaved
+    return None
