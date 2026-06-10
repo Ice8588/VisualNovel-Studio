@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import tempfile
 from pathlib import Path
 
@@ -555,9 +556,45 @@ class CharacterEditorDialog(QDialog):
     def get_character(self) -> Character:
         name = self.edit_name.text().strip()
         color = self._selected_color or "#4682B4"
-        # 若透過角色卡匯入、且未手動覆寫立繪 → 保留卡內所有服裝
+
+        # 情境 1：角色卡匯入 → 保留卡內所有服裝（現行行為不變）
         if self._loaded_from_card and self._extra_costumes:
             return Character(name=name, name_color=color, costumes=list(self._extra_costumes))
+
+        # 情境 2：編輯既有角色 → 以原始 costumes 深拷貝為基礎，僅更新可編輯欄位
+        if self._original is not None:
+            costumes = copy.deepcopy(self._original.costumes)
+
+            # 確定「原本第一張立繪」的 filename，用於比較是否更換
+            original_first_filename: str | None = None
+            if self._original.sprites:
+                original_first_filename = self._original.sprites[0].filename
+
+            # 若 _sprite_filename 有值且與原本第一張不同 → 替換 costumes[0].expressions[0]
+            if self._sprite_filename is not None and self._sprite_filename != original_first_filename:
+                new_sv = SpriteVariant(
+                    label=self._lbl_sprite_name.text() or "差分1",
+                    filename=self._sprite_filename,
+                )
+                if not costumes:
+                    # 原本就沒有服裝 → 建立預設服裝
+                    costumes = [Costume(name="服裝1", expressions=[new_sv])]
+                elif not costumes[0].expressions:
+                    # 服裝存在但沒有差分 → 插入
+                    costumes[0].expressions.insert(0, new_sv)
+                else:
+                    # 正常情況：替換第一個差分
+                    costumes[0].expressions[0] = new_sv
+            # 若 _sprite_filename 為 None（使用者按了「清除」） → 原 costumes 原樣保留，不刪資料
+
+            return Character(
+                name=name,
+                name_color=color,
+                position=self._original.position,  # legacy 欄位帶過去
+                costumes=costumes,
+            )
+
+        # 情境 3：新增角色 → 維持現行行為
         sprites = []
         if self._sprite_filename:
             label = self._lbl_sprite_name.text() or "差分1"
