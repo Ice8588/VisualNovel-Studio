@@ -8,10 +8,19 @@ Phase 2 移植自 experimental/timeline_poc/dialogue_column.py，import 改為�
 from __future__ import annotations
 
 from PyQt6.QtCore import QRect, Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QFont, QFontMetrics, QMouseEvent, QPainter, QPen
-from PyQt6.QtWidgets import QWidget
+from PyQt6.QtGui import (
+    QColor,
+    QFont,
+    QFontMetrics,
+    QKeyEvent,
+    QKeySequence,
+    QMouseEvent,
+    QPainter,
+    QPen,
+)
+from PyQt6.QtWidgets import QApplication, QMenu, QWidget
 
-from src.core.models import Scene
+from src.core.models import Dialogue, Scene
 from src.ui import _timeline_shared as shared
 
 
@@ -20,6 +29,7 @@ class DialogueColumn(QWidget):
     dialogue_moved = pyqtSignal(int, int)  # src_idx, dst_idx
     selection_changed = pyqtSignal(int)    # 單選簡化版
     speaker_changed = pyqtSignal(int)      # task.md #8：點 chip 改說話者
+    content_changed = pyqtSignal()         # Task 6：刪除 / 編輯文字 / 插入 等內容變更
 
     WIDTH_HINT = 360
 
@@ -33,8 +43,10 @@ class DialogueColumn(QWidget):
         self._drag_current_y: int = 0
         self._is_dragging: bool = False
         self._character_colors: dict[str, str] = {}
+        self._text_editor = None  # Task 6：inline 文字編輯 overlay（同時最多一個）
         self.setMouseTracking(True)
         self.setMinimumWidth(self.WIDTH_HINT)
+        self.setFocusPolicy(Qt.FocusPolicy.ClickFocus)  # Task 6：收 keyPress（Delete / Ctrl+C）
         self._update_height()
 
     def _update_height(self):
@@ -295,6 +307,7 @@ class DialogueColumn(QWidget):
         return max(0, min(raw, len(self.scene.dialogues)))
 
     def mousePressEvent(self, ev: QMouseEvent):
+        self.setFocus()  # Task 6：收 keyPress（Delete / Ctrl+C）
         if ev.button() != Qt.MouseButton.LeftButton:
             return
         idx = self._idx_at(ev.pos().y())
@@ -391,3 +404,167 @@ class DialogueColumn(QWidget):
         self._drag_src = None
         self._is_dragging = False
         self.update()
+
+    # --- Task 6：刪除 / 複製（鍵盤） ---
+
+    def keyPressEvent(self, ev: QKeyEvent):
+        """Delete/Backspace 刪除選取句；Ctrl+C 複製選取句文字。"""
+        if ev.matches(QKeySequence.StandardKey.Copy):
+            if self._selected_idx is not None and 0 <= self._selected_idx < len(self.scene.dialogues):
+                QApplication.clipboard().setText(self.scene.dialogues[self._selected_idx].text)
+                ev.accept()
+                return
+        if ev.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+            idx = self._selected_idx
+            if idx is not None and 0 <= idx < len(self.scene.dialogues):
+                self._delete_dialogue(idx)
+                ev.accept()
+                return
+        super().keyPressEvent(ev)
+
+    def _delete_dialogue(self, idx: int) -> None:
+        """經 Scene.remove_dialogue 刪除（自動 shift segment），再修正選取 / 游標。"""
+        self.scene.remove_dialogue(idx)
+        n = len(self.scene.dialogues)
+        if n == 0:
+            self._selected_idx = None
+            self._cursor_idx = None
+        else:
+            self._selected_idx = min(idx, n - 1)
+            if self._cursor_idx is not None:
+                self._cursor_idx = min(self._cursor_idx, n - 1)
+        self.refresh()
+        self.content_changed.emit()
+
+    # --- Task 6：雙擊編輯文字（inline overlay） ---
+
+    def mouseDoubleClickEvent(self, ev: QMouseEvent):
+        idx = self._idx_at(ev.pos().y())
+        if idx is None:
+            return
+        # 角色欄交給 _popup_speaker_combo（單擊已處理）；雙擊角色欄不開文字編輯
+        if self._character_col_rect(idx).contains(ev.pos()):
+            return
+        self._begin_text_edit(idx)
+
+    def _text_col_rect(self, idx: int) -> QRect:
+        """回傳該 row 台詞欄的命中區（與 paintEvent 三欄計算一致）。"""
+        rect = QRect(0, idx * shared.ROW_HEIGHT, self.width(), shared.ROW_HEIGHT)
+        inner = rect.adjusted(6, 4, -6, -4)
+        text_col_x = inner.x() + shared.COL_INDEX_W + shared.COL_CHARACTER_W
+        return QRect(text_col_x, inner.y(), inner.right() - text_col_x, inner.height())
+
+    def _begin_text_edit(self, idx: int) -> None:
+        """在台詞欄浮一個 LineEdit 編輯文字；Enter/失焦提交、Esc 取消。"""
+        from qfluentwidgets import LineEdit
+
+        if self._text_editor is not None:
+            self._text_editor.deleteLater()
+            self._text_editor = None
+
+        self._selected_idx = idx
+        editor = LineEdit(self)
+        editor.setText(self.scene.dialogues[idx].text)
+        editor.selectAll()
+        anchor = self._text_col_rect(idx)
+        editor.setGeometry(anchor.x(), anchor.y(), anchor.width(), max(28, anchor.height()))
+        self._text_editor = editor
+        self._edit_committed = False  # 防 Enter + focusOut 重複提交
+
+        def commit() -> None:
+            if self._edit_committed:
+                return
+            self._edit_committed = True
+            self._commit_text_edit(idx, editor.text())
+
+        def cancel() -> None:
+            if self._edit_committed:
+                return
+            self._edit_committed = True
+            self._close_text_editor()
+
+        editor.returnPressed.connect(commit)
+        editor.editingFinished.connect(commit)  # 失焦提交
+
+        # Esc 取消：覆寫 keyPressEvent
+        def key_press(ev: QKeyEvent, _orig=editor.keyPressEvent) -> None:
+            if ev.key() == Qt.Key.Key_Escape:
+                cancel()
+                return
+            _orig(ev)
+
+        editor.keyPressEvent = key_press
+        editor.show()
+        editor.raise_()
+        editor.setFocus()
+
+    def _commit_text_edit(self, idx: int, new_text: str) -> None:
+        """提交 inline 編輯：strip 後同原文或空 → 不套用；否則更新並重判 type。"""
+        from src.core.text_parser import classify_line
+
+        if not (0 <= idx < len(self.scene.dialogues)):
+            self._close_text_editor()
+            return
+        dlg = self.scene.dialogues[idx]
+        stripped = new_text.strip()
+        if not stripped or stripped == dlg.text:
+            self._close_text_editor()
+            return
+        dlg.text = stripped
+        new_type = classify_line(stripped)
+        if new_type == "dialogue":
+            dlg.type = "dialogue"  # character 保留原值
+        else:
+            dlg.type = "narration"
+            dlg.character = None
+        self._close_text_editor()
+        self.refresh()
+        self.content_changed.emit()
+
+    def _close_text_editor(self) -> None:
+        if self._text_editor is not None:
+            self._text_editor.deleteLater()
+            self._text_editor = None
+        self.update()
+
+    # --- Task 6：右鍵選單（編輯 / 插入 / 刪除） ---
+
+    def contextMenuEvent(self, ev):
+        menu = QMenu(self)
+        idx = self._idx_at(ev.pos().y())
+        if idx is not None:
+            self._selected_idx = idx
+            self.update()
+            menu.addAction("編輯文字", lambda: self._begin_text_edit(idx))
+            menu.addAction("在下方插入台詞", lambda: self._insert_dialogue_after(idx, "dialogue"))
+            menu.addAction("在下方插入旁白", lambda: self._insert_dialogue_after(idx, "narration"))
+            menu.addSeparator()
+            menu.addAction("刪除此句", lambda: self._delete_dialogue(idx))
+        else:
+            menu.addAction("新增台詞", lambda: self._append_dialogue("dialogue"))
+            menu.addAction("新增旁白", lambda: self._append_dialogue("narration"))
+        menu.exec(ev.globalPos())
+
+    def _new_dialogue(self, kind: str) -> Dialogue:
+        """依類型建立預設新句：台詞 text=「」、旁白 text=""。"""
+        if kind == "dialogue":
+            return Dialogue(type="dialogue", text="「」", character=None)
+        return Dialogue(type="narration", text="", character=None)
+
+    def _insert_dialogue_after(self, idx: int, kind: str) -> None:
+        """在 idx 下方插入新句，選中並立即開編輯 overlay。"""
+        new_idx = idx + 1
+        self.scene.insert_dialogue(new_idx, self._new_dialogue(kind))
+        self._select_and_edit_new(new_idx)
+
+    def _append_dialogue(self, kind: str) -> None:
+        """在末尾新增新句，選中並立即開編輯 overlay。"""
+        new_idx = len(self.scene.dialogues)
+        self.scene.insert_dialogue(new_idx, self._new_dialogue(kind))
+        self._select_and_edit_new(new_idx)
+
+    def _select_and_edit_new(self, new_idx: int) -> None:
+        self._selected_idx = new_idx
+        self.refresh()
+        self.content_changed.emit()
+        self._begin_text_edit(new_idx)
