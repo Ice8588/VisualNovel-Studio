@@ -95,6 +95,8 @@ class MainWindow(QMainWindow):
         add_action(file_menu, "save", "另存專案", self._on_save_project_as)
         file_menu.addSeparator()
         add_action(file_menu, "import", "匯入文字", self._on_import_text)
+        act_paste = add_action(file_menu, "import", "貼上文字", self._on_paste_text)
+        act_paste.setShortcut(QKeySequence("Ctrl+Shift+V"))
         file_menu.addSeparator()
         act_refresh = add_action(file_menu, "refresh", "重新整理預覽", self._on_refresh_preview)
         act_refresh.setShortcut(QKeySequence("F5"))
@@ -364,11 +366,12 @@ class MainWindow(QMainWindow):
             "5. 預覽畫面即時顯示效果\n"
             "6. 完成後導出為影片 (MP4) 或網頁 (ZIP/HTML)\n\n"
             "快捷鍵：\n"
-            "  Ctrl+N — 新增專案\n"
-            "  Ctrl+O — 開啟專案\n"
-            "  Ctrl+S — 儲存專案\n"
-            "  Delete — 刪除選取的對話\n"
-            "  Ctrl+C/V — 複製/貼上對話"
+            "  Ctrl+N/O/S — 新增/開啟/儲存專案\n"
+            "  Delete — 刪除選取的句子\n"
+            "  雙擊台詞 — 編輯文字\n"
+            "  右鍵台詞列 — 插入/刪除句子\n"
+            "  Ctrl+C — 複製句子文字\n"
+            "  Ctrl+Shift+V — 貼上文字（也可走 檔案 > 貼上文字）"
         )
 
     def _on_show_about(self) -> None:
