@@ -358,7 +358,10 @@ class DialogueColumn(QWidget):
         )
         combo.show()
         combo.raise_()
-        combo.showPopup()
+        # qfluentwidgets ComboBox（v1.11.2）不是 QComboBox 子類，沒有 showPopup()。
+        # 正確的展開方法是 _showComboMenu()；使用 hasattr 防衛以避免未來版本異動時崩潰。
+        if hasattr(combo, "_showComboMenu"):
+            combo._showComboMenu()  # noqa: SLF001 — 依賴 qfluentwidgets 1.11.2 內部 API
 
     def mouseMoveEvent(self, ev: QMouseEvent):
         if self._drag_src is not None:
