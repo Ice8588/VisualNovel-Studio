@@ -93,6 +93,48 @@ class TestSaveAndLoad:
         assert "繁體中文標題" in raw  # 不應是 \u escape
 
 
+class TestV1Migration:
+    def test_load_v1_file_and_resave_as_v2(self, tmp_path):
+        """v1 舊檔（頂層 scenes）→ 開啟成單影片作品 → 存檔變 v2 → 重開不丟資料。"""
+        v1 = {
+            "title": "舊作品",
+            "scenes": [
+                {"id": "場景1", "dialogues": [
+                    {"type": "narration", "text": "第一行", "character": None},
+                ]},
+            ],
+            "characters": [{"name": "小美", "name_color": "#E05555", "costumes": []}],
+        }
+        old_file = tmp_path / "old.vnsproj"
+        old_file.write_text(json.dumps(v1, ensure_ascii=False), encoding="utf-8")
+
+        p = load_project(old_file)
+        assert len(p.episodes) == 1
+        assert p.scenes[0].dialogues[0].text == "第一行"
+        assert p.characters[0].name == "小美"
+
+        save_project(p, old_file)
+        raw = json.loads(old_file.read_text(encoding="utf-8"))
+        assert raw["version"] == 2
+        assert raw["episodes"][0]["scenes"][0]["id"] == "場景1"
+
+        p2 = load_project(old_file)
+        assert p2.scenes[0].dialogues[0].text == "第一行"
+
+    def test_multi_episode_roundtrip(self, tmp_path):
+        p = Project(title="系列作", episodes=[
+            Episode(name="第一集", scenes=[Scene(id="A")]),
+            Episode(name="第二集", scenes=[Scene(id="B"), Scene(id="C")]),
+        ])
+        p.active_episode_index = 1
+        f = tmp_path / "multi.vnsproj"
+        save_project(p, f)
+        p2 = load_project(f)
+        assert [e.name for e in p2.episodes] == ["第一集", "第二集"]
+        assert p2.active_episode_index == 1
+        assert [s.id for s in p2.scenes] == ["B", "C"]
+
+
 class TestSaveMigratesAssets:
     """Bug 1：save_project 必須把 assets/ 從來源搬到目標。"""
 
