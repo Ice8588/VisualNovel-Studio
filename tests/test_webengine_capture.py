@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from src.core.models import Dialogue, Project, Scene
+from src.core.models import Dialogue, Episode, Project, Scene
 
 
 # ── 不需要 Qt 的純邏輯測試 ──
@@ -73,7 +73,7 @@ class TestPrepareEngineFiles:
 
         project = Project(
             title="測試",
-            scenes=[Scene(id="s1", dialogues=[Dialogue(type="narration", text="旁白")])],
+            episodes=[Episode(name="影片1", scenes=[Scene(id="s1", dialogues=[Dialogue(type="narration", text="旁白")])])],
         )
 
         with patch("src.ui.webengine_capture.WebEngineVideoExporter.__init__",
@@ -109,7 +109,7 @@ class TestExportValidation:
     def test_no_dialogues_raises(self):
         from src.ui.webengine_capture import WebEngineVideoExporter
 
-        project = Project(title="空場景", scenes=[Scene(id="s1")])
+        project = Project(title="空場景", episodes=[Episode(name="影片1", scenes=[Scene(id="s1")])])
         with patch("src.core.ffmpeg_manager.ensure_ffmpeg_or_raise",
                    return_value=Path("ffmpeg")):
             exporter = WebEngineVideoExporter(project, Path("out.mp4"))

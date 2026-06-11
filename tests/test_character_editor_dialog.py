@@ -154,33 +154,6 @@ def test_new_character_no_sprite_has_empty_costumes(qapp, tmp_path):
     assert result.costumes == []
 
 
-# ── 測試 6：角色卡匯入情境（_loaded_from_card=True）→ 行為不變 ──
-
-def test_card_import_preserves_extra_costumes(qapp, tmp_path):
-    """角色卡匯入後 get_character() 應回傳卡內完整 costumes，不因修改觸發不同分支。"""
-    dlg = CharacterEditorDialog(character=None, project_dir=tmp_path)
-    dlg.edit_name.setText("卡片角色")
-    dlg._apply_color("#00AAFF")
-
-    # 模擬角色卡匯入（直接設 internal state）
-    card_costumes = [
-        Costume("卡裝1", [SpriteVariant("笑", "card_a.png"), SpriteVariant("哭", "card_b.png")]),
-        Costume("卡裝2", [SpriteVariant("嚴肅", "card_c.png")]),
-    ]
-    dlg._loaded_from_card = True
-    dlg._extra_costumes = list(card_costumes)
-    dlg._sprite_filename = "card_a.png"
-    dlg._lbl_sprite_name.setText("笑")
-
-    result = dlg.get_character()
-
-    assert result.name == "卡片角色"
-    assert len(result.costumes) == 2
-    assert result.costumes[0].name == "卡裝1"
-    assert len(result.costumes[0].expressions) == 2
-    assert result.costumes[1].name == "卡裝2"
-
-
 # ── 測試 7：編輯角色時，名稱與顏色從對話框取得（不從 _original） ──
 
 def test_edit_updates_name_and_color(qapp, tmp_path):
@@ -215,6 +188,24 @@ def test_edit_character_with_empty_costumes_and_new_sprite(qapp, tmp_path):
     assert len(result.costumes) == 1
     assert result.costumes[0].name == "服裝1"
     assert result.costumes[0].expressions[0].filename == "solo.png"
+
+
+# ── 服裝摘要標籤（修走查陷阱 P8：多服裝角色其餘資料隱形）──
+
+def test_summary_label_visible_for_multi_costume_char(qapp, tmp_path):
+    char = _make_multi_costume_char()  # 2 套服裝 / 3 張差分（檔案開頭已定義）
+    dlg = CharacterEditorDialog(character=char, project_dir=tmp_path)
+    assert dlg._lbl_costume_summary.isVisibleTo(dlg)
+    assert "2 套服裝" in dlg._lbl_costume_summary.text()
+    assert "3 張差分" in dlg._lbl_costume_summary.text()
+
+
+def test_summary_label_hidden_for_single_sprite_char(qapp, tmp_path):
+    char = Character(name="單圖", costumes=[
+        Costume(name="服裝1", expressions=[SpriteVariant("正面", "a.png")]),
+    ])
+    dlg = CharacterEditorDialog(character=char, project_dir=tmp_path)
+    assert not dlg._lbl_costume_summary.isVisibleTo(dlg)
 
 
 # ── 測試 9：get_character() 回傳深拷貝，不污染 _original ──

@@ -617,3 +617,51 @@ segment 上白字 `#FFFFFF`、`character_color` / `effect_color` 使用者強調
 - Step 3 列的 light-mode follow-up 若使用者要求淺色主題完整支援，優先從 `_timeline_shared.py`
   抽 theme 常數開始；否則保持現狀，屬深色主題下的實用工具。
 
+---
+
+## feature/episodes-and-character-reuse：作品/影片兩層結構與跨作品角色復用（2026-06）
+
+### 背景與決策（ADR）
+
+- 需求根源：系列創作者每支影片重設角色/素材。原候選方案「角色卡庫管理器」
+  （見已取代的 plans/2026-06-11-character-card-ux.md）被否決——卡片只解決角色、
+  且庫會堆積舊版本。
+- 決策 1：一個專案 = 一個作品；Project 與 Scene 之間插入 Episode（影片）層，
+  角色/素材/設定屬作品層全影片共用，每支影片獨立導出 MP4。層級固定兩層；
+  不預留分組欄位——from_dict 忽略未知 key，未來要加時一行即可、舊檔免遷移（YAGNI）。
+- 決策 2：`Project.scenes` 改為 property 指向 active episode 的場景
+  （getter + setter；setter 支援場景拖曳排序的整列賦值）。center_panel /
+  exporter_video / webengine_capture / to_script_json 等所有舊取用點因此零修改，
+  engine.js 完全不動。
+- 決策 3：跨作品復用 =「從其他作品匯入角色」（直接唯讀對方 .vnsproj + 複製立繪，
+  內容相同去重、同名檔加後綴、同名角色詢問取代/略過）。使用者語彙不出現「卡」。
+  character_library.py（.vncard）保留為休眠分享格式後端，UI 入口已移除，測試照跑。
+
+### 存檔格式 v2
+
+- 頂層 `version: 2` + `episodes: [{name, scenes}]` + `active_episode_index`，
+  不再有頂層 `scenes`。v1 舊檔由 `Project.from_dict` 自動包成單影片作品，
+  存檔即升級 v2（不可逆，UI 暫無降版需求）。
+
+### UI 漸進揭露
+
+- 單支影片時介面與改版前完全相同；「檔案 > 新增影片」為常駐入口。
+- 第二支影片出現後，左側場景頁頂部顯示影片切換列（ComboBox + ＋ + ⋯選單）。
+- 刪除影片有確認（列出場景/對話數，註明角色素材不受影響）；最後一支不可刪。
+
+### 一併修復（2026-06-11 新手走查陷阱）
+
+- 服裝編輯器零服裝時按「新增差分」/拖圖自動建「服裝1」（原本靜默無反應）。
+- 移除含差分的服裝先確認。
+- 編輯多服裝角色時對話框顯示「N 套服裝、M 張差分」摘要（原本其餘資料隱形）。
+- CharacterEditorDialog 的「從角色卡匯入/儲存為角色卡」按鈕與流程移除。
+
+### 給接手者的備忘
+
+- 新功能取場景一律走 `project.scenes`（active episode）；要跨影片枚舉時
+  明確寫 `for ep in project.episodes: ep.scenes`，不要假設單影片。
+- 所有導出（MP4 / ZIP / HTML）與預覽皆為「目前影片」範圍，不是全作品（刻意，與 WYSIWYG 一致）。
+- `_update_status` 的統計目前是「目前影片」的數字，不是全作品總和（刻意）。
+- `copy_file_dedup` 以整檔 bytes 相等判定重用；立繪經 normalize 後為
+  1080×1440 PNG，比較成本可接受。
+

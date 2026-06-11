@@ -14,7 +14,7 @@ from src.core.exporter_video import (
     find_ffmpeg,
     render_transition_frame,
 )
-from src.core.models import Dialogue, Project, Scene
+from src.core.models import Dialogue, Episode, Project, Scene
 
 
 @pytest.fixture
@@ -174,7 +174,7 @@ class TestVideoExporter:
 
         p = Project(
             title="測試",
-            scenes=[
+            episodes=[Episode(name="影片1", scenes=[
                 Scene(
                     id="scene_001",
                     background="bg.png",
@@ -183,7 +183,7 @@ class TestVideoExporter:
                         Dialogue(type="dialogue", text="台詞", character="角色A"),
                     ],
                 ),
-            ],
+            ])],
             assets={"backgrounds": ["bg.png"], "sprites": [], "music": []},
             project_path=project_dir / "test.vnsproj",
         )
@@ -212,7 +212,7 @@ class TestVideoExporter:
                 exporter.export()
 
     def test_export_no_dialogues_raises(self, tmp_path):
-        p = Project(title="空場景", scenes=[Scene(id="s1")])
+        p = Project(title="空場景", episodes=[Episode(name="影片1", scenes=[Scene(id="s1")])])
         output = tmp_path / "test.mp4"
         with patch("src.core.exporter_video.find_ffmpeg", return_value=Path("ffmpeg")):
             exporter = VideoExporter(p, output)

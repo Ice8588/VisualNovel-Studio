@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from src.core.models import Dialogue, Project, Scene
+from src.core.models import Dialogue, Episode, Project, Scene
 
 
 NONE_LABEL = "(無)"
@@ -24,7 +24,7 @@ def _make_project_with_bg_bgm() -> Project:
         bgm="theme.mp3",
         dialogues=[Dialogue(type="narration", text="測試")],
     )
-    proj = Project(scenes=[scene])
+    proj = Project(episodes=[Episode(name="影片1", scenes=[scene])])
     proj.assets["backgrounds"] = ["forest.png", "city.png"]
     proj.assets["music"] = ["theme.mp3", "battle.mp3"]
     return proj
@@ -113,7 +113,7 @@ def test_import_assets_auto_applies_to_current_scene(qapp):
     from pathlib import Path
 
     w = MainWindow()
-    proj = Project(scenes=[Scene(id="場景1", dialogues=[Dialogue(type="narration", text="x")])])
+    proj = Project(episodes=[Episode(name="影片1", scenes=[Scene(id="場景1", dialogues=[Dialogue(type="narration", text="x")])])])
     proj.assets["backgrounds"] = []
     proj.assets["music"] = []
     w._project = proj

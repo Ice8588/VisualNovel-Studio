@@ -28,7 +28,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from qfluentwidgets import ComboBox, LineEdit, ListWidget, PushButton, StrongBodyLabel
+from qfluentwidgets import BodyLabel, ComboBox, LineEdit, ListWidget, PushButton, StrongBodyLabel
 
 from src.core.models import Character, Costume, SpriteVariant
 from src.ui.palette import PRESET_NAME_COLORS as _PRESET_COLORS
@@ -290,7 +290,7 @@ class PasteTextDialog(QDialog):
 
 
 class CharacterEditorDialog(QDialog):
-    """新增或編輯角色：名稱、名牌顏色、預設立繪；支援拖曳圖片與角色卡匯入匯出。"""
+    """新增或編輯角色：名稱、名牌顏色、預設立繪；支援拖曳圖片匯入。"""
 
     def __init__(
         self,
@@ -303,9 +303,6 @@ class CharacterEditorDialog(QDialog):
         self._project_dir = project_dir or Path(tempfile.gettempdir()) / "vnstudio_unsaved"
         self._selected_color = "#4682B4"
         self._sprite_filename: str | None = None
-        # C6：若透過角色卡匯入，除主立繪外還可能夾帶額外差分，存在這裡作為 get_character() 的 costumes 輸出
-        self._extra_costumes: list[Costume] = []
-        self._loaded_from_card: bool = False
         self.setAcceptDrops(True)
         # 確保 app-level QSS 中 QDialog 的背景色能套到本 dialog（部份 Qt 樣式下需顯式啟用）
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -366,16 +363,11 @@ class CharacterEditorDialog(QDialog):
         sprite_group.setLayout(sprite_layout)
         layout.addWidget(sprite_group)
 
-        # C6 角色卡按鈕列
-        card_row = QHBoxLayout()
-        self.btn_import_card = PushButton("從角色卡匯入…")
-        self.btn_import_card.clicked.connect(self._on_import_card)
-        self.btn_export_card = PushButton("儲存為角色卡…")
-        self.btn_export_card.clicked.connect(self._on_export_card)
-        card_row.addWidget(self.btn_import_card)
-        card_row.addWidget(self.btn_export_card)
-        card_row.addStretch()
-        layout.addLayout(card_row)
+        # 多服裝角色提示：避免新手以為角色只有這一張圖
+        self._lbl_costume_summary = BodyLabel("")
+        self._lbl_costume_summary.setWordWrap(True)
+        self._lbl_costume_summary.setVisible(False)
+        layout.addWidget(self._lbl_costume_summary)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
@@ -401,6 +393,13 @@ class CharacterEditorDialog(QDialog):
                     Qt.TransformationMode.SmoothTransformation
                 )
                 self._sprite_preview.setPixmap(pm)
+        total = len(char.sprites)
+        if total > 1:
+            self._lbl_costume_summary.setText(
+                f"此角色共有 {len(char.costumes)} 套服裝、{total} 張差分。"
+                "這裡只更換預設立繪；完整管理請用角色面板的「編輯服裝…」。"
+            )
+            self._lbl_costume_summary.setVisible(True)
 
     def _apply_color(self, hex_color: str) -> None:
         from src.ui import palette as _pal
@@ -442,8 +441,6 @@ class CharacterEditorDialog(QDialog):
         self._lbl_sprite_name.setText("（無）")
         self._sprite_preview.clear()
         self._sprite_preview.setText("尚未選擇圖片")
-        self._extra_costumes = []
-        self._loaded_from_card = False
 
     # ── C2：拖曳圖片到對話框任何位置即匯入為立繪 ──
 
@@ -474,78 +471,6 @@ class CharacterEditorDialog(QDialog):
             break  # 多檔拖入時只接受第一張（單一預設立繪）
         event.acceptProposedAction()
 
-    # ── C6：角色卡匯入 / 匯出 ──
-
-    def _on_import_card(self) -> None:
-        from src.core.character_library import list_cards, load_card, get_library_dir
-
-        lib_dir = get_library_dir()
-        cards = list_cards(lib_dir)
-        if not cards:
-            QMessageBox.information(
-                self, "沒有角色卡",
-                f"資料庫為空：{lib_dir}\n\n可先在另一個專案『儲存為角色卡…』後匯入。",
-            )
-            return
-
-        # 允許選目錄外的卡
-        path, _ = QFileDialog.getOpenFileName(
-            self, "選擇角色卡",
-            str(lib_dir),
-            "角色卡 (*.vncard);;所有檔案 (*)",
-        )
-        if not path:
-            return
-
-        try:
-            char, _written = load_card(Path(path), self._project_dir / "assets")
-        except (FileNotFoundError, ValueError) as e:
-            QMessageBox.warning(self, "匯入失敗", str(e))
-            return
-
-        # 覆蓋目前編輯值
-        self.edit_name.setText(char.name)
-        self._apply_color(char.name_color)
-        if char.costumes and char.costumes[0].expressions:
-            first = char.costumes[0].expressions[0]
-            self._sprite_filename = first.filename
-            self._lbl_sprite_name.setText(first.label)
-            full = self._project_dir / "assets" / first.filename
-            if full.exists():
-                pm = QPixmap(str(full)).scaled(
-                    116, 136, Qt.AspectRatioMode.KeepAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation,
-                )
-                self._sprite_preview.setPixmap(pm)
-        # 保留所有服裝（含差分）供 get_character 使用
-        self._extra_costumes = list(char.costumes)
-        self._loaded_from_card = True
-
-    def _on_export_card(self) -> None:
-        from src.core.character_library import save_card
-
-        # 必須先有名稱與立繪
-        name = self.edit_name.text().strip()
-        if not name:
-            QMessageBox.warning(self, "缺少名稱", "請先輸入角色名稱才能匯出角色卡。")
-            return
-        if not self._sprite_filename and not self._extra_costumes:
-            QMessageBox.warning(self, "缺少立繪", "請先匯入至少一張立繪才能匯出角色卡。")
-            return
-
-        # 編輯中的角色（未 accept）先組一個臨時 Character 出去
-        char = self.get_character()
-        assets_dir = self._project_dir / "assets"
-        try:
-            path = save_card(char, assets_dir)
-        except (OSError, ValueError) as e:
-            QMessageBox.warning(self, "儲存失敗", str(e))
-            return
-        QMessageBox.information(
-            self, "角色卡已儲存",
-            f"角色卡已寫入：\n{path}\n\n日後可在其他專案透過『從角色卡匯入』復用。",
-        )
-
     def _validate_and_accept(self) -> None:
         name = self.edit_name.text().strip()
         if not name:
@@ -557,11 +482,7 @@ class CharacterEditorDialog(QDialog):
         name = self.edit_name.text().strip()
         color = self._selected_color or "#4682B4"
 
-        # 情境 1：角色卡匯入 → 保留卡內所有服裝（現行行為不變）
-        if self._loaded_from_card and self._extra_costumes:
-            return Character(name=name, name_color=color, costumes=list(self._extra_costumes))
-
-        # 情境 2：編輯既有角色 → 以原始 costumes 深拷貝為基礎，僅更新可編輯欄位
+        # 情境 1：編輯既有角色 → 以原始 costumes 深拷貝為基礎，僅更新可編輯欄位
         if self._original is not None:
             costumes = copy.deepcopy(self._original.costumes)
 
@@ -594,7 +515,7 @@ class CharacterEditorDialog(QDialog):
                 costumes=costumes,
             )
 
-        # 情境 3：新增角色 → 維持現行行為
+        # 情境 2：新增角色 → 維持現行行為
         sprites = []
         if self._sprite_filename:
             label = self._lbl_sprite_name.text() or "差分1"
@@ -738,6 +659,17 @@ class CostumeEditorDialog(QDialog):
             return
         expressions[expr_row].label = new_label
 
+    def _ensure_costume(self) -> int:
+        """確保至少有一套服裝（無則自動建「服裝1」）；回傳目前選中的服裝索引。"""
+        if not self._costumes:
+            self._costumes.append(Costume(name="服裝1"))
+            self._populate_costume_list()
+        row = self._costume_list.currentRow()
+        if row < 0:
+            self._costume_list.setCurrentRow(0)
+            row = 0
+        return row
+
     def _on_add_costume(self) -> None:
         default_name = f"服裝{len(self._costumes) + 1}"
         name, ok = QInputDialog.getText(self, "新增服裝", "服裝名稱：")
@@ -749,14 +681,21 @@ class CostumeEditorDialog(QDialog):
 
     def _on_remove_costume(self) -> None:
         row = self._costume_list.currentRow()
-        if 0 <= row < len(self._costumes):
-            self._costumes.pop(row)
-            self._populate_costume_list()
+        if not (0 <= row < len(self._costumes)):
+            return
+        cos = self._costumes[row]
+        if cos.expressions:
+            ret = QMessageBox.question(
+                self, "移除服裝",
+                f"「{cos.name}」內含 {len(cos.expressions)} 張立繪差分，確定一併移除？",
+            )
+            if ret != QMessageBox.StandardButton.Yes:
+                return
+        self._costumes.pop(row)
+        self._populate_costume_list()
 
     def _on_add_expression(self) -> None:
-        cos_row = self._costume_list.currentRow()
-        if cos_row < 0 or cos_row >= len(self._costumes):
-            return
+        cos_row = self._ensure_costume()
         file_path, _ = QFileDialog.getOpenFileName(
             self, "選擇差分圖片", "", "圖片 (*.png *.jpg *.jpeg)"
         )
@@ -775,10 +714,8 @@ class CostumeEditorDialog(QDialog):
             self._on_costume_selected(cos_row)
 
     def _on_files_dropped(self, paths: list[Path]) -> None:
-        """拖曳圖片到右側面板時批量匯入。"""
-        cos_row = self._costume_list.currentRow()
-        if cos_row < 0 or cos_row >= len(self._costumes):
-            return
+        """拖曳圖片到右側面板時批量匯入；零服裝時自動建服裝1。"""
+        cos_row = self._ensure_costume()
         for p in paths:
             if p.suffix.lower() in (".png", ".jpg", ".jpeg"):
                 self._import_expression(cos_row, p)

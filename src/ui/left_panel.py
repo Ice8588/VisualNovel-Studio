@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QListWidget,
     QListWidgetItem,
+    QMenu,
     QMessageBox,
     QPushButton,
     QSplitter,
@@ -23,7 +24,7 @@ from PyQt6.QtWidgets import (
 )
 from qfluentwidgets import ComboBox, LineEdit, ListWidget, PushButton, SegmentedWidget, StrongBodyLabel
 
-from src.core.models import Character, Project, Scene
+from src.core.models import Character, Episode, Project, Scene
 from src.ui import palette
 from src.ui.icons import design_icon, themed_icon
 from src.ui.palette import PRESET_NAME_COLORS as PRESET_COLORS
@@ -111,6 +112,13 @@ class LeftPanel(QWidget):
     character_property_changed = pyqtSignal()    # name/color/position edited
     costume_edit_requested = pyqtSignal(int)     # character index
 
+    # 影片（Episode）信號
+    episode_switched = pyqtSignal(int)   # 新 active episode index
+    episodes_changed = pyqtSignal()      # 新增/改名/刪除影片
+
+    # 角色匯入信號
+    character_import_requested = pyqtSignal()
+
     # 素材匯入信號
     bg_import_requested = pyqtSignal()
     music_import_requested = pyqtSignal()
@@ -150,6 +158,28 @@ class LeftPanel(QWidget):
         scene_layout = QVBoxLayout()
         scene_layout.setContentsMargins(0, 0, 0, 0)
         scene_layout.setSpacing(4)
+
+        # 影片切換列（漸進揭露：單支影片時整列隱藏，入口在檔案選單「新增影片」）
+        self._episode_bar = QWidget()
+        ep_row = QHBoxLayout()
+        ep_row.setContentsMargins(0, 0, 0, 0)
+        ep_row.setSpacing(4)
+        _ep_lbl = QLabel("影片:")
+        _ep_lbl.setFixedWidth(56)
+        ep_row.addWidget(_ep_lbl)
+        self.combo_episode = ComboBox()
+        ep_row.addWidget(self.combo_episode, 1)
+        self.btn_add_episode = PushButton("＋")
+        self.btn_add_episode.setFixedWidth(32)
+        self.btn_add_episode.setToolTip("新增影片（共用本作品的角色與素材）")
+        ep_row.addWidget(self.btn_add_episode)
+        self.btn_episode_menu = PushButton("⋯")
+        self.btn_episode_menu.setFixedWidth(32)
+        self.btn_episode_menu.setToolTip("重新命名／刪除這支影片")
+        ep_row.addWidget(self.btn_episode_menu)
+        self._episode_bar.setLayout(ep_row)
+        scene_layout.addWidget(self._episode_bar)
+
         self.scene_list = ListWidget()
         _f = self.scene_list.font(); _f.setPixelSize(18); self.scene_list.setFont(_f)
         self.scene_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
@@ -176,6 +206,12 @@ class LeftPanel(QWidget):
         self.btn_add_char.setIcon(themed_icon("add"))
         self.btn_add_char.setIconSize(QSize(16, 16))
         char_layout.addWidget(self.btn_add_char)
+        self.btn_import_char = QPushButton(" 從其他作品匯入…")
+        self.btn_import_char.setObjectName("dashedButton")
+        self.btn_import_char.setIcon(themed_icon("open"))
+        self.btn_import_char.setIconSize(QSize(16, 16))
+        self.btn_import_char.setToolTip("把另一個作品做好的角色（含立繪）複製進來")
+        char_layout.addWidget(self.btn_import_char)
         char_section.setLayout(char_layout)
         self._list_stack.addWidget(char_section)
 
@@ -292,6 +328,11 @@ class LeftPanel(QWidget):
 
         self.character_list.currentRowChanged.connect(self._on_char_selection_changed)
         self.btn_add_char.clicked.connect(self.character_add_requested.emit)
+        self.btn_import_char.clicked.connect(self.character_import_requested.emit)
+
+        self.combo_episode.currentIndexChanged.connect(self._on_episode_combo_changed)
+        self.btn_add_episode.clicked.connect(self.add_episode)
+        self.btn_episode_menu.clicked.connect(self._on_episode_menu)
 
     def _on_tab_changed(self, route_key: str) -> None:
         """SegmentedWidget 切換：同步 stacked widget 和屬性面板。"""
@@ -314,6 +355,7 @@ class LeftPanel(QWidget):
     def set_project(self, project: Project) -> None:
         """綁定 Project，重建 UI。"""
         self._project = project
+        self._refresh_episode_bar()
         self._refresh_scene_list()
         self._refresh_character_list()
 
@@ -348,6 +390,83 @@ class LeftPanel(QWidget):
     def get_current_scene_index(self) -> int:
         """取得目前選取的場景索引。"""
         return self._current_scene_index
+
+    # ── 影片（Episode）切換 ──
+
+    def _refresh_episode_bar(self) -> None:
+        """重建影片下拉選單；單支影片時整列隱藏（漸進揭露）。"""
+        self._updating = True
+        self.combo_episode.clear()
+        if self._project:
+            for ep in self._project.episodes:
+                self.combo_episode.addItem(ep.name)
+            self.combo_episode.setCurrentIndex(self._project.active_episode_index)
+        multi = bool(self._project) and len(self._project.episodes) > 1
+        self._episode_bar.setVisible(multi)
+        self._updating = False
+
+    def _on_episode_combo_changed(self, index: int) -> None:
+        if self._updating or not self._project or index < 0:
+            return
+        self._project.active_episode_index = index
+        self._refresh_scene_list()
+        self.episode_switched.emit(index)
+
+    def add_episode(self) -> None:
+        """新增一支影片並切換過去；公開給檔案選單呼叫。"""
+        if not self._project:
+            return
+        default = self._project.next_episode_name()
+        name, ok = QInputDialog.getText(self, "新增影片", "影片名稱：", text=default)
+        if not ok:
+            return
+        self._project.episodes.append(Episode(name=name.strip() or default))
+        self._project.active_episode_index = len(self._project.episodes) - 1
+        self._refresh_episode_bar()
+        self._refresh_scene_list()
+        self.episodes_changed.emit()
+
+    def _on_episode_menu(self) -> None:
+        menu = QMenu(self)
+        act_rename = menu.addAction("重新命名")
+        act_delete = menu.addAction("刪除這支影片")
+        chosen = menu.exec(
+            self.btn_episode_menu.mapToGlobal(self.btn_episode_menu.rect().bottomLeft())
+        )
+        if chosen == act_rename:
+            self._on_rename_episode()
+        elif chosen == act_delete:
+            self._on_remove_episode()
+
+    def _on_rename_episode(self) -> None:
+        if not self._project:
+            return
+        ep = self._project.active_episode
+        name, ok = QInputDialog.getText(self, "重新命名影片", "影片名稱：", text=ep.name)
+        if ok and name.strip():
+            ep.name = name.strip()
+            self._refresh_episode_bar()
+            self.episodes_changed.emit()
+
+    def _on_remove_episode(self) -> None:
+        if not self._project or len(self._project.episodes) <= 1:
+            return  # 最後一支不可刪（按鈕列在單影片時本來就隱藏；此為保險）
+        ep = self._project.active_episode
+        n_dlg = sum(len(s.dialogues) for s in ep.scenes)
+        result = QMessageBox.question(
+            self, "刪除影片",
+            f"「{ep.name}」含 {len(ep.scenes)} 個場景、{n_dlg} 則對話，將一併刪除。\n"
+            "（角色與素材屬於整個作品，不受影響）\n確定刪除？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if result != QMessageBox.StandardButton.Yes:
+            return
+        idx = self._project.active_episode_index
+        self._project.episodes.pop(idx)
+        self._project.active_episode_index = max(0, idx - 1)
+        self._refresh_episode_bar()
+        self._refresh_scene_list()
+        self.episodes_changed.emit()
 
     # ── 場景列表 ──
 

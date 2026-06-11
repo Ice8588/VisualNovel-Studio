@@ -7,6 +7,7 @@ from src.core.models import (
     Dialogue,
     EffectSegment,
     EffectTrack,
+    Episode,
     Project,
     Scene,
     StageSegment,
@@ -32,7 +33,7 @@ def _make_project() -> Project:
     scene.effect_tracks.append(
         EffectTrack(name="cam", segments=[EffectSegment(2, 2, "screen_shake")])
     )
-    return Project(title="T", scenes=[scene])
+    return Project(title="T", episodes=[Episode(name="影片1", scenes=[scene])])
 
 
 def test_each_dialogue_has_stage_and_active_effects():

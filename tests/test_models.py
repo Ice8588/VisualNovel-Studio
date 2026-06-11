@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from src.core.models import Character, Costume, Dialogue, GameSettings, Project, Scene, SpriteVariant
+from src.core.models import Episode
 
 
 class TestDialogue:
@@ -85,7 +86,7 @@ class TestProject:
     def test_project_roundtrip(self):
         original = Project(
             title="我的故事",
-            scenes=[
+            episodes=[Episode(name="影片1", scenes=[
                 Scene(
                     id="scene_001",
                     background="bg_forest.png",
@@ -95,7 +96,7 @@ class TestProject:
                         Dialogue(type="dialogue", text="你真的要走嗎？", character="小花"),
                     ],
                 ),
-            ],
+            ])],
             assets={
                 "backgrounds": ["bg_forest.png"],
                 "sprites": [],
@@ -134,11 +135,11 @@ class TestProject:
     def test_to_script_json(self):
         p = Project(
             title="測試",
-            scenes=[
+            episodes=[Episode(name="影片1", scenes=[
                 Scene(id="scene_001", dialogues=[
                     Dialogue(type="dialogue", text="哈囉", character="A"),
                 ]),
-            ],
+            ])],
         )
         result = p.to_script_json()
         assert result["title"] == "測試"
@@ -152,17 +153,17 @@ class TestProject:
         assert p.next_scene_id() == "場景1"
 
     def test_next_scene_id_sequential(self):
-        p = Project(scenes=[
+        p = Project(episodes=[Episode(name="影片1", scenes=[
             Scene(id="場景1"),
             Scene(id="場景3"),
-        ])
+        ])])
         assert p.next_scene_id() == "場景4"
 
     def test_next_scene_id_legacy_compat(self):
-        p = Project(scenes=[
+        p = Project(episodes=[Episode(name="影片1", scenes=[
             Scene(id="scene_001"),
             Scene(id="scene_003"),
-        ])
+        ])])
         assert p.next_scene_id() == "場景4"
 
     def test_from_dict_missing_asset_categories(self):
@@ -262,4 +263,68 @@ class TestCharacterCostume:
         result = p.to_script_json()
         sprites = result["characters"]["角色A"]["sprites"]
         assert sprites == {"普通": "a_normal.png", "開心": "a_happy.png"}
+
+
+class TestEpisodes:
+    def test_default_project_has_one_episode(self):
+        p = Project()
+        assert len(p.episodes) == 1
+        assert p.episodes[0].name == "影片1"
+        # scenes property 是 active episode 的 live reference
+        assert p.scenes is p.episodes[0].scenes
+
+    def test_scenes_property_follows_active_episode(self):
+        e1 = Episode(name="第一集", scenes=[Scene(id="A")])
+        e2 = Episode(name="第二集", scenes=[Scene(id="B")])
+        p = Project(episodes=[e1, e2])
+        assert [s.id for s in p.scenes] == ["A"]
+        p.active_episode_index = 1
+        assert [s.id for s in p.scenes] == ["B"]
+
+    def test_scenes_setter_writes_into_active_episode(self):
+        # left_panel 場景拖曳排序會做 project.scenes = new_order，必須寫進 active episode
+        p = Project()
+        p.scenes = [Scene(id="X")]
+        assert [s.id for s in p.episodes[0].scenes] == ["X"]
+
+    def test_to_dict_writes_v2(self):
+        p = Project(title="作品", episodes=[
+            Episode(name="第一集", scenes=[Scene(id="A")]),
+            Episode(name="第二集"),
+        ])
+        p.active_episode_index = 1
+        data = p.to_dict()
+        assert data["version"] == 2
+        assert "scenes" not in data  # 頂層不再有 scenes
+        restored = Project.from_dict(data)
+        assert [e.name for e in restored.episodes] == ["第一集", "第二集"]
+        assert restored.active_episode_index == 1
+        assert restored.episodes[0].scenes[0].id == "A"
+
+    def test_from_dict_migrates_v1_file(self):
+        old = {
+            "title": "舊專案",
+            "scenes": [{"id": "場景1", "dialogues": []}],
+            "characters": [],
+        }
+        p = Project.from_dict(old)
+        assert len(p.episodes) == 1
+        assert p.episodes[0].name == "影片1"
+        assert p.scenes[0].id == "場景1"
+
+    def test_to_script_json_exports_active_episode_only(self):
+        e1 = Episode(name="一", scenes=[Scene(id="A", dialogues=[Dialogue(type="narration", text="hi")])])
+        e2 = Episode(name="二", scenes=[Scene(id="B", dialogues=[Dialogue(type="narration", text="yo")])])
+        p = Project(episodes=[e1, e2])
+        assert [s["id"] for s in p.to_script_json()["scenes"]] == ["A"]
+        p.active_episode_index = 1
+        assert [s["id"] for s in p.to_script_json()["scenes"]] == ["B"]
+
+    def test_next_episode_name(self):
+        p = Project()
+        assert p.next_episode_name() == "影片2"
+        p.episodes.append(Episode(name="自訂名"))
+        assert p.next_episode_name() == "影片2"
+        p.episodes.append(Episode(name="影片7"))
+        assert p.next_episode_name() == "影片8"
 

@@ -324,6 +324,24 @@ class Scene:
 
 
 @dataclass
+class Episode:
+    """一支影片：擁有自己的場景與劇本；角色/素材/設定屬於上層 Project（作品）。"""
+
+    name: str
+    scenes: list[Scene] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {"name": self.name, "scenes": [s.to_dict() for s in self.scenes]}
+
+    @classmethod
+    def from_dict(cls, data: dict) -> Episode:
+        return cls(
+            name=data["name"],
+            scenes=[Scene.from_dict(s) for s in data.get("scenes", [])],
+        )
+
+
+@dataclass
 class GameSettings:
     """遊戲畫面顯示設定（影響預覽與影片導出）。"""
 
@@ -358,10 +376,11 @@ class GameSettings:
 
 @dataclass
 class Project:
-    """專案根物件，包含標題、場景列表和素材清單。"""
+    """專案根物件 = 一個作品：角色/素材/設定全作品共用，底下多支影片（Episode）各自導出。"""
 
     title: str = "Untitled"
-    scenes: list[Scene] = field(default_factory=list)
+    episodes: list[Episode] = field(default_factory=lambda: [Episode(name="影片1")])
+    active_episode_index: int = 0
     characters: list[Character] = field(default_factory=list)
     assets: dict[str, list[str]] = field(
         default_factory=lambda: {
@@ -372,6 +391,29 @@ class Project:
     )
     project_path: Path | None = None
     game_settings: GameSettings = field(default_factory=GameSettings)
+
+    @property
+    def active_episode(self) -> Episode:
+        """目前編輯中的影片。index 有效性由 from_dict（反序列化邊界）與 UI 操作維護；
+        getter 不做防呆修復，索引 bug 應直接浮出而非被靜默吞掉。"""
+        return self.episodes[self.active_episode_index]
+
+    @property
+    def scenes(self) -> list[Scene]:
+        """目前影片的場景列表（live reference）。預覽/導出/UI 一律經此取得。"""
+        return self.active_episode.scenes
+
+    @scenes.setter
+    def scenes(self, value: list[Scene]) -> None:
+        self.active_episode.scenes = value
+
+    def next_episode_name(self) -> str:
+        """產生下一個影片名稱，如「影片2」（沿用 next_scene_id 的命名慣例）。"""
+        nums = [
+            int(e.name[2:]) for e in self.episodes
+            if e.name.startswith("影片") and e.name[2:].isdigit()
+        ]
+        return f"影片{max(nums, default=1) + 1}"
 
     def to_script_json(self) -> dict:
         """供 engine.js 消化的格式：每個 dialogue 的 stage / active_effects 已預計算。
@@ -430,10 +472,12 @@ class Project:
         }
 
     def to_dict(self) -> dict:
-        """完整序列化（含素材路徑），用於 .vnsproj 儲存。"""
+        """完整序列化（含素材路徑），用於 .vnsproj 儲存。格式 v2：頂層 episodes。"""
         return {
+            "version": 2,
             "title": self.title,
-            "scenes": [s.to_dict() for s in self.scenes],
+            "episodes": [e.to_dict() for e in self.episodes],
+            "active_episode_index": self.active_episode_index,
             "characters": [c.to_dict() for c in self.characters],
             "assets": self.assets,
             "project_path": str(self.project_path) if self.project_path else None,
@@ -444,16 +488,26 @@ class Project:
     def from_dict(cls, data: dict) -> Project:
         default_assets = {"backgrounds": [], "sprites": [], "music": []}
         assets = data.get("assets", default_assets)
-        # 確保所有分類都存在
         for key in default_assets:
             if key not in assets:
                 assets[key] = []
+
+        if "episodes" in data:
+            episodes = [Episode.from_dict(e) for e in data["episodes"]]
+        else:
+            # v1 遷移：頂層 scenes 包成單一影片
+            old_scenes = [Scene.from_dict(s) for s in data.get("scenes", [])]
+            episodes = [Episode(name="影片1", scenes=old_scenes)]
+        if not episodes:
+            episodes = [Episode(name="影片1")]
+        raw_idx = int(data.get("active_episode_index", 0))
 
         path_str = data.get("project_path")
         gs_data = data.get("game_settings", {})
         return cls(
             title=data.get("title", "Untitled"),
-            scenes=[Scene.from_dict(s) for s in data.get("scenes", [])],
+            episodes=episodes,
+            active_episode_index=max(0, min(raw_idx, len(episodes) - 1)),
             characters=[Character.from_dict(c) for c in data.get("characters", [])],
             assets=assets,
             project_path=Path(path_str) if path_str else None,
