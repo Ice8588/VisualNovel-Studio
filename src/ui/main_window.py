@@ -98,6 +98,8 @@ class MainWindow(QMainWindow):
         act_paste = add_action(file_menu, "import", "貼上文字", self._on_paste_text)
         act_paste.setShortcut(QKeySequence("Ctrl+Shift+V"))
         file_menu.addSeparator()
+        add_action(file_menu, "add", "新增影片", self._on_add_episode_menu)
+        file_menu.addSeparator()
         act_refresh = add_action(file_menu, "refresh", "重新整理預覽", self._on_refresh_preview)
         act_refresh.setShortcut(QKeySequence("F5"))
         file_menu.addSeparator()
@@ -201,6 +203,20 @@ class MainWindow(QMainWindow):
         # 對話框背景 / 文字色：live update 不 reload，避免拉桿時整個 iframe 閃爍
         self.center_panel.dialogue_box_color_changed.connect(self._on_dialogue_box_color_live)
         self.center_panel.dialogue_text_color_changed.connect(self._on_dialogue_text_color_live)
+
+        # 左側面板 → 影片切換
+        self.left_panel.episode_switched.connect(self._on_episode_changed)
+        self.left_panel.episodes_changed.connect(self._on_episode_changed)
+
+    # ── 影片（Episode）──
+
+    def _on_episode_changed(self, _index: int = -1) -> None:
+        """影片切換/增刪後：中央面板重綁到新場景列表，並標記變更。"""
+        self.center_panel.set_project(self._project)
+        self._on_project_changed()
+
+    def _on_add_episode_menu(self) -> None:
+        self.left_panel.add_episode()
 
     # ── 場景切換 ──
 
@@ -576,12 +592,12 @@ class MainWindow(QMainWindow):
     def _check_export_ready(self) -> bool:
         if not self._project.scenes:
             dialogs.show_error(
-                self, "無法導出", "專案中沒有任何場景。\n請先新增場景。"
+                self, "無法導出", "目前影片沒有任何場景。\n請先新增場景。"
             )
             return False
         if not self._has_dialogues():
             dialogs.show_error(
-                self, "無法導出", "所有場景都沒有對話。\n請先匯入文字或新增對話。"
+                self, "無法導出", "目前影片的所有場景都沒有對話。\n請先匯入文字或新增對話。"
             )
             return False
         return True
