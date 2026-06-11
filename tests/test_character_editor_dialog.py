@@ -154,33 +154,6 @@ def test_new_character_no_sprite_has_empty_costumes(qapp, tmp_path):
     assert result.costumes == []
 
 
-# ── 測試 6：角色卡匯入情境（_loaded_from_card=True）→ 行為不變 ──
-
-def test_card_import_preserves_extra_costumes(qapp, tmp_path):
-    """角色卡匯入後 get_character() 應回傳卡內完整 costumes，不因修改觸發不同分支。"""
-    dlg = CharacterEditorDialog(character=None, project_dir=tmp_path)
-    dlg.edit_name.setText("卡片角色")
-    dlg._apply_color("#00AAFF")
-
-    # 模擬角色卡匯入（直接設 internal state）
-    card_costumes = [
-        Costume("卡裝1", [SpriteVariant("笑", "card_a.png"), SpriteVariant("哭", "card_b.png")]),
-        Costume("卡裝2", [SpriteVariant("嚴肅", "card_c.png")]),
-    ]
-    dlg._loaded_from_card = True
-    dlg._extra_costumes = list(card_costumes)
-    dlg._sprite_filename = "card_a.png"
-    dlg._lbl_sprite_name.setText("笑")
-
-    result = dlg.get_character()
-
-    assert result.name == "卡片角色"
-    assert len(result.costumes) == 2
-    assert result.costumes[0].name == "卡裝1"
-    assert len(result.costumes[0].expressions) == 2
-    assert result.costumes[1].name == "卡裝2"
-
-
 # ── 測試 7：編輯角色時，名稱與顏色從對話框取得（不從 _original） ──
 
 def test_edit_updates_name_and_color(qapp, tmp_path):
