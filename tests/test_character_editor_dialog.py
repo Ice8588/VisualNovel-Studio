@@ -190,6 +190,24 @@ def test_edit_character_with_empty_costumes_and_new_sprite(qapp, tmp_path):
     assert result.costumes[0].expressions[0].filename == "solo.png"
 
 
+# ── 服裝摘要標籤（修走查陷阱 P8：多服裝角色其餘資料隱形）──
+
+def test_summary_label_visible_for_multi_costume_char(qapp, tmp_path):
+    char = _make_multi_costume_char()  # 2 套服裝 / 3 張差分（檔案開頭已定義）
+    dlg = CharacterEditorDialog(character=char, project_dir=tmp_path)
+    assert dlg._lbl_costume_summary.isVisibleTo(dlg)
+    assert "2 套服裝" in dlg._lbl_costume_summary.text()
+    assert "3 張差分" in dlg._lbl_costume_summary.text()
+
+
+def test_summary_label_hidden_for_single_sprite_char(qapp, tmp_path):
+    char = Character(name="單圖", costumes=[
+        Costume(name="服裝1", expressions=[SpriteVariant("正面", "a.png")]),
+    ])
+    dlg = CharacterEditorDialog(character=char, project_dir=tmp_path)
+    assert not dlg._lbl_costume_summary.isVisibleTo(dlg)
+
+
 # ── 測試 9：get_character() 回傳深拷貝，不污染 _original ──
 
 def test_edit_returns_deep_copy_not_original(qapp, tmp_path):

@@ -28,7 +28,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from qfluentwidgets import ComboBox, LineEdit, ListWidget, PushButton, StrongBodyLabel
+from qfluentwidgets import BodyLabel, ComboBox, LineEdit, ListWidget, PushButton, StrongBodyLabel
 
 from src.core.models import Character, Costume, SpriteVariant
 from src.ui.palette import PRESET_NAME_COLORS as _PRESET_COLORS
@@ -363,6 +363,12 @@ class CharacterEditorDialog(QDialog):
         sprite_group.setLayout(sprite_layout)
         layout.addWidget(sprite_group)
 
+        # 多服裝角色提示：避免新手以為角色只有這一張圖
+        self._lbl_costume_summary = BodyLabel("")
+        self._lbl_costume_summary.setWordWrap(True)
+        self._lbl_costume_summary.setVisible(False)
+        layout.addWidget(self._lbl_costume_summary)
+
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
@@ -387,6 +393,13 @@ class CharacterEditorDialog(QDialog):
                     Qt.TransformationMode.SmoothTransformation
                 )
                 self._sprite_preview.setPixmap(pm)
+        total = len(char.sprites)
+        if total > 1:
+            self._lbl_costume_summary.setText(
+                f"此角色共有 {len(char.costumes)} 套服裝、{total} 張差分。"
+                "這裡只更換預設立繪；完整管理請用角色面板的「編輯服裝…」。"
+            )
+            self._lbl_costume_summary.setVisible(True)
 
     def _apply_color(self, hex_color: str) -> None:
         from src.ui import palette as _pal
