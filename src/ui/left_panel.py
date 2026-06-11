@@ -116,6 +116,9 @@ class LeftPanel(QWidget):
     episode_switched = pyqtSignal(int)   # 新 active episode index
     episodes_changed = pyqtSignal()      # 新增/改名/刪除影片
 
+    # 角色匯入信號
+    character_import_requested = pyqtSignal()
+
     # 素材匯入信號
     bg_import_requested = pyqtSignal()
     music_import_requested = pyqtSignal()
@@ -203,6 +206,12 @@ class LeftPanel(QWidget):
         self.btn_add_char.setIcon(themed_icon("add"))
         self.btn_add_char.setIconSize(QSize(16, 16))
         char_layout.addWidget(self.btn_add_char)
+        self.btn_import_char = QPushButton(" 從其他作品匯入…")
+        self.btn_import_char.setObjectName("dashedButton")
+        self.btn_import_char.setIcon(themed_icon("open"))
+        self.btn_import_char.setIconSize(QSize(16, 16))
+        self.btn_import_char.setToolTip("把另一個作品做好的角色（含立繪）複製進來")
+        char_layout.addWidget(self.btn_import_char)
         char_section.setLayout(char_layout)
         self._list_stack.addWidget(char_section)
 
@@ -319,6 +328,7 @@ class LeftPanel(QWidget):
 
         self.character_list.currentRowChanged.connect(self._on_char_selection_changed)
         self.btn_add_char.clicked.connect(self.character_add_requested.emit)
+        self.btn_import_char.clicked.connect(self.character_import_requested.emit)
 
         self.combo_episode.currentIndexChanged.connect(self._on_episode_combo_changed)
         self.btn_add_episode.clicked.connect(self.add_episode)

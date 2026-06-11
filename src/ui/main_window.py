@@ -7,6 +7,7 @@ from PyQt6.QtCore import QThread, QTimer, pyqtSignal, Qt
 from PyQt6.QtGui import QKeySequence
 from PyQt6.QtWidgets import (
     QApplication,
+    QDialog,
     QFileDialog,
     QLabel,
     QMainWindow,
@@ -179,6 +180,7 @@ class MainWindow(QMainWindow):
         self.left_panel.character_remove_requested.connect(self._on_remove_character)
         self.left_panel.character_property_changed.connect(self._on_character_property_changed)
         self.left_panel.costume_edit_requested.connect(self._on_costume_edit)
+        self.left_panel.character_import_requested.connect(self._on_import_characters_from_work)
 
         # 左側面板 → 素材匯入
         self.left_panel.bg_import_requested.connect(
@@ -325,6 +327,68 @@ class MainWindow(QMainWindow):
         self.left_panel.refresh_costume_list()
         self.center_panel.refresh()
         self._on_project_changed()
+
+    def _on_import_characters_from_work(self) -> None:
+        """從另一個 .vnsproj 挑角色複製進本作品（含立繪；同名詢問取代或略過）。"""
+        from src.core.character_transfer import import_character
+        from src.ui.character_import import CharacterImportDialog
+
+        path_str, _ = QFileDialog.getOpenFileName(
+            self, "選擇作品檔", "",
+            "VisualNovel Studio 專案 (*.vnsproj);;所有檔案 (*)",
+        )
+        if not path_str:
+            return
+        src_path = Path(path_str)
+        try:
+            source = load_project(src_path)
+        except (OSError, ValueError, KeyError) as e:
+            dialogs.show_error(self, "開啟失敗", f"無法讀取作品檔：\n{e}")
+            return
+        if not source.characters:
+            dialogs.show_info(self, "沒有角色", f"「{source.title}」裡沒有任何角色。")
+            return
+
+        source_assets = src_path.parent / "assets"
+        dlg = CharacterImportDialog(source, source_assets, parent=self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        target_assets = self._get_project_dir() / "assets"
+        existing = {c.name: i for i, c in enumerate(self._project.characters)}
+        imported = 0
+        all_missing: list[str] = []
+        for char in dlg.selected_characters():
+            if char.name in existing:
+                ret = QMessageBox.question(
+                    self, "同名角色",
+                    f"本作品已有角色「{char.name}」。要用匯入的版本取代嗎？\n"
+                    "（選「No」會跳過這個角色）",
+                )
+                if ret != QMessageBox.StandardButton.Yes:
+                    continue
+            new_char, missing = import_character(char, source_assets, target_assets)
+            all_missing.extend(missing)
+            if new_char.name in existing:
+                self._project.characters[existing[new_char.name]] = new_char
+            else:
+                self._project.characters.append(new_char)
+                existing[new_char.name] = len(self._project.characters) - 1
+            for sv in new_char.sprites:
+                if sv.filename and sv.filename not in self._project.assets["sprites"]:
+                    self._project.assets["sprites"].append(sv.filename)
+            imported += 1
+
+        if all_missing:
+            dialogs.show_info(
+                self, "部分立繪遺失",
+                "下列立繪在來源作品中找不到，已略過：\n"
+                + "\n".join(f"・{m}" for m in sorted(set(all_missing))),
+            )
+        if imported:
+            self.left_panel.refresh_characters()
+            self.center_panel.refresh()
+            self._on_project_changed()
 
     def _on_character_property_changed(self) -> None:
         self.left_panel.refresh_characters(keep_tab=True)
