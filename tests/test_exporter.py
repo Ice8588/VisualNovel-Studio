@@ -8,14 +8,14 @@ from unittest.mock import patch
 import pytest
 
 from src.core.exporter import ENGINE_DIR, export_zip
-from src.core.models import Dialogue, Project, Scene
+from src.core.models import Dialogue, Episode, Project, Scene
 
 
 @pytest.fixture
 def sample_project():
     return Project(
         title="測試故事",
-        scenes=[
+        episodes=[Episode(name="影片1", scenes=[
             Scene(
                 id="scene_001",
                 background="bg_forest.png",
@@ -25,7 +25,7 @@ def sample_project():
                     Dialogue(type="dialogue", text="你好", character="小明"),
                 ],
             ),
-        ],
+        ])],
         assets={
             "backgrounds": ["bg_forest.png"],
             "sprites": ["char_xm.png"],

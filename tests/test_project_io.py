@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from src.core.models import Dialogue, Project, Scene
+from src.core.models import Dialogue, Episode, Project, Scene
 from src.core.project_io import load_project, save_project
 
 
@@ -14,7 +14,7 @@ from src.core.project_io import load_project, save_project
 def sample_project():
     return Project(
         title="測試故事",
-        scenes=[
+        episodes=[Episode(name="影片1", scenes=[
             Scene(
                 id="scene_001",
                 background="bg_forest.png",
@@ -25,7 +25,7 @@ def sample_project():
                 ],
             ),
             Scene(id="scene_002", dialogues=[]),
-        ],
+        ])],
         assets={
             "backgrounds": ["bg_forest.png"],
             "sprites": ["char_xm.png"],

@@ -8,6 +8,7 @@ from unittest.mock import patch
 from src.core.models import (
     Character,
     Dialogue,
+    Episode,
     Project,
     Scene,
     StageSegment,
@@ -28,7 +29,7 @@ def _make_project_with_char() -> Project:
     # 留一個別的角色 segment，不應受影響
     scene.stage_left.append(StageSegment(2, 2, "小華"))
     return Project(characters=[Character(name="小明"), Character(name="小華")],
-                   scenes=[scene])
+                   episodes=[Episode(name="影片1", scenes=[scene])])
 
 
 def test_remove_character_downgrades_dialogues_and_clears_stage(qapp):

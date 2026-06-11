@@ -86,7 +86,7 @@ class TestProject:
     def test_project_roundtrip(self):
         original = Project(
             title="我的故事",
-            scenes=[
+            episodes=[Episode(name="影片1", scenes=[
                 Scene(
                     id="scene_001",
                     background="bg_forest.png",
@@ -96,7 +96,7 @@ class TestProject:
                         Dialogue(type="dialogue", text="你真的要走嗎？", character="小花"),
                     ],
                 ),
-            ],
+            ])],
             assets={
                 "backgrounds": ["bg_forest.png"],
                 "sprites": [],
@@ -135,11 +135,11 @@ class TestProject:
     def test_to_script_json(self):
         p = Project(
             title="測試",
-            scenes=[
+            episodes=[Episode(name="影片1", scenes=[
                 Scene(id="scene_001", dialogues=[
                     Dialogue(type="dialogue", text="哈囉", character="A"),
                 ]),
-            ],
+            ])],
         )
         result = p.to_script_json()
         assert result["title"] == "測試"
@@ -153,17 +153,17 @@ class TestProject:
         assert p.next_scene_id() == "場景1"
 
     def test_next_scene_id_sequential(self):
-        p = Project(scenes=[
+        p = Project(episodes=[Episode(name="影片1", scenes=[
             Scene(id="場景1"),
             Scene(id="場景3"),
-        ])
+        ])])
         assert p.next_scene_id() == "場景4"
 
     def test_next_scene_id_legacy_compat(self):
-        p = Project(scenes=[
+        p = Project(episodes=[Episode(name="影片1", scenes=[
             Scene(id="scene_001"),
             Scene(id="scene_003"),
-        ])
+        ])])
         assert p.next_scene_id() == "場景4"
 
     def test_from_dict_missing_asset_categories(self):
