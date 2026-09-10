@@ -47,7 +47,7 @@ python -m PyInstaller vnstudio.spec --noconfirm
 
 ## 分支工作流
 
-新功能一律開新分支（`feature/xxx`），跑 `pytest tests/` 全過才合併到 `main`。
+新功能與修正一律從小寫 `dev` 建立 `feature/xxx` 或 `fix/xxx`，完成後先合回 `dev`。`main` 僅保留正式公開結果，必須按 `CONTRIBUTING.md` 的驗收與 squash 發布流程處理。歷史計畫中的舊分支規則不再適用；以 `AGENTS.md` 與 `CONTRIBUTING.md` 為準。
 
 跨 Phase 的架構決策（ADR）、踩過的雷、給接手者的備忘，集中記錄於 [`docs/DEVELOPMENT_HISTORY.md`](docs/DEVELOPMENT_HISTORY.md)。涉及跨端同步或破壞性變更時，結束前把摘要追加該文件。
 

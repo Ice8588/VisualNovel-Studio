@@ -44,3 +44,8 @@ VisualNovel Studio _ Design/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# 本機測試暫存與私人驗收素材
+.pytest_cache/
+tests/input/
+tests/01.vnsproj
