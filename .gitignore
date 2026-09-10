@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.env
+.venv/
+venv/
+
+# Build / distribution
+build/
+dist/
+*.spec.bak
+
+# 大型二進位（ffmpeg 由使用者自行下載）
+resources/ffmpeg/*.exe
+resources/ffmpeg/*.zip
+
+# PyInstaller 產出（保留 spec 設定）
+dist/
+
+# 測試樣本 / 暫存影片
+tests/samples/
+tests/*.mp4
+tests/*.docx
+
+# 手動測試時 app 於 tests/ 下產生的素材副本
+tests/assets/
+
+# 個人筆記 / AI 指令
+task.md
+CLAUDE.md
+image.png
+
+# 設計師原始檔（fonts 過大；必要資產已搬到 assets/design/）
+VisualNovel Studio _ Design/
+
+# Claude Code IDE 設定
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 本機測試暫存與私人驗收素材
+.pytest_cache/
+tests/input/
+tests/01.vnsproj

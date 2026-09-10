@@ -1,0 +1,344 @@
+"""Phase 2：選中 segment 時顯示對應 payload 的 inline 編輯器。
+
+模式：
+- StageSegment：Character / Costume / Sprite 級聯 ComboBox
+- EffectSegment：effect_type ComboBox + params JSON 編輯器
+- None：placeholder
+"""
+
+from __future__ import annotations
+
+import json
+from typing import TYPE_CHECKING
+
+from PyQt6.QtCore import QSize, Qt, pyqtSignal
+from PyQt6.QtGui import QFont, QKeyEvent
+from PyQt6.QtWidgets import (
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QPlainTextEdit,
+    QStackedLayout,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
+)
+from qfluentwidgets import BodyLabel, ComboBox
+
+from src.core.models import EffectSegment, StageSegment
+from src.ui import palette
+from src.ui.icons import design_icon_tinted
+
+if TYPE_CHECKING:
+    from src.core.models import Project
+
+
+_KNOWN_EFFECT_TYPES = ["rain", "snow", "crt", "screen_shake", "pixel_dark"]
+
+
+class SegmentEditor(QWidget):
+    """選中 segment 時顯示對應 payload 的 inline 編輯器（Phase 4 改為浮動視窗）。"""
+
+    segment_changed = pyqtSignal()  # payload 改動（UI 端需重繪 / 預覽 refresh）
+    closed = pyqtSignal()           # Phase 4：使用者按 X 或 ESC 關閉浮動視窗
+
+    # 方便單測以字串比對模式
+    MODE_NONE = "none"
+    MODE_STAGE = "stage"
+    MODE_EFFECT = "effect"
+
+    def __init__(self, project_ref=None, parent=None):
+        super().__init__(parent)
+        self._project: "Project | None" = project_ref
+        self._segment: object | None = None
+        self._suppress_signals: bool = False
+        # Phase 4：浮動視窗外觀（陰影 + 邊框 + 圓角），主題感知
+        self.setObjectName("segmentEditorPopup")
+
+        # task.md #7：背景比 surface 高一階對比的同色系（深色主題稍亮、淺色主題稍暗），
+        # 配陰影產生視覺分層；不再做反相（深淺對撞撕裂視覺）。
+        def _editor_style(p):
+            elevated = p.surface_alt.lighter(115) if p.is_dark else p.surface_alt.darker(108)
+            return (
+                f"#segmentEditorPopup {{"
+                f" background:{elevated.name()};"
+                f" color:{p.text_primary.name()};"
+                f" border:1px solid {p.border_focus.name()};"
+                f" border-radius:8px;"
+                f"}}"
+            )
+        palette.register_themed(self, _editor_style)
+        # 加柔和陰影
+        from PyQt6.QtWidgets import QGraphicsDropShadowEffect
+        from PyQt6.QtGui import QColor as _QColor
+        _shadow = QGraphicsDropShadowEffect(self)
+        _shadow.setBlurRadius(20)
+        _shadow.setOffset(0, 4)
+        _shadow.setColor(_QColor(0, 0, 0, 90))
+        self.setGraphicsEffect(_shadow)
+
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)  # 收 ESC
+        self._build_ui()
+        self.set_segment(None)
+
+    # ── 對外 API ─────────────────────────────────────────────
+
+    def set_project(self, project) -> None:
+        self._project = project
+        # 若正在編輯 StageSegment，更新下拉內容
+        if isinstance(self._segment, StageSegment):
+            self._load_stage_segment(self._segment)
+
+    def set_lane_label(self, label: str) -> None:
+        """task.md #7：依 lane（左/中/右/特效軌道）動態替換編輯器標題。"""
+        self._title.setText(label)
+
+    def set_segment(self, seg) -> None:
+        self._segment = seg
+        if seg is None:
+            self._stack.setCurrentIndex(0)  # placeholder
+            return
+        if isinstance(seg, StageSegment):
+            self._stack.setCurrentIndex(1)
+            self._load_stage_segment(seg)
+        elif isinstance(seg, EffectSegment):
+            self._stack.setCurrentIndex(2)
+            self._load_effect_segment(seg)
+        else:
+            self._stack.setCurrentIndex(0)
+
+    def current_mode(self) -> str:
+        idx = self._stack.currentIndex()
+        return (self.MODE_NONE, self.MODE_STAGE, self.MODE_EFFECT)[idx]
+
+    # ── UI 建構 ─────────────────────────────────────────────
+
+    def _build_ui(self) -> None:
+        root = QVBoxLayout(self)
+        root.setContentsMargins(8, 8, 8, 8)
+        root.setSpacing(6)
+
+        # Header：標題 + 關閉 X 鈕
+        header = QHBoxLayout()
+        header.setContentsMargins(0, 0, 0, 0)
+        self._title = BodyLabel("Segment 編輯器")
+        # task.md #12：title 字體跟 QApplication.font；只設 bold（不硬編碼 size）
+        _tf = QFont(self._title.font()); _tf.setBold(True)
+        self._title.setFont(_tf)
+        header.addWidget(self._title, 1)
+        self._btn_close = QToolButton()
+        self._btn_close.setIconSize(QSize(14, 14))
+        self._btn_close.setToolTip("關閉")
+        self._btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
+        # icon 顏色 + hover 底色都跟主題：register builder 會在切主題時重套
+        def _close_btn_style(p):
+            self._btn_close.setIcon(design_icon_tinted("close", p.text_secondary.name(), 14))
+            hover_bg = "rgba(255,255,255,0.08)" if p.is_dark else "rgba(0,0,0,0.06)"
+            return (
+                "QToolButton { border:none; padding:2px 6px; }"
+                f"QToolButton:hover {{ background:{hover_bg}; border-radius:3px; }}"
+            )
+        palette.register_themed(self._btn_close, _close_btn_style)
+        self._btn_close.clicked.connect(self.closed.emit)
+        header.addWidget(self._btn_close, 0)
+        root.addLayout(header)
+
+        self._stack = QStackedLayout()
+        root.addLayout(self._stack, 1)
+
+        # 0: placeholder
+        ph = QWidget()
+        ph_layout = QVBoxLayout(ph)
+        ph_layout.setContentsMargins(0, 0, 0, 0)
+        self._placeholder_label = QLabel("未選取 segment")
+        palette.register_themed(
+            self._placeholder_label,
+            lambda p: f"color:{p.text_secondary.name()};",
+        )
+        self._placeholder_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        ph_layout.addWidget(self._placeholder_label)
+        self._stack.addWidget(ph)
+
+        # 1: stage segment
+        stage = QWidget()
+        form_stage = QFormLayout(stage)
+        form_stage.setContentsMargins(0, 0, 0, 0)
+        form_stage.setSpacing(6)
+        self._cb_character = ComboBox()
+        self._cb_costume = ComboBox()
+        self._cb_sprite = ComboBox()
+        self._cb_character.currentTextChanged.connect(self._on_stage_character_changed)
+        self._cb_costume.currentTextChanged.connect(self._on_stage_costume_changed)
+        self._cb_sprite.currentTextChanged.connect(self._on_stage_sprite_changed)
+        form_stage.addRow(BodyLabel("角色"), self._cb_character)
+        form_stage.addRow(BodyLabel("服裝"), self._cb_costume)
+        form_stage.addRow(BodyLabel("差分"), self._cb_sprite)
+        self._stack.addWidget(stage)
+
+        # 2: effect segment
+        effect = QWidget()
+        form_effect = QFormLayout(effect)
+        form_effect.setContentsMargins(0, 0, 0, 0)
+        form_effect.setSpacing(6)
+        self._cb_effect_type = ComboBox()
+        self._cb_effect_type.addItems(_KNOWN_EFFECT_TYPES)
+        self._cb_effect_type.currentTextChanged.connect(self._on_effect_type_changed)
+        self._params_edit = QPlainTextEdit()
+        self._params_edit.setPlaceholderText('{"intensity": 0.5}')
+        self._params_edit.setMaximumHeight(80)
+        _pf = QFont("monospace"); _pf.setPixelSize(18)
+        self._params_edit.setFont(_pf)
+        self._params_edit.installEventFilter(self)
+        form_effect.addRow(BodyLabel("特效類型"), self._cb_effect_type)
+        # task.md #7：暫隱藏 params 欄。當前效果用預設值即可；
+        # TODO（task.md #7 後續）：之後改用 UI（slider / X-Y 選擇器）做角色位移等進階特效，不再用 JSON。
+        self._params_edit.hide()
+        self._stack.addWidget(effect)
+
+    # ── StageSegment 模式 ──────────────────────────────────
+
+    def _load_stage_segment(self, seg: StageSegment) -> None:
+        self._suppress_signals = True
+        try:
+            self._cb_character.clear()
+            chars = list(self._project.characters) if self._project else []
+            for c in chars:
+                self._cb_character.addItem(c.name)
+            if not chars:
+                self._cb_character.addItem(seg.character or "")
+            # 選中當前角色
+            idx = self._cb_character.findText(seg.character or "")
+            if idx < 0:
+                self._cb_character.insertItem(0, seg.character or "")
+                idx = 0
+            self._cb_character.setCurrentIndex(idx)
+
+            self._reload_costume_options(seg.character, seg.costume)
+            self._reload_sprite_options(seg.character, seg.costume, seg.sprite)
+        finally:
+            self._suppress_signals = False
+
+    def _reload_costume_options(self, character: str | None, preferred: str | None) -> None:
+        self._cb_costume.clear()
+        char_obj = self._find_character(character)
+        names = [c.name for c in (char_obj.costumes if char_obj else [])]
+        if names:
+            self._cb_costume.addItems(names)
+        else:
+            self._cb_costume.addItem("（無）")
+        if preferred and preferred in names:
+            self._cb_costume.setCurrentText(preferred)
+        else:
+            self._cb_costume.setCurrentIndex(0)
+
+    def _reload_sprite_options(self, character: str | None, costume: str | None, preferred: str | None) -> None:
+        self._cb_sprite.clear()
+        char_obj = self._find_character(character)
+        cos_obj = None
+        if char_obj and costume:
+            cos_obj = next((c for c in char_obj.costumes if c.name == costume), None)
+        labels = [e.label for e in (cos_obj.expressions if cos_obj else [])]
+        if labels:
+            self._cb_sprite.addItems(labels)
+        else:
+            self._cb_sprite.addItem("（無）")
+        if preferred and preferred in labels:
+            self._cb_sprite.setCurrentText(preferred)
+        else:
+            self._cb_sprite.setCurrentIndex(0)
+
+    def _find_character(self, name: str | None):
+        if not name or not self._project:
+            return None
+        return next((c for c in self._project.characters if c.name == name), None)
+
+    def _on_stage_character_changed(self, new_name: str) -> None:
+        if self._suppress_signals or not isinstance(self._segment, StageSegment):
+            return
+        self._segment.character = new_name
+        # cascade reset：角色變 → 服裝改為第一個（或 None）、差分同步
+        self._suppress_signals = True
+        try:
+            self._reload_costume_options(new_name, None)
+            new_costume = self._combo_value(self._cb_costume)
+            self._segment.costume = new_costume
+            self._reload_sprite_options(new_name, new_costume, None)
+            self._segment.sprite = self._combo_value(self._cb_sprite)
+        finally:
+            self._suppress_signals = False
+        self.segment_changed.emit()
+
+    def _on_stage_costume_changed(self, new_costume: str) -> None:
+        if self._suppress_signals or not isinstance(self._segment, StageSegment):
+            return
+        value = None if new_costume == "（無）" else new_costume
+        self._segment.costume = value
+        self._suppress_signals = True
+        try:
+            self._reload_sprite_options(self._segment.character, value, None)
+            self._segment.sprite = self._combo_value(self._cb_sprite)
+        finally:
+            self._suppress_signals = False
+        self.segment_changed.emit()
+
+    def _on_stage_sprite_changed(self, new_sprite: str) -> None:
+        if self._suppress_signals or not isinstance(self._segment, StageSegment):
+            return
+        self._segment.sprite = None if new_sprite == "（無）" else new_sprite
+        self.segment_changed.emit()
+
+    @staticmethod
+    def _combo_value(cb: ComboBox) -> str | None:
+        v = cb.currentText()
+        return None if (not v or v == "（無）") else v
+
+    # ── EffectSegment 模式 ─────────────────────────────────
+
+    def _load_effect_segment(self, seg: EffectSegment) -> None:
+        self._suppress_signals = True
+        try:
+            if self._cb_effect_type.findText(seg.effect_type) < 0:
+                self._cb_effect_type.insertItem(0, seg.effect_type)
+            self._cb_effect_type.setCurrentText(seg.effect_type)
+            self._params_edit.setPlainText(
+                json.dumps(seg.params, ensure_ascii=False, indent=2) if seg.params else ""
+            )
+        finally:
+            self._suppress_signals = False
+
+    def _on_effect_type_changed(self, new_type: str) -> None:
+        if self._suppress_signals or not isinstance(self._segment, EffectSegment):
+            return
+        self._segment.effect_type = new_type
+        self.segment_changed.emit()
+
+    def eventFilter(self, obj, event):
+        # params 編輯框 blur（失焦）時嘗試寫回 JSON
+        if obj is self._params_edit and event.type().name == "FocusOut":
+            self._commit_params_json()
+        return super().eventFilter(obj, event)
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        if event.key() == Qt.Key.Key_Escape:
+            self.closed.emit()
+            return
+        super().keyPressEvent(event)
+
+    def _commit_params_json(self) -> None:
+        if not isinstance(self._segment, EffectSegment):
+            return
+        text = self._params_edit.toPlainText().strip()
+        if not text:
+            if self._segment.params:
+                self._segment.params = {}
+                self.segment_changed.emit()
+            return
+        try:
+            parsed = json.loads(text)
+            if not isinstance(parsed, dict):
+                return  # 非 dict 不寫回
+            self._segment.params = parsed
+            self.segment_changed.emit()
+        except json.JSONDecodeError:
+            # 解析失敗：保持原值，不 emit；使用者可繼續編輯
+            return
