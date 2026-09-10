@@ -2,8 +2,17 @@
 
 import logging
 import logging.handlers
+import os
 import sys
 from pathlib import Path
+
+# Conda 建立的 Windows venv 可能無法解析 Qt 所需的系統 DLL。
+# 必須在首次載入 Qt 前註冊搜尋目錄，並保留 handle 到程序結束。
+_system_dll_directory = None
+if sys.platform == "win32":
+    _system_dll_directory = os.add_dll_directory(
+        str(Path(os.environ["SystemRoot"]) / "System32")
+    )
 
 from PyQt6.QtGui import QFontDatabase
 from PyQt6.QtWidgets import QApplication
